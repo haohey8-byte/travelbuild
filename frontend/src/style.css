@@ -1,0 +1,28 @@
+:root {
+  --brand: #c8102e;
+  --brand-soft: #fde8ec;
+  --ink: #1f2329;
+  --muted: #8a94a6;
+  --line: #e6e9ef;
+  --bg: #f7f8fa;
+  --card: #ffffff;
+  --ok: #1aab8a;
+  --warn: #f5a623;
+  --danger: #e2483d;
+  --info: #2f80ed;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; color: var(--ink); background: var(--bg); }
+.app-shell { min-height: 100vh; }
+.app-header { display: flex; align-items: center; gap: 24px; padding: 0 20px; height: 56px; background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 10; }
+.brand { font-weight: 700; color: var(--brand); }
+.app-nav { display: flex; gap: 16px; flex: 1; }
+.app-nav a { color: var(--ink); text-decoration: none; padding: 6px 4px; }
+.app-nav a.router-link-active { color: var(--brand); border-bottom: 2px solid var(--brand); }
+.role-switch { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 13px; }
+.role-switch select { padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; }
+.app-main { padding: 20px; max-width: 1280px; margin: 0 auto; }
+.page-title { font-size: 20px; font-weight: 700; margin: 0 0 16px; }
+.btn { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); cursor: pointer; font-size: 14px; }
+.btn-primary { background: var(--brand); color: #fff; border-color: var(--brand); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }

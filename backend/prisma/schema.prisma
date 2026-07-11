@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 角色：一手 PandaKing / 境外旅行社 / 省地接社
+enum Role {
+  pandaking
+  agency
+  provincial
+}
+
+enum CaseStatus {
+  draft
+  published
+  offline
+}
+
+// 用户（微信 OAuth2 + 邀请制）
+model User {
+  id         String   @id @default(uuid())
+  name       String
+  role       Role     @default(agency)
+  agencyId   String?
+  openid     String?  @unique
+  email      String?
+  disabled   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  invites    Invite[]
+}
+
+// 邀请（一手发出，带角色+有效期）
+model Invite {
+  id         String   @id @default(uuid())
+  token      String   @unique
+  role       Role
+  email      String?
+  expiresAt  DateTime
+  accepted   Boolean  @default(false)
+  createdById String
+  createdAt  DateTime @default(now())
+}
+
+// 路线（协作 spine）
+model Route {
+  id            String         @id @default(uuid())
+  customerName  String
+  customerNameCn String?
+  country       String
+  agency        String
+  destination   String
+  groupSize     Int
+  travelDate    DateTime?
+  statusKey     String
+  modeKey       String         @default("collab")
+  createdById   String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  versions      RouteVersion[]
+}
+
+// 路线版本（行程+报价一体化，每次保存并通知生成新版本）
+model RouteVersion {
+  id         String   @id @default(uuid())
+  routeId    String
+  route      Route    @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  version    String
+  draft      Boolean  @default(true)
+  itinerary  Json
+  quote      Json?
+  createdAt  DateTime @default(now())
+}
+
+// 案例（由已确认路线脱敏派生）
+model Case {
+  id          String     @id @default(uuid())
+  routeId     String?
+  destination String
+  days        Int
+  theme       String
+  priceRange  String
+  status      CaseStatus @default(draft)
+  createdById String
+  createdAt   DateTime   @default(now())
+  publishedAt DateTime?
+}
+
+// 知识库条目
+model KbEntry {
+  id          String   @id @default(uuid())
+  title       String
+  category    String
+  tags        String[]
+  body        String
+  routeId     String?
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// 成本询价（省地接社填写成本价①②）
+model CostInquiry {
+  id        String   @id @default(uuid())
+  routeId   String
+  agencyId  String
+  token     String   @unique
+  cost1     Decimal? @db.Decimal(12, 2)
+  cost2     Decimal? @db.Decimal(12, 2)
+  status    String   @default("pending")
+  createdAt DateTime @default(now())
+}
