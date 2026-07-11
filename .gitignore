@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+.vite/
+
+# Env / secrets（密钥绝不入库）
+.env
+.env.*
+!.env.example
+
+# WorkBuddy runtime（记忆非源码；仅保留错题本）
+.workbuddy/
+!.workbuddy/memory/lessons-learned.md
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Local temp
+temp/
