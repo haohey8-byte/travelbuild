@@ -1,0 +1,15 @@
+{
+  "name": "pandaking9-workbench",
+  "version": "0.1.0",
+  "private": true,
+  "description": "入境游定制协作工作台 —— Vue3 + NestJS + PostgreSQL monorepo（pnpm workspace）",
+  "scripts": {
+    "dev": "pnpm -F frontend dev & pnpm -F backend start:dev",
+    "build": "pnpm -F frontend build && pnpm -F backend build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
