@@ -1,7 +1,9 @@
 import axios from 'axios'
 
-// 统一 API 客户端：baseURL=/api（开发期 Vite 代理到 :3000），自动带 JWT
-const client = axios.create({ baseURL: '/api', timeout: 10000 })
+// 生产环境通过 VITE_API_BASE 指定后端地址（CloudBase 云托管域名，或 EdgeOne 反代 /api）；
+// 缺省回退 /api：开发期走 Vite 代理；生产若用 EdgeOne 反代 /api 也走此路。
+const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) || '/api'
+const client = axios.create({ baseURL: API_BASE, timeout: 10000 })
 
 client.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')

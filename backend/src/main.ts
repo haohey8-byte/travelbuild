@@ -8,9 +8,11 @@ async function bootstrap() {
   // 全局前缀 /api，对齐前端 Vite 代理与 axios baseURL
   app.setGlobalPrefix('api')
   app.enableCors()
-  await app.listen(3000)
+  // 容器内/云托管监听 0.0.0.0，端口取 PORT 环境变量（CloudBase 注入，缺省 3000）
+  const port = Number(process.env.PORT) || 3000
+  await app.listen(port, '0.0.0.0')
   // eslint-disable-next-line no-console
-  console.log('Backend listening on http://localhost:3000 (prefix: /api)')
+  console.log(`Backend listening on :${port} (prefix: /api)`)
 }
 
 bootstrap()

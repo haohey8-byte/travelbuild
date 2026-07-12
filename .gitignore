@@ -13,6 +13,8 @@ build/
 .env
 .env.*
 !.env.example
+# 前端生产构建期公开配置（非密钥，可入库；由 EdgeOne/CloudBase 控制台或此处覆盖）
+!frontend/.env.production
 
 # WorkBuddy runtime（记忆非源码；仅保留错题本）
 .workbuddy/

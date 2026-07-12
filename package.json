@@ -6,8 +6,13 @@
   "scripts": {
     "dev": "pnpm -F frontend dev & pnpm -F backend start:dev",
     "build": "pnpm -F frontend build && pnpm -F backend build",
+    "build:frontend": "pnpm -F frontend build",
+    "build:backend": "pnpm -F backend build",
     "lint": "pnpm -r lint",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "migrate:deploy": "pnpm -F backend prisma:deploy",
+    "seed": "pnpm -F backend db:seed",
+    "deploy:frontend": "node deploy/deploy-frontend.mjs"
   },
   "engines": {
     "node": ">=18"

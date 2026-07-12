@@ -1,0 +1,34 @@
+# 依赖与构建产物（容器内在构建阶段重新生成）
+node_modules
+**/node_modules
+**/dist
+**/.vite
+**/coverage
+*.tsbuildinfo
+
+# 密钥（绝不进构建上下文）
+**/.env
+**/.env.*
+!**/.env.example
+!frontend/.env.production
+
+# 日志
+*.log
+npm-debug.log*
+
+# 旧项目快照与 npm 残留（切换到 pnpm 后无用）
+2026-07-09-19-48-14
+2026-07-11-14-44-08
+_npm_trash
+prototype
+
+# git / IDE / OS
+.git
+.gitignore
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# WorkBuddy 记忆（非源码）
+.workbuddy
