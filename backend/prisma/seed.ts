@@ -15,6 +15,26 @@ async function main() {
     update: {},
     create: { id: 'seed-agency', name: '环球旅行社', role: 'agency' },
   })
+  const provincial = await prisma.user.upsert({
+    where: { id: 'seed-provincial' },
+    update: {},
+    create: { id: 'seed-provincial', name: '川内地接社', role: 'provincial' },
+  })
+
+  // 一条演示邀请（角色 agency，7 天有效），用于 accept-invite 联调
+  await prisma.invite.upsert({
+    where: { id: 'seed-invite-1' },
+    update: {},
+    create: {
+      id: 'seed-invite-1',
+      token: 'demo-invite-agency',
+      role: 'agency',
+      email: 'agency@example.com',
+      expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000),
+      accepted: false,
+      createdById: pandaking.id,
+    },
+  })
 
   // 一条协作路线 + 两个版本（演示双向回路数据）
   const route = await prisma.route.upsert({
@@ -85,7 +105,12 @@ async function main() {
   })
 
   // eslint-disable-next-line no-console
-  console.log('Seed done:', { pandaking: pandaking.id, agency: agency.id, route: route.id })
+  console.log('Seed done:', {
+    pandaking: pandaking.id,
+    agency: agency.id,
+    provincial: provincial.id,
+    route: route.id,
+  })
 }
 
 main()
