@@ -1,29 +1,68 @@
 // 角色字段级可见性 —— 对应 PRD 权限矩阵 Q4.1–Q4.5 与 doc/04-接口契约/权限矩阵.md
-// 成本①(cost1)/成本②(cost2)/利润(profit) 仅「一手 PandaKing」可见；
-// 境外旅行社 / 省地接社 仅见游客侧报价（含其自身加价），不暴露内部成本。
+// 报价采用统一形状：{ items: QuoteLevel[], totals: { cost1, cost2, markup, guestPrice } }
+//   - cost1 = 省地接社成本（成本①）
+//   - cost2 = 一手利润（成本②）
+//   - markup = 旅行社加价
+//   - guestPrice = 对客总价 = cost1 + cost2 + markup（仅此字段对外公开）
+// 可见性规则：
+//   - pandaking（一手）：全见 cost1/cost2/markup/guestPrice
+//   - agency（境外旅行社）：见 markup/guestPrice，隐藏内部成本 cost1/cost2
+//   - provincial（省地接社）：见 cost1/markup/guestPrice，隐藏一手利润 cost2
+//   - 公开 H5：仅 guestPrice（maskQuotePublic）
 
 export type Role = 'pandaking' | 'agency' | 'provincial'
 
-// 剥离报价中的内部成本字段（cost1/cost2/profit）
-export function hideCostsForRole(quote: unknown, role: Role): unknown {
-  if (role === 'pandaking' || quote == null) return quote
+interface QuoteLevel {
+  type?: string
+  cost1?: number
+  cost2?: number
+  markup?: number
+  guestPrice?: number
+}
 
-  const q = quote as Record<string, unknown>
-  const stripItem = (item: Record<string, unknown>) => {
-    const copy = { ...item }
-    delete copy.cost1
-    delete copy.cost2
-    delete copy.profit
+interface Quote {
+  items?: QuoteLevel[]
+  totals?: QuoteLevel
+}
+
+// 按角色剥离报价内部成本字段
+export function hideCostsForRole(quote: unknown, role: Role): unknown {
+  if (quote == null) return quote
+
+  // 一手可见全部
+  if (role === 'pandaking') return quote
+
+  const q = quote as Quote
+  const strip = (level: QuoteLevel | undefined): QuoteLevel | undefined => {
+    if (!level) return level
+    const copy: QuoteLevel = { ...level }
+    if (role === 'agency') {
+      delete copy.cost1 // 旅行社不可见内部成本①
+      delete copy.cost2 // 也不可见一手利润②
+    }
+    if (role === 'provincial') {
+      delete copy.cost2 // 省地接社不可见一手利润②，但可见自身成本①
+    }
+    delete copy.markup // 加价细节对外协作视图不展示
     return copy
   }
 
   return {
     ...q,
+    items: Array.isArray(q.items) ? q.items.map(strip) : q.items,
+    totals: strip(q.totals),
+  }
+}
+
+// 公开 H5 脱敏：仅保留对客总价 guestPrice
+export function maskQuotePublic(quote: unknown): unknown {
+  if (quote == null) return quote
+  const q = quote as Quote
+  const guestPrice = q.totals?.guestPrice
+  return {
     items: Array.isArray(q.items)
-      ? (q.items as Record<string, unknown>[]).map(stripItem)
+      ? q.items.map((it) => ({ type: it.type, guestPrice: it.guestPrice }))
       : q.items,
-    totals: q.totals
-      ? stripItem(q.totals as Record<string, unknown>)
-      : q.totals,
+    totals: { guestPrice },
   }
 }

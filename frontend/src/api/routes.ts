@@ -7,7 +7,7 @@ export async function fetchRoutes(params?: { status?: string; role?: string }): 
   return data
 }
 
-export async function fetchRoute(id: string): Promise<{ route: Route; version: RouteVersion }> {
+export async function fetchRoute(id: string): Promise<Route> {
   const { data } = await client.get(`/routes/${id}`)
   return data
 }
@@ -20,5 +20,14 @@ export async function createRoute(payload: unknown): Promise<Route> {
 // 保存并通知：生成新 version
 export async function saveVersion(routeId: string, payload: unknown): Promise<RouteVersion> {
   const { data } = await client.post(`/routes/${routeId}/versions`, payload)
+  return data
+}
+
+// 生成协作 H5 共享链接
+export async function shareRoute(
+  routeId: string,
+  role?: string,
+): Promise<{ token: string; link: string }> {
+  const { data } = await client.post(`/routes/${routeId}/share`, role ? { role } : {})
   return data
 }

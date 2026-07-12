@@ -18,27 +18,25 @@ export interface Route {
   agency: string
   destination: string
   groupSize: number
-  travelDate: string
+  travelDate: string | null
   statusKey: RouteStatusKey
   modeKey: 'collab' | 'solo'
   version: string
   lastAction?: string
+  versions?: RouteVersion[]
 }
 
 export interface QuoteLevel {
   type: 'vehicle' | 'hotel' | 'ticket' | 'meal' | 'other'
-  cost1: number // 省地接社成本（成本①）
-  cost2: number // 一手利润（成本②）
-  markup: number // 旅行社加价
-  guestPrice: number // = cost1 + cost2 + markup
+  cost1?: number // 省地接社成本（成本①）
+  cost2?: number // 一手利润（成本②）
+  markup?: number // 旅行社加价
+  guestPrice?: number // = cost1 + cost2 + markup（对客总价）
 }
 
 export interface Quote {
-  levels: QuoteLevel[]
-  totalCost1: number
-  totalCost2: number
-  totalMarkup: number
-  totalGuestPrice: number
+  items: QuoteLevel[]
+  totals: { cost1?: number; cost2?: number; markup?: number; guestPrice?: number }
 }
 
 export interface RouteVersion {
@@ -54,7 +52,14 @@ export interface User {
   id: string
   name: string
   role: Role
-  agencyId?: string
+  agencyId?: string | null
+  email?: string | null
+  disabled?: boolean
+}
+
+export interface LoginResult {
+  token: string
+  user: User
 }
 
 export interface CaseItem {
@@ -64,4 +69,35 @@ export interface CaseItem {
   theme: string
   priceRange: string
   status: 'published' | 'draft' | 'offline'
+}
+
+// —— 协作 H5（公开只读视图） ——
+export interface H5Route {
+  token: string
+  routeId: string
+  destination: string
+  groupSize: number
+  travelDate: string | null
+  version: string
+  statusKey: string
+  itinerary: Record<string, unknown>
+  guestPrice: number | null
+}
+
+export interface H5Feedback {
+  id: string
+  content: string
+  authorName?: string | null
+  createdAt: string
+}
+
+export interface KbEntry {
+  id: string
+  title: string
+  category: string
+  tags: string[]
+  body: string
+  routeId?: string | null
+  createdAt: string
+  updatedAt: string
 }

@@ -55,6 +55,16 @@ export class RoutesController {
     return this.svc.saveVersion(id, body, user.role)
   }
 
+  // 生成协作 H5 共享令牌 + 链接（含当前对外版本）
+  @Post(':id/share')
+  share(
+    @Param('id') id: string,
+    @Body() body: { role?: Role },
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.svc.createShare(id, body?.role ?? user.role)
+  }
+
   // 旅行社提交草案 → 待一手确认
   @Post(':id/submit')
   submit(@Param('id') id: string, @CurrentUser() user: AuthUser) {

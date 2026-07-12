@@ -11,6 +11,8 @@ const router = createRouter({
     { path: '/kb', name: 'kb', component: () => import('@/views/KnowledgeBase.vue') },
     { path: '/account', name: 'account', component: () => import('@/views/Account.vue') },
     { path: '/cases', name: 'cases', component: () => import('@/views/Cases.vue') },
+    // 协作 H5（公开，免登录，隐藏主导航）
+    { path: '/h5/route/:token', name: 'h5-route', component: () => import('@/views/H5Route.vue'), meta: { h5: true } },
   ],
 })
 

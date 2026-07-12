@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../../prisma/prisma.service'
 import {
   ACTION,
@@ -9,7 +9,7 @@ import {
   StatusKey,
   validateStateMachine,
 } from './state-machine'
-import { hideCostsForRole, Role } from './role-visibility'
+import { hideCostsForRole, maskQuotePublic, Role } from './role-visibility'
 
 export interface CreateRouteInput {
   customerName: string
@@ -114,10 +114,93 @@ export class RoutesService {
         quote: (input.quote as object) ?? null,
       },
     })
-    // 对外 H5 链接（notify=true 且非草稿时生成）
+    // 对外 H5 链接（notify=true 且非草稿时生成协作共享 token）
     const shareLink =
-      !draft && input.notify ? `/h5/routes/${routeId}/versions/${version.id}` : null
+      !draft && input.notify ? (await this.createShare(routeId, role, version.id)).link : null
     return { version: this.serializeVersion(version, role), shareLink }
+  }
+
+  // 生成协作 H5 共享令牌（默认指向最新非草稿版本）
+  async createShare(routeId: string, role: Role = 'agency', versionId?: string) {
+    let vid = versionId
+    if (!vid) {
+      const vers = await this.prisma.routeVersion.findMany({
+        where: { routeId, draft: false },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+      })
+      if (!vers.length) {
+        throw new BadRequestException('该路线暂无对外版本（请先保存非草稿版本）')
+      }
+      vid = vers[0].id
+    }
+    const token = Math.random().toString(36).slice(2) + Date.now().toString(36)
+    const share = await this.prisma.routeShare.create({
+      data: { token, routeId, versionId: vid, role },
+    })
+    return { token: share.token, link: `/h5/route/${share.token}` }
+  }
+
+  // 协作 H5 只读视图（按 token 解析，报价仅暴露对客总价）
+  async getH5(token: string) {
+    const share = await this.prisma.routeShare.findUnique({ where: { token } })
+    if (!share) throw new NotFoundException('协作链接无效')
+    if (share.expiresAt && share.expiresAt.getTime() < Date.now()) {
+      throw new NotFoundException('协作链接已过期')
+    }
+    const route = await this.prisma.route
+      .findUniqueOrThrow({ where: { id: share.routeId } })
+      .catch(() => {
+        throw new NotFoundException('路线不存在')
+      })
+    let version = share.versionId
+      ? await this.prisma.routeVersion.findUnique({ where: { id: share.versionId } })
+      : null
+    if (!version) {
+      version =
+        (
+          await this.prisma.routeVersion.findMany({
+            where: { routeId: share.routeId, draft: false },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          })
+        )[0] ?? null
+    }
+    if (!version) throw new NotFoundException('该路线暂无对外版本')
+    const masked = maskQuotePublic(version.quote) as { totals?: { guestPrice?: number } }
+    return {
+      token,
+      routeId: route.id,
+      destination: route.destination,
+      groupSize: route.groupSize,
+      travelDate: route.travelDate ? route.travelDate.toISOString() : null,
+      version: version.version,
+      statusKey: route.statusKey,
+      itinerary: version.itinerary,
+      guestPrice: masked?.totals?.guestPrice ?? null,
+    }
+  }
+
+  // 协作 H5 反馈提交（客户/对方在链接内填写修改意见）
+  async submitFeedback(token: string, content: string, authorName?: string) {
+    if (!content || !content.trim()) throw new BadRequestException('反馈内容不能为空')
+    const share = await this.prisma.routeShare.findUnique({ where: { token } })
+    if (!share) throw new NotFoundException('协作链接无效')
+    const fb = await this.prisma.routeFeedback.create({
+      data: {
+        routeId: share.routeId,
+        versionId: share.versionId,
+        token,
+        authorName: authorName ?? null,
+        content,
+      },
+    })
+    return {
+      id: fb.id,
+      content: fb.content,
+      authorName: fb.authorName,
+      createdAt: fb.createdAt.toISOString(),
+    }
   }
 
   // 版本历史

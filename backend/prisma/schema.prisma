@@ -62,6 +62,7 @@ model Route {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   versions      RouteVersion[]
+  shares        RouteShare[]
 }
 
 // 路线版本（行程+报价一体化，每次保存并通知生成新版本）
@@ -112,5 +113,28 @@ model CostInquiry {
   cost1     Decimal? @db.Decimal(12, 2)
   cost2     Decimal? @db.Decimal(12, 2)
   status    String   @default("pending")
+  createdAt DateTime @default(now())
+}
+
+// 协作 H5 共享令牌（一手/旅行社分享给客户或对方的只读链接）
+model RouteShare {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  routeId   String
+  route     Route    @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  versionId String?
+  role      Role     @default(agency) // 预览角色：决定 H5 内报价可见性
+  createdAt DateTime @default(now())
+  expiresAt DateTime?
+}
+
+// 协作 H5 反馈（客户/对方在链接内提交的修改意见）
+model RouteFeedback {
+  id        String   @id @default(uuid())
+  routeId   String
+  versionId String?
+  token     String?  // 关联 RouteShare，便于溯源
+  authorName String?
+  content   String
   createdAt DateTime @default(now())
 }
