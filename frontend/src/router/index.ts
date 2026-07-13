@@ -1,8 +1,9 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
 
 // 路由严格对应 doc/03 页面清单
+// 使用 hash 模式：所有路由带 # 前缀，静态托管服务端永远只看到 /，无需 404 回退配置
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHashHistory(),
   routes: [
     { path: '/', redirect: '/routes/kanban' },
     { path: '/routes/kanban', name: 'route-kanban', component: () => import('@/views/RouteKanban.vue') },
