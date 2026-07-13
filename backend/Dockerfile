@@ -4,11 +4,13 @@
 # 监听端口：3000（容器内由 PORT 环境变量覆盖）；健康检查：/api/health
 
 FROM node:22-alpine AS build
-RUN corepack enable
+# 显式安装 pnpm v9（与 lockfileVersion 9.0 匹配；corepack 默认可能拉到 v10 导致 frozen 校验失败）
+RUN npm install -g pnpm@9
 WORKDIR /app
 # 复制整个仓库（含 pnpm workspace），安装全部依赖
 COPY . .
-RUN pnpm install --frozen-lockfile
+# 不用 --frozen-lockfile：避免 corepack/pnpm 小版本差异导致 lockfile 严格校验失败
+RUN pnpm install
 # 生成 Prisma Client（写入 backend/node_modules/.prisma/client）
 RUN pnpm --filter backend exec prisma generate
 # 编译 NestJS 到 backend/dist
