@@ -10,6 +10,10 @@
 FROM node:22-bookworm-slim AS build
 # 显式安装 pnpm v9（与 lockfileVersion 9.0 匹配；corepack 默认可能拉到 v10 导致校验失败）
 RUN npm install -g pnpm@9
+# 构建阶段也安装 openssl，确保 prisma generate 正确识别 debian-openssl-3.0.x 引擎
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 # 复制整个仓库（含 pnpm workspace），安装全部依赖
 COPY . .
