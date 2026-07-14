@@ -4,31 +4,45 @@ const prisma = new PrismaClient()
 
 // 幂等种子：以固定 id upsert，重复执行安全
 async function main() {
-  // 角色：一手 PandaKing / 境外旅行社
+  // 角色：一手 PandaKing / 境外旅行社 / 省地接社（含机构归属与层级）
   const pandaking = await prisma.user.upsert({
     where: { id: 'seed-pk' },
-    update: {},
-    create: { id: 'seed-pk', name: 'PandaKing 一手', role: 'pandaking' },
+    update: { level: 'admin' },
+    create: { id: 'seed-pk', name: 'PandaKing 一手', role: 'pandaking', level: 'admin' },
   })
   const agency = await prisma.user.upsert({
     where: { id: 'seed-agency' },
-    update: {},
-    create: { id: 'seed-agency', name: '环球旅行社', role: 'agency' },
+    update: { agencyId: 'org-agency-seed', level: 'admin' },
+    create: {
+      id: 'seed-agency',
+      name: '环球旅行社',
+      role: 'agency',
+      agencyId: 'org-agency-seed',
+      level: 'admin',
+    },
   })
   const provincial = await prisma.user.upsert({
     where: { id: 'seed-provincial' },
-    update: {},
-    create: { id: 'seed-provincial', name: '川内地接社', role: 'provincial' },
+    update: { agencyId: 'org-provincial-seed', level: 'admin' },
+    create: {
+      id: 'seed-provincial',
+      name: '川内地接社',
+      role: 'provincial',
+      agencyId: 'org-provincial-seed',
+      level: 'admin',
+    },
   })
 
-  // 一条演示邀请（角色 agency，7 天有效），用于 accept-invite 联调
+  // 一条演示邀请（机构管理员，7 天有效），用于 accept-invite 联调
   await prisma.invite.upsert({
     where: { id: 'seed-invite-1' },
-    update: {},
+    update: { agencyId: 'org-agency-seed', level: 'admin' },
     create: {
       id: 'seed-invite-1',
       token: 'demo-invite-agency',
       role: 'agency',
+      agencyId: 'org-agency-seed',
+      level: 'admin',
       email: 'agency@example.com',
       expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000),
       accepted: false,
@@ -39,7 +53,7 @@ async function main() {
   // 一条协作路线 + 两个版本（演示双向回路数据）
   const route = await prisma.route.upsert({
     where: { id: 'seed-route-1' },
-    update: { statusKey: 'awaiting_pk_confirm' },
+    update: { statusKey: 'awaiting_pk_confirm', agencyId: 'org-agency-seed', provincialId: 'org-provincial-seed' },
     create: {
       id: 'seed-route-1',
       customerName: 'Smith Family',
@@ -51,6 +65,8 @@ async function main() {
       travelDate: new Date('2026-10-01'),
       statusKey: 'awaiting_pk_confirm',
       modeKey: 'collab',
+      agencyId: 'org-agency-seed',
+      provincialId: 'org-provincial-seed',
       createdById: agency.id,
     },
   })

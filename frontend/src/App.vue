@@ -67,7 +67,7 @@ function onSwitchRole(e: Event) {
 
   <div v-else class="app-shell">
     <header class="app-header">
-      <button class="hamburger" :class="{ open: menuOpen }" @click="toggleMenu" aria-label="菜单" aria-expanded="menuOpen">
+      <button class="hamburger" :class="{ open: menuOpen }" @click="toggleMenu" aria-label="菜单" :aria-expanded="menuOpen">
         <span></span><span></span><span></span>
       </button>
       <div class="brand" @click="onNav('/routes/kanban')">PandaKing9<span class="brand-sub">协作工作台</span></div>

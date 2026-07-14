@@ -16,6 +16,14 @@ enum Role {
   provincial
 }
 
+// 组织内层级：管理员（可被授权邀请员工）/ 员工
+// - 一手 PandaKing 视为管理员（枢纽，可见全部）
+// - 境外旅行社 / 省地接社 各自有 admin 与 staff
+enum RoleLevel {
+  admin
+  staff
+}
+
 enum CaseStatus {
   draft
   published
@@ -24,28 +32,36 @@ enum CaseStatus {
 
 // 用户（微信 OAuth2 + 邀请制）
 model User {
-  id         String   @id @default(uuid())
+  id         String    @id @default(uuid())
   name       String
-  role       Role     @default(agency)
-  agencyId   String?
+  role       Role      @default(agency)
+  agencyId   String? // 归属机构 ID（境外旅行社 / 省地接社的 org id；一手为 null）
+  level      RoleLevel @default(staff) // 组织内层级：admin 可邀请员工
+  parentId   String? // 邀请人（上级），用于层级与审计
   openid     String?  @unique
   email      String?
-  disabled   Boolean  @default(false)
-  createdAt  DateTime @default(now())
+  disabled   Boolean   @default(false)
+  createdAt  DateTime  @default(now())
   invites    Invite[]
 }
 
-// 邀请（一手发出，带角色+有效期）
+// 邀请（两层级：一手邀请机构管理员 → 管理员/一手邀请机构员工）
+// - agencyId：受邀者归属的机构 org id（境外旅行社 / 省地接社）
+// - level：admin=机构管理员（首邀），staff=机构员工（由管理员或一手再邀）
+// - parentId：邀请人用户 id（层级/审计）
 model Invite {
-  id         String   @id @default(uuid())
-  token      String   @unique
+  id         String    @id @default(uuid())
+  token      String    @unique
   role       Role
+  agencyId   String? // 受邀者归属机构（agency/provincial 必填；手为 null）
+  level      RoleLevel @default(admin)
+  parentId   String? // 邀请人 id
   email      String?
   expiresAt  DateTime
-  accepted   Boolean  @default(false)
+  accepted   Boolean   @default(false)
   createdById String
   createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
-  createdAt  DateTime @default(now())
+  createdAt  DateTime  @default(now())
 }
 
 // 路线（协作 spine）
@@ -60,6 +76,8 @@ model Route {
   travelDate    DateTime?
   statusKey     String
   modeKey       String         @default("collab")
+  agencyId      String? // 归属机构（境外旅行社 org id）；用于机构间物理隔绝的查询隔离
+  provincialId  String? // 归属省地接社 org id；一手将该路线分配给某省地接社后，该省地接社可见并参与协作规划/报价
   createdById   String
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
@@ -106,16 +124,16 @@ model KbEntry {
   updatedAt   DateTime @updatedAt
 }
 
-// 成本询价（省地接社填写成本价①②）
+// 成本询价（一手向省地接社询价，省地接社填写成本价①）
 model CostInquiry {
-  id        String   @id @default(uuid())
-  routeId   String
-  agencyId  String
-  token     String   @unique
-  cost1     Decimal? @db.Decimal(12, 2)
-  cost2     Decimal? @db.Decimal(12, 2)
-  status    String   @default("pending")
-  createdAt DateTime @default(now())
+  id           String   @id @default(uuid())
+  routeId      String
+  provincialId String // 被询价的省地接社机构 org id（原 agencyId 改名，语义更清晰）
+  token        String   @unique
+  cost1        Decimal? @db.Decimal(12, 2) // 省地接社填的成本①（地接成本）
+  cost2        Decimal? @db.Decimal(12, 2) // 预留：省地接社次级成本（当前未强制使用）
+  status       String   @default("pending") // pending | submitted
+  createdAt    DateTime @default(now())
 }
 
 // 协作 H5 共享令牌（一手/旅行社分享给客户或对方的只读链接）

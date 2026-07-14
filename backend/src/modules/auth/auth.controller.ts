@@ -1,11 +1,13 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Param, Post, Put, UseGuards } from '@nestjs/common'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
-import { AuthService, Role } from './auth.service'
+import { AuthService, AuthPrincipal, Role, RoleLevel } from './auth.service'
 
 interface AuthUser {
   id: string
   role: Role
+  agencyId: string | null
+  level: RoleLevel
 }
 
 // 账号与认证 —— 对应 doc/04-接口契约/账号与认证.md
@@ -25,11 +27,21 @@ export class AuthController {
     return this.svc.exchangeCode(body.code)
   }
 
-  // 一手创建邀请（需登录）
+  // 创建邀请（两层级：一手邀请机构管理员 → 管理员/一手邀请机构员工）
   @Post('invites')
   @UseGuards(JwtAuthGuard)
-  createInvite(@Body() body: { email?: string; role: Role }, @CurrentUser() user: AuthUser) {
-    return this.svc.createInvite(body, user.id)
+  createInvite(
+    @Body() body: { role: Role; email?: string; agencyId?: string; level?: RoleLevel },
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.svc.createInvite(body, user as AuthPrincipal)
+  }
+
+  // 邀请列表（按权限隔离）
+  @Get('invites')
+  @UseGuards(JwtAuthGuard)
+  listInvites(@CurrentUser() user: AuthUser) {
+    return this.svc.listInvites(user as AuthPrincipal)
   }
 
   @Get('invites/:token')
@@ -56,10 +68,35 @@ export class AuthController {
     return this.svc.me(user.id)
   }
 
-  // 成员列表（需登录）
+  // 成员列表（按机构物理隔绝）
   @Get('members')
   @UseGuards(JwtAuthGuard)
-  listMembers() {
-    return this.svc.listMembers()
+  listMembers(@CurrentUser() user: AuthUser) {
+    return this.svc.listMembers(user as AuthPrincipal)
+  }
+
+  // 权限矩阵（字段级 + 物理隔绝）
+  @Get('permissions/matrix')
+  @UseGuards(JwtAuthGuard)
+  permissionMatrix() {
+    return this.svc.getPermissionMatrix()
+  }
+
+  // 改成员角色（仅一手）
+  @Put('members/:id/role')
+  @UseGuards(JwtAuthGuard)
+  updateMemberRole(
+    @Param('id') id: string,
+    @Body() body: { role: Role },
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.svc.updateMemberRole(id, body.role, user as AuthPrincipal)
+  }
+
+  // 停用成员（仅一手）
+  @Post('members/:id/disable')
+  @UseGuards(JwtAuthGuard)
+  disableMember(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.svc.disableMember(id, user as AuthPrincipal)
   }
 }

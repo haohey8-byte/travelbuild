@@ -2,10 +2,29 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
-import { fetchRoute, saveVersion, shareRoute, routeAction, fetchRouteFeedback } from '@/api/routes'
+import {
+  fetchRoute,
+  saveVersion,
+  shareRoute,
+  routeAction,
+  fetchRouteFeedback,
+  assignProvincial,
+  createCostInquiry,
+  listCostInquiries,
+  applyCostInquiry,
+  createProvincialShare,
+} from '@/api/routes'
 import { useAuthStore } from '@/stores/auth'
 import { safeName, safeText } from '@/utils/name'
-import { shareH5Url, shareH5Caption, feedbackNotifyText, copyText } from '@/utils/share'
+import {
+  shareH5Url,
+  shareH5Caption,
+  collabNotifyText,
+  roleLabel,
+  copyText,
+  costInquiryH5Url,
+  provincialRouteH5Url,
+} from '@/utils/share'
 import type { Route, RouteStatusKey, QuoteLevel, RouteFeedbackItem } from '@/types'
 
 const route = useRoute()
@@ -103,6 +122,8 @@ const totals = computed(() => {
 // 当前角色可编辑/可见的成本字段
 const role = computed(() => auth.currentRole)
 const canEditCost = computed(() => role.value === 'pandaking')
+// 旅行社可在报价基础上加价生成对游客报价（成本①/② 由一手填写，旅行社不可改）
+const canEditMarkup = computed(() => role.value === 'pandaking' || role.value === 'agency')
 const showCost1 = computed(() => role.value === 'pandaking' || role.value === 'provincial')
 const showCost2 = computed(() => role.value === 'pandaking')
 
@@ -115,6 +136,8 @@ const STATUS_LABEL: Record<RouteStatusKey, string> = {
   awaiting_feedback: '待反馈',
   awaiting_confirm: '待确认',
   confirmed: '已确认',
+  booked: '已成单',
+  pending_followup: '待跟进',
   lost: '已流失',
 }
 const ACTIONS_BY_STATUS: Record<RouteStatusKey, { key: string; label: string; needNote?: boolean }[]> = {
@@ -128,6 +151,8 @@ const ACTIONS_BY_STATUS: Record<RouteStatusKey, { key: string; label: string; ne
   awaiting_feedback: [{ key: 'markup', label: '加价' }],
   awaiting_confirm: [{ key: 'tourist-confirm', label: '游客确认' }],
   confirmed: [{ key: 'pay', label: '付款成单' }],
+  booked: [],
+  pending_followup: [],
   lost: [],
 }
 const availableActions = computed(() => {
@@ -144,6 +169,97 @@ const feedbackNote = ref('')
 const notifyTextConsole = ref('')
 
 const versionLabel = computed(() => data.value?.versions?.[0]?.version ?? 'v1')
+
+// —— 成本询价（一手） ——
+const costInquiries = ref<{ id: string; routeId: string; provincialId: string; status: string; cost1: number | null; createdAt: string }[]>([])
+const loadingInquiries = ref(false)
+const assignProvId = ref('')
+const inquiryProvId = ref('')
+const inquiryLink = ref('')
+const inquiryErr = ref('')
+const copiedInquiry = ref(false)
+const applyingId = ref('')
+async function loadInquiries() {
+  if (role.value !== 'pandaking') return
+  loadingInquiries.value = true
+  try {
+    costInquiries.value = await listCostInquiries(id)
+  } catch {
+    costInquiries.value = []
+  } finally {
+    loadingInquiries.value = false
+  }
+}
+async function onAssignProvincial() {
+  inquiryErr.value = ''
+  if (!assignProvId.value.trim()) {
+    inquiryErr.value = '请填写省地接社机构编号'
+    return
+  }
+  try {
+    await assignProvincial(id, assignProvId.value.trim())
+    actionOk.value = `已将路线分配给省地接社 ${assignProvId.value.trim()}，该省地接社现可看到此路线并参与协作`
+    await load()
+  } catch (e: any) {
+    inquiryErr.value = e?.response?.data?.message || '分配失败'
+  }
+}
+async function onCreateInquiry() {
+  inquiryErr.value = ''
+  copiedInquiry.value = false
+  if (!inquiryProvId.value.trim()) {
+    inquiryErr.value = '请填写要询价的省地接社机构编号'
+    return
+  }
+  try {
+    const res = await createCostInquiry(id, inquiryProvId.value.trim())
+    inquiryLink.value = costInquiryH5Url(res.token)
+    await loadInquiries()
+  } catch (e: any) {
+    inquiryErr.value = e?.response?.data?.message || '发起询价失败'
+  }
+}
+async function copyInquiryLink() {
+  if (!inquiryLink.value) return
+  const ok = await copyText(inquiryLink.value)
+  copiedInquiry.value = ok
+  setTimeout(() => (copiedInquiry.value = false), 2000)
+}
+async function onApplyInquiry(inqId: string) {
+  applyingId.value = inqId
+  inquiryErr.value = ''
+  try {
+    await applyCostInquiry(inqId)
+    actionOk.value = '已将省地接社成本①写入路线报价（成本①）'
+    await load()
+    await loadInquiries()
+  } catch (e: any) {
+    inquiryErr.value = e?.response?.data?.message || '应用失败'
+  } finally {
+    applyingId.value = ''
+  }
+}
+
+// 一手生成「省地接社协作 H5」（可编辑行程），复制发微信群
+const provShareLink = ref('')
+const copiedProvShare = ref(false)
+const provShareErr = ref('')
+async function onGenProvShare() {
+  provShareErr.value = ''
+  copiedProvShare.value = false
+  try {
+    const res = await createProvincialShare(id)
+    provShareLink.value = provincialRouteH5Url(res.token)
+  } catch (e: any) {
+    provShareErr.value = e?.response?.data?.message || '生成协作 H5 失败（请先分配省地接社）'
+  }
+}
+async function copyProvShare() {
+  if (!provShareLink.value) return
+  const ok = await copyText(provShareLink.value)
+  copiedProvShare.value = ok
+  setTimeout(() => (copiedProvShare.value = false), 2000)
+}
 
 function displayName(r: Route): string {
   return safeName(r.customerNameCn, r.customerName)
@@ -170,6 +286,7 @@ async function load() {
       quoteItems.value = []
     }
     await loadFeedback()
+    await loadInquiries()
   } catch (e: any) {
     err.value = e?.response?.data?.message || '加载失败'
   } finally {
@@ -270,8 +387,9 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
     const body = a.needNote ? { feedback: note } : undefined
     await routeAction(id, a.key, body)
     feedbackNote.value = ''
-    // 回传反馈：生成通知文案并复制到剪贴板，提示去微信同步给一手地接社
-    if (a.key === 'feedback' && data.value) {
+    // 除「拒绝/流失」外，所有状态流转（规划提交类动作）与反馈意见，
+    // 都生成「主题 + 事件 + H5 链接」通知文案并复制到剪贴板，便于粘贴到微信群同步协作方。
+    if (a.key !== 'reject' && data.value) {
       let link = shareLink.value
       if (!link) {
         try {
@@ -283,21 +401,23 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
         }
       }
       if (link) {
-        const text = feedbackNotifyText({
-          label: '旅行社回复',
+        const isFeedback = !!a.needNote
+        const text = collabNotifyText({
+          kind: isFeedback ? 'feedback' : 'plan',
+          eventLabel: a.label,
           subject: safeName(data.value.customerNameCn, data.value.customerName),
           destination: safeText(data.value.destination),
-          authorName: user.value?.name || '旅行社',
-          suggestion: note,
+          authorName: user.value?.name || roleLabel(role.value),
+          detail: isFeedback ? note : undefined,
           url: link,
         })
         notifyTextConsole.value = text
         const ok = await copyText(text)
         actionOk.value = ok
-          ? '回传反馈已保存，通知文案已复制到剪贴板，去微信粘贴发给一手地接社'
-          : '回传反馈已保存，请手动复制下方通知文案发到微信'
+          ? '通知文案已复制到剪贴板，去微信粘贴到协作群即可同步 ✅'
+          : '通知文案已生成，请手动复制下方文案发到协作群'
       } else {
-        actionOk.value = '回传反馈已保存'
+        actionOk.value = `${a.label}成功`
       }
     } else {
       actionOk.value = `${a.label}成功`
@@ -310,10 +430,16 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
     doing.value = ''
   }
 }
+async function copyShareLink() {
+  if (!shareLink.value || !data.value) return
+  const text = `${shareH5Caption(data.value)}\n${shareLink.value}`
+  const ok = await copyText(text)
+  actionOk.value = ok ? '协作 H5 链接已复制，去微信群粘贴即可 ✅' : '复制失败，请手动复制下方链接'
+}
 async function copyConsoleNotify() {
   if (!notifyTextConsole.value) return
   const ok = await copyText(notifyTextConsole.value)
-  actionOk.value = ok ? '已再次复制，去微信粘贴发给一手地接社 ✅' : '复制失败，请手动选择上方文字复制'
+  actionOk.value = ok ? '已再次复制，去微信粘贴到协作群 ✅' : '复制失败，请手动选择上方文字复制'
 }
 </script>
 
@@ -338,13 +464,14 @@ async function copyConsoleNotify() {
         <button class="btn" :disabled="savingDraft || savingNotify" @click="onSaveNotify">
           {{ savingNotify ? '生成中…' : '保存并通知（生成协作 H5）' }}
         </button>
-        <a v-if="shareLink" :href="shareLink" target="_blank" class="link">打开协作 H5 ↗（已复制）</a>
+        <a v-if="shareLink" :href="shareLink" target="_blank" class="link">打开协作 H5 ↗</a>
+        <button v-if="shareLink" class="btn ghost sm" @click="copyShareLink">复制链接</button>
       </div>
       <p v-if="actionErr" class="err">{{ actionErr }}</p>
       <p v-if="actionOk" class="ok">{{ actionOk }}</p>
       <div v-if="notifyTextConsole" class="fb-notify">
         <div class="fb-notify-head">
-          <span>📋 通知文案（去微信粘贴发给一手地接社）</span>
+          <span>📋 通知文案（去微信粘贴到协作群）</span>
           <button class="btn ghost sm" @click="copyConsoleNotify">再复制</button>
         </div>
         <pre class="fb-notify-text">{{ notifyTextConsole }}</pre>
@@ -392,6 +519,9 @@ async function copyConsoleNotify() {
           <p v-if="!canEditCost" class="hint">
             当前角色（{{ role }}）按权限仅可见部分成本字段；完整编辑请切换为一手 PandaKing。
           </p>
+          <p v-if="role === 'provincial'" class="hint">
+            省地接社可见自身成本①（只读）。地接成本由一手发起的「成本询价 H5」回填；左侧行程规划可直接编辑保存，参与协作。
+          </p>
           <div class="tbl-wrap">
           <table class="quote">
             <thead>
@@ -417,7 +547,7 @@ async function copyConsoleNotify() {
                 <td v-if="showCost2">
                   <input type="number" v-model.number="it.cost2" :disabled="!canEditCost" />
                 </td>
-                <td><input type="number" v-model.number="it.markup" :disabled="!canEditCost" /></td>
+                <td><input type="number" v-model.number="it.markup" :disabled="!canEditMarkup" /></td>
                 <td class="ro">¥{{ itemGuest(it).toLocaleString() }}</td>
                 <td><button class="btn ghost sm" @click="removeItem(i)">×</button></td>
               </tr>
@@ -505,6 +635,67 @@ async function copyConsoleNotify() {
         </ul>
         <p v-else class="muted">暂无反馈意见。对方可在协作 H5 链接内提交修改意见，或在此回传反馈。</p>
       </section>
+
+      <!-- 成本询价（仅一手）：分配省地接社 + 发起询价 + 应用 -->
+      <section class="card fb-card" v-if="role === 'pandaking'">
+        <h3>成本询价（省地接社协作）</h3>
+        <p class="hint">
+          一手将路线分配给省地接社后，该省地接社可见此路线并参与行程规划；发起成本询价让其填写地接成本①，应用后写入路线报价。
+        </p>
+        <div class="ci-row">
+          <input v-model="assignProvId" class="input sm" placeholder="省地接社机构编号" />
+          <button class="btn sm" @click="onAssignProvincial">分配省地接社</button>
+        </div>
+        <div class="ci-row" style="margin-top: 10px">
+          <input v-model="inquiryProvId" class="input sm" placeholder="询价省地接社机构编号" />
+          <button class="btn sm" :disabled="!inquiryProvId.trim()" @click="onCreateInquiry">发起成本询价</button>
+        </div>
+        <p v-if="inquiryErr" class="err">{{ inquiryErr }}</p>
+        <div v-if="inquiryLink" class="link-box">
+          <input :value="inquiryLink" class="input" readonly />
+          <button class="btn ghost sm" @click="copyInquiryLink">{{ copiedInquiry ? '已复制 ✓' : '复制链接' }}</button>
+        </div>
+        <p v-if="inquiryLink" class="tip">把链接发到微信群，省地接社打开即填成本①。</p>
+
+        <div class="ci-row" style="margin-top: 12px">
+          <button class="btn sm" :disabled="!data?.provincialId" @click="onGenProvShare">
+            生成省地接社协作 H5（可编辑行程）
+          </button>
+        </div>
+        <p v-if="provShareErr" class="err">{{ provShareErr }}</p>
+        <div v-if="provShareLink" class="link-box">
+          <input :value="provShareLink" class="input" readonly />
+          <button class="btn ghost sm" @click="copyProvShare">{{ copiedProvShare ? '已复制 ✓' : '复制链接' }}</button>
+        </div>
+        <p v-if="provShareLink" class="tip">把链接发到微信群，省地接社打开即可编辑分配给自己的行程并提交规划建议。</p>
+
+        <h3 style="margin-top: 18px">询价记录</h3>
+        <p v-if="loadingInquiries">加载中…</p>
+        <div v-else class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr><th>省地接社</th><th>状态</th><th>成本①</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr v-for="ci in costInquiries" :key="ci.id">
+                <td>{{ ci.provincialId }}</td>
+                <td>{{ ci.status === 'submitted' ? '已回传' : '待回传' }}</td>
+                <td>{{ ci.cost1 != null ? '¥' + Number(ci.cost1).toLocaleString() : '-' }}</td>
+                <td>
+                  <button
+                    v-if="ci.status === 'submitted'"
+                    class="btn ghost sm"
+                    :disabled="!!applyingId"
+                    @click="onApplyInquiry(ci.id)"
+                  >
+                    {{ applyingId === ci.id ? '应用中…' : '应用成本①' }}
+                  </button>
+                  <span v-else class="muted">待回传</span>
+                </td>
+              </tr>
+              <tr v-if="!costInquiries.length"><td colspan="4" class="muted">暂无询价</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </template>
   </div>
 </template>
@@ -549,6 +740,13 @@ async function copyConsoleNotify() {
 .btn.ghost.sm { padding: 2px 8px; font-size: 12px; }
 .btn.danger { border-color: var(--danger); color: var(--danger); }
 textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; font-family: inherit; box-sizing: border-box; }
+.input { flex: 1; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); font-size: 14px; box-sizing: border-box; }
+.input.sm { flex: 1; }
+.btn.sm { padding: 8px 12px; font-size: 13px; border: 1px solid var(--line-strong); background: var(--surface); border-radius: 8px; cursor: pointer; }
+.btn.sm:disabled { opacity: 0.6; }
+.ci-row { display: flex; gap: 8px; align-items: center; }
+.link-box { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
+.link-box .input { font-size: 12px; color: var(--muted); }
 
 /* 反馈记录 */
 .fb-card { margin-top: 16px; }

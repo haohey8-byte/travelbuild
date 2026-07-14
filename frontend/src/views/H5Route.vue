@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { fetchH5Route, submitH5Feedback, fetchH5Feedback } from '@/api/h5'
 import { safeText, safeName } from '@/utils/name'
-import { shareH5Url, feedbackNotifyText, copyText } from '@/utils/share'
+import { shareH5Url, shareH5Caption, collabNotifyText, copyText } from '@/utils/share'
 import type { H5Route, RouteFeedbackItem } from '@/types'
 
 const route = useRoute()
@@ -22,6 +22,14 @@ const feedbackList = ref<RouteFeedbackItem[]>([])
 // 提交反馈后自动生成的通知文案（带主题+建议+H5链接），便于粘贴到微信同步对端
 const notifyText = ref('')
 const notifyTip = ref('')
+// 查看方随时把协作方案链接转发到微信群（复制「说明 + 链接」）
+const shareTip = ref('')
+async function copyShareLink() {
+  if (!data.value) return
+  const caption = shareH5Caption(data.value)
+  const ok = await copyText(`${caption}\n${shareH5Url(token)}`)
+  shareTip.value = ok ? '协作链接已复制，去微信粘贴到群里即可 ✅' : '复制失败，请长按上方链接手动复制'
+}
 async function copyAgain() {
   if (!notifyText.value) return
   const ok = await copyText(notifyText.value)
@@ -109,12 +117,13 @@ async function onSend() {
     thanks.value = true
     // 生成「主题+反馈建议+H5链接」通知文案并复制，提示去微信粘贴同步对端
     if (data.value) {
-      const text = feedbackNotifyText({
-        label: '新反馈',
+      const text = collabNotifyText({
+        kind: 'feedback',
+        eventLabel: '提交了修改意见',
         subject: safeName(data.value.customerNameCn, data.value.customerName),
         destination: data.value.destination,
         authorName: authorName.value.trim() || undefined,
-        suggestion: content,
+        detail: content,
         url: shareH5Url(token),
       })
       notifyText.value = text
@@ -155,6 +164,9 @@ function goHome() {
       <div v-if="data.guestPrice != null" class="h5-price">
         对客总价: <b>¥{{ data.guestPrice.toLocaleString() }}</b>
       </div>
+
+      <button class="btn ghost share-btn" @click="copyShareLink">📋 复制协作链接发到微信群</button>
+      <p v-if="shareTip" class="share-tip">{{ shareTip }}</p>
 
       <h3>行程安排</h3>
       <div v-if="days.length">
@@ -209,6 +221,8 @@ function goHome() {
 .h5-meta { display: flex; flex-wrap: wrap; gap: 12px; color: var(--muted); font-size: 13px; }
 .h5-price { margin: 12px 0; font-size: 16px; }
 .h5-price b { color: var(--brand); }
+.share-btn { width: 100%; margin-top: 14px; }
+.share-tip { color: var(--success, #10b981); font-size: 13px; margin: 6px 0 0; }
 .day { border-top: 1px solid var(--line); padding: 10px 0; }
 .line { color: var(--ink); font-size: 14px; margin: 2px 0; }
 .muted { color: var(--muted); }

@@ -15,6 +15,12 @@ const router = createRouter({
     { path: '/cases', name: 'cases', component: () => import('@/views/Cases.vue') },
     // 协作 H5（公开，免登录，隐藏主导航）
     { path: '/h5/route/:token', name: 'h5-route', component: () => import('@/views/H5Route.vue'), meta: { h5: true } },
+    // 邀请接受 H5（一手/管理员复制链接发到微信群，受邀者打开后接受）
+    { path: '/h5/invite/:token', name: 'h5-invite', component: () => import('@/views/H5Invite.vue'), meta: { h5: true } },
+    // 成本询价 H5（一手复制链接发微信群，省地接社打开填写成本①）
+    { path: '/h5/cost-inquiry/:token', name: 'h5-cost-inquiry', component: () => import('@/views/H5CostInquiry.vue'), meta: { h5: true } },
+    // 省地接社协作 H5（一手复制链接发微信群，省地接社打开可编辑分配给自己的行程并反馈）
+    { path: '/h5/provincial-route/:token', name: 'h5-provincial-route', component: () => import('@/views/H5ProvincialRoute.vue'), meta: { h5: true } },
   ],
 })
 

@@ -1,11 +1,15 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common'
 import { RoutesService } from './routes.service'
+import { CostInquiryService } from './cost-inquiry.service'
 
 // 协作 H5（公开，免登录） —— 对应 doc/04-接口契约/H5协作链接.md
 // 客户/对方凭共享令牌只读查看行程与对客报价，并可提交反馈，完成协作闭环。
 @Controller('h5')
 export class H5Controller {
-  constructor(private readonly svc: RoutesService) {}
+  constructor(
+    private readonly svc: RoutesService,
+    private readonly costInquiry: CostInquiryService,
+  ) {}
 
   // 渲染协作 H5（按 token 解析路线+version，报价仅暴露对客总价）
   @Get('route/:token')
@@ -26,5 +30,29 @@ export class H5Controller {
   @Get('route/:token/feedback')
   getFeedback(@Param('token') token: string) {
     return this.svc.getFeedbackByToken(token)
+  }
+
+  // 成本询价 H5（省地接社填成本价①）—— 免登录，链接即授权
+  @Get('cost-inquiry/:token')
+  getCostInquiry(@Param('token') token: string) {
+    return this.costInquiry.getByToken(token)
+  }
+
+  // 省地接社提交成本①
+  @Post('cost-inquiry/:token/submit')
+  submitCostInquiry(
+    @Param('token') token: string,
+    @Body() body: { cost1: number },
+  ) {
+    return this.costInquiry.submit(token, body?.cost1)
+  }
+
+  // 省地接社协作 H5：编辑分配给自己的行程并保存（价格保留上一版）
+  @Post('route/:token/edit')
+  editRoute(
+    @Param('token') token: string,
+    @Body() body: { itinerary: unknown },
+  ) {
+    return this.svc.provincialEdit(token, body?.itinerary)
   }
 }

@@ -17,6 +17,8 @@ const STATUS_LABEL: Record<RouteStatusKey, string> = {
   awaiting_feedback: '待反馈',
   awaiting_confirm: '待确认',
   confirmed: '已确认',
+  booked: '已成单',
+  pending_followup: '待跟进',
   lost: '已流失',
 }
 const statusOptions: { key: string; label: string }[] = [
@@ -28,6 +30,8 @@ const statusOptions: { key: string; label: string }[] = [
   { key: 'awaiting_feedback', label: '待反馈' },
   { key: 'awaiting_confirm', label: '待确认' },
   { key: 'confirmed', label: '已确认' },
+  { key: 'booked', label: '已成单' },
+  { key: 'pending_followup', label: '待跟进' },
   { key: 'lost', label: '已流失' },
 ]
 

@@ -2,12 +2,15 @@
 export type Role = 'pandaking' | 'agency' | 'provincial'
 
 export type RouteStatusKey =
+  | 'consulting'            // 咨询中（草稿，未提交）
   | 'awaiting_pk_confirm'   // 待一手确认（旅行社已发草案）
   | 'awaiting_agency_revision' // 待旅行社修订（一手回传反馈）
   | 'awaiting_quote'        // 待报价
   | 'awaiting_feedback'     // 待反馈
   | 'awaiting_confirm'      // 待确认
   | 'confirmed'             // 已确认
+  | 'booked'                // 已成单
+  | 'pending_followup'      // 待跟进（超期）
   | 'lost'                  // 已流失
 
 export interface Route {
@@ -21,6 +24,8 @@ export interface Route {
   travelDate: string | null
   statusKey: RouteStatusKey
   modeKey: 'collab' | 'solo'
+  agencyId?: string | null
+  provincialId?: string | null
   version?: string
   lastAction?: string
   versions?: RouteVersion[]
@@ -53,8 +58,21 @@ export interface User {
   name: string
   role: Role
   agencyId?: string | null
+  level?: 'admin' | 'staff'
   email?: string | null
   disabled?: boolean
+}
+
+// 邀请（两层级邀请模型）
+export interface Invite {
+  id: string
+  token: string
+  role: Role
+  agencyId: string | null
+  level: 'admin' | 'staff'
+  email?: string | null
+  accepted: boolean
+  expiresAt: string
 }
 
 export interface LoginResult {
@@ -67,6 +85,8 @@ export interface CaseItem {
   routeId?: string | null
   title?: string
   cover?: string
+  customerName?: string | null
+  customerNameCn?: string | null
   destination: string
   days: number
   theme: string
@@ -109,6 +129,44 @@ export interface RouteFeedbackItem {
   authorName?: string | null
   content: string
   createdAt: string
+}
+
+// 成本询价（一手 ↔ 省地接社）
+export interface CostInquiry {
+  id: string
+  routeId: string
+  provincialId: string
+  token?: string
+  status: 'pending' | 'submitted'
+  cost1: number | null
+  createdAt: string
+}
+
+// 成本询价 H5（省地接社填写成本①，免登录）
+export interface H5CostInquiry {
+  token: string
+  status: string
+  cost1: number | null
+  route: {
+    id: string
+    customerName?: string | null
+    customerNameCn?: string | null
+    destination: string
+    groupSize: number
+    travelDate: string | null
+  }
+}
+
+// 省地接社协作 H5 令牌（一手生成，省地接社打开可编辑分配给自己的行程）
+export interface ProvincialShare {
+  token: string
+  link: string
+}
+
+// 权限矩阵（后端返回，前端渲染字段级可见性）
+export interface PermissionMatrix {
+  fields: { field: string; pandaking: string; agency: string; provincial: string }[]
+  roles: Role[]
 }
 
 export interface KbEntry {

@@ -37,13 +37,15 @@ export function hideCostsForRole(quote: unknown, role: Role): unknown {
     if (!level) return level
     const copy: QuoteLevel = { ...level }
     if (role === 'agency') {
-      delete copy.cost1 // 旅行社不可见内部成本①
+      delete copy.cost1 // 旅行社不可见省地接社内部成本①
       delete copy.cost2 // 也不可见一手利润②
+      // 保留 markup：旅行社可见自身加价（权限矩阵 Q4.5）
     }
     if (role === 'provincial') {
-      delete copy.cost2 // 省地接社不可见一手利润②，但可见自身成本①
+      delete copy.cost2 // 省地接社不可见一手利润②
+      delete copy.markup // 省地接社不可见旅行社加价
+      // 保留 cost1：省地接社可见自身成本①
     }
-    delete copy.markup // 加价细节对外协作视图不展示
     return copy
   }
 

@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../../prisma/prisma.service'
 import {
   ACTION,
@@ -11,6 +11,9 @@ import {
 } from './state-machine'
 import { hideCostsForRole, maskQuotePublic, Role } from './role-visibility'
 
+// 路线操作主体（来自 JWT 守卫注入）：用于机构间物理隔绝
+type RoutePrincipal = { role: Role; agencyId: string | null }
+
 export interface CreateRouteInput {
   customerName: string
   customerNameCn?: string
@@ -21,6 +24,8 @@ export interface CreateRouteInput {
   travelDate?: string
   modeKey?: 'collab' | 'solo'
   createdById: string
+  creatorRole?: Role
+  creatorAgencyId?: string | null
   // 旅行社发起的结构化行程规划草案（按天：城市/景点/住宿/餐饮偏好 + 预算区间）
   initialDraft?: { itinerary: unknown; quote?: unknown }
 }
@@ -39,17 +44,29 @@ export class RoutesService {
     validateStateMachine()
   }
 
-  // 列表（按角色字段级过滤）
-  async findAll(status?: string, role: Role = 'agency') {
+  // 列表（按角色字段级过滤 + 机构物理隔绝）
+  // 物理隔绝：一手见全部；境外旅行社仅见「本机构(agencyId)」路线；省地接社仅见「被分配(provincialId)」的路线。
+  async findAll(status?: string, principal?: RoutePrincipal) {
+    const role = principal?.role ?? 'agency'
+    const where: { statusKey?: string; agencyId?: string; provincialId?: string } = status
+      ? { statusKey: status }
+      : {}
+    if (role === 'agency') {
+      if (!principal?.agencyId) return []
+      where.agencyId = principal.agencyId
+    } else if (role === 'provincial') {
+      if (!principal?.agencyId) return []
+      where.provincialId = principal.agencyId
+    }
     const routes = await this.prisma.route.findMany({
-      where: status ? { statusKey: status } : undefined,
+      where,
       include: { versions: { orderBy: { createdAt: 'desc' } } },
       orderBy: { updatedAt: 'desc' },
     })
     return routes.map((r) => this.serialize(r, role))
   }
 
-  async findOne(id: string, role: Role = 'agency') {
+  async findOne(id: string, principal?: RoutePrincipal) {
     const route = await this.prisma.route
       .findUniqueOrThrow({
         where: { id },
@@ -58,7 +75,34 @@ export class RoutesService {
       .catch(() => {
         throw new NotFoundException('路线不存在')
       })
+    const role = principal?.role ?? 'agency'
+    // 物理隔绝校验：境外旅行社仅见本机构路线；省地接社仅见被分配的路线
+    if (role === 'agency' && (!principal?.agencyId || route.agencyId !== principal.agencyId)) {
+      throw new NotFoundException('路线不存在')
+    }
+    if (
+      role === 'provincial' &&
+      (!principal?.agencyId || route.provincialId !== principal.agencyId)
+    ) {
+      throw new NotFoundException('路线不存在')
+    }
     return this.serialize(route, role)
+  }
+
+  // 一手将路线分配给某省地接社：分配后该省地接社可见并参与协作规划与报价（成本询价）
+  async assignProvincial(routeId: string, provincialId: string, principal?: RoutePrincipal) {
+    if (principal && principal.role !== 'pandaking') {
+      throw new ForbiddenException('仅一手 PandaKing 可分配省地接社')
+    }
+    const route = await this.prisma.route.findUniqueOrThrow({ where: { id: routeId } }).catch(() => {
+      throw new NotFoundException('路线不存在')
+    })
+    const updated = await this.prisma.route.update({
+      where: { id: routeId },
+      data: { provincialId },
+      include: { versions: { orderBy: { createdAt: 'desc' } } },
+    })
+    return this.serialize(updated, principal?.role ?? 'pandaking')
   }
 
   // 新建路线 + 客户档案
@@ -78,6 +122,7 @@ export class RoutesService {
         travelDate: input.travelDate ? new Date(input.travelDate) : null,
         statusKey,
         modeKey,
+        agencyId: input.creatorAgencyId ?? null,
         createdById: input.createdById,
       },
     })
@@ -97,32 +142,48 @@ export class RoutesService {
   }
 
   // 保存并通知：生成新 version（version 自增），draft 决定是否对外
-  async saveVersion(routeId: string, input: SaveVersionInput, role: Role = 'agency') {
-    await this.prisma.route.findUniqueOrThrow({ where: { id: routeId } })
+  async saveVersion(routeId: string, input: SaveVersionInput, principal?: RoutePrincipal) {
+    await this.assertVisible(routeId, principal)
+    const role = principal?.role ?? 'agency'
     const versions = await this.prisma.routeVersion.findMany({ where: { routeId } })
     const max = versions.reduce((m, v) => {
       const n = parseInt(String(v.version).replace(/\D/g, ''), 10)
       return Number.isNaN(n) ? m : Math.max(m, n)
     }, 0)
     const draft = input.draft ?? false
+    // 报价按角色隔离写入：
+    //  - 一手(pandaking)：全量写入 cost1/cost2/markup
+    //  - 旅行社(agency)：仅可改自身加价 markup，成本①/②取自上一版（旅行社不可见）并重算对客总价
+    //  - 省地接社(provincial)：不写价，价格保留上一版（地接成本由成本询价闭环回填）
+    const latest = await this.latestVersion(routeId)
+    let quote: any = input.quote ?? null
+    if (role === 'agency') {
+      quote = this.mergeAgencyQuote(latest, input.quote)
+    } else if (role === 'provincial') {
+      quote = (latest?.quote as object) ?? null
+    }
     const version = await this.prisma.routeVersion.create({
       data: {
         routeId,
         version: `v${max + 1}`,
         draft,
         itinerary: input.itinerary as object,
-        quote: (input.quote as object) ?? null,
+        quote,
       },
     })
     // 对外 H5 链接（notify=true 且非草稿时生成协作共享 token）
     let shareToken: string | null = null
     let shareLink: string | null = null
     if (!draft && input.notify) {
-      const share = await this.createShare(routeId, role, version.id)
+      const share = await this.createShare(routeId, principal?.role ?? 'agency', version.id)
       shareToken = share.token
       shareLink = share.link
     }
-    return { version: this.serializeVersion(version, role), shareLink, shareToken }
+    return {
+      version: this.serializeVersion(version, principal?.role ?? 'agency'),
+      shareLink,
+      shareToken,
+    }
   }
 
   // 生成协作 H5 共享令牌（默认指向最新非草稿版本）
@@ -144,6 +205,71 @@ export class RoutesService {
       data: { token, routeId, versionId: vid, role },
     })
     return { token: share.token, link: `/share/route/${share.token}` }
+  }
+
+  // 一手生成「省地接社协作 H5」令牌：省地接社凭链接在 H5 内查看+编辑分配给自己的行程并反馈
+  async createProvincialShare(routeId: string, principal?: RoutePrincipal) {
+    if (principal && principal.role !== 'pandaking') {
+      throw new ForbiddenException('仅一手 PandaKing 可生成省地接社协作 H5')
+    }
+    const route = await this.prisma.route
+      .findUniqueOrThrow({ where: { id: routeId } })
+      .catch(() => {
+        throw new NotFoundException('路线不存在')
+      })
+    if (!route.provincialId) {
+      throw new BadRequestException('请先将路线分配给省地接社，再生成协作 H5')
+    }
+    const token = Math.random().toString(36).slice(2) + Date.now().toString(36)
+    await this.prisma.routeShare.create({
+      data: { token, routeId, role: 'provincial' },
+    })
+    return { token, link: `/h5/provincial-route/${token}` }
+  }
+
+  // 省地接社凭令牌在 H5 内编辑分配给自己的行程（仅改行程，价格保留上一版），保存并生成新版本
+  async provincialEdit(token: string, itinerary: unknown) {
+    const share = await this.prisma.routeShare.findUnique({ where: { token } })
+    if (!share || share.role !== 'provincial') {
+      throw new NotFoundException('协作链接无效')
+    }
+    const latest = await this.latestVersion(share.routeId)
+    const next = (parseInt(String(latest?.version).replace(/\D/g, '') || '0', 10)) + 1
+    const version = await this.prisma.routeVersion.create({
+      data: {
+        routeId: share.routeId,
+        version: `v${next}`,
+        draft: false,
+        itinerary: itinerary as object,
+        quote: (latest?.quote as object) ?? null,
+      },
+    })
+    return {
+      version: this.serializeVersion(version, 'provincial'),
+      link: `/h5/route/${share.token}`,
+    }
+  }
+
+  // 旅行社仅可调整自身加价(markup)，成本①/②取自上一版（旅行社不可见），并重算对客总价
+  private mergeAgencyQuote(prev: { quote?: unknown } | null | undefined, incoming: unknown): unknown {
+    if (!incoming) return incoming
+    const inQ = incoming as { items?: any[]; totals?: any }
+    const prevItems = Array.isArray((prev as any)?.quote?.items) ? (prev as any).quote.items : []
+    const items = (inQ.items ?? []).map((it: any, i: number) => {
+      const p = prevItems[i] || {}
+      const cost1 = Number(p.cost1) || 0
+      const cost2 = Number(p.cost2) || 0
+      const markup = Number(it.markup) || 0
+      return { ...it, cost1, cost2, markup, guestPrice: cost1 + cost2 + markup }
+    })
+    const totals = {
+      cost1: items.reduce((s: number, it: any) => s + (Number(it.cost1) || 0), 0),
+      cost2: items.reduce((s: number, it: any) => s + (Number(it.cost2) || 0), 0),
+      markup: items.reduce((s: number, it: any) => s + (Number(it.markup) || 0), 0),
+      guestPrice: 0,
+    }
+    totals.guestPrice = totals.cost1 + totals.cost2 + totals.markup
+    return { ...inQ, items, totals }
   }
 
   // 协作 H5 只读视图（按 token 解析，报价仅暴露对客总价）
@@ -211,7 +337,8 @@ export class RoutesService {
   }
 
   // 反馈记录（协作双方可见）：H5 链接提交的反馈 + 一手「回传反馈」(写在最新版本 itinerary.pkFeedback)
-  async getFeedback(routeId: string, role: Role = 'agency') {
+  async getFeedback(routeId: string, principal?: RoutePrincipal) {
+    if (principal) await this.assertVisible(routeId, principal)
     const fb = await this.prisma.routeFeedback.findMany({
       where: { routeId },
       orderBy: { createdAt: 'asc' },
@@ -256,35 +383,50 @@ export class RoutesService {
   }
 
   // 版本历史
-  async getVersions(routeId: string, role: Role = 'agency') {
+  async getVersions(routeId: string, principal?: RoutePrincipal) {
+    if (principal) await this.assertVisible(routeId, principal)
     const versions = await this.prisma.routeVersion.findMany({
       where: { routeId },
       orderBy: { createdAt: 'desc' },
     })
-    return versions.map((v) => this.serializeVersion(v, role))
+    return versions.map((v) => this.serializeVersion(v, principal?.role ?? 'agency'))
   }
 
-  async getVersion(routeId: string, versionId: string, role: Role = 'agency') {
+  async getVersion(routeId: string, versionId: string, principal?: RoutePrincipal) {
+    if (principal) await this.assertVisible(routeId, principal)
     const v = await this.prisma.routeVersion
       .findFirstOrThrow({ where: { routeId, id: versionId } })
       .catch(() => {
         throw new NotFoundException('版本不存在')
       })
-    return this.serializeVersion(v, role)
+    return this.serializeVersion(v, principal?.role ?? 'agency')
+  }
+
+  // 物理隔绝断言：境外旅行社仅可见本机构路线；省地接社仅可见被分配的路线
+  private async assertVisible(routeId: string, principal?: RoutePrincipal) {
+    if (!principal) return
+    const route = await this.prisma.route.findUnique({ where: { id: routeId } })
+    if (!route) throw new NotFoundException('路线不存在')
+    if (principal.role === 'agency' && route.agencyId !== principal.agencyId) {
+      throw new NotFoundException('路线不存在')
+    }
+    if (principal.role === 'provincial' && route.provincialId !== principal.agencyId) {
+      throw new NotFoundException('路线不存在')
+    }
   }
 
   // —— 双向协作回路 ——
   // 旅行社提交草案 → 待一手确认
-  submitDraft(routeId: string, role: Role) {
-    return this.transition(routeId, ACTION.SUBMIT_DRAFT, role)
+  submitDraft(routeId: string, principal: RoutePrincipal) {
+    return this.transition(routeId, ACTION.SUBMIT_DRAFT, principal)
   }
   // 一手确认采用 → 待报价
-  pkConfirm(routeId: string, role: Role) {
-    return this.transition(routeId, ACTION.PK_CONFIRM, role)
+  pkConfirm(routeId: string, principal: RoutePrincipal) {
+    return this.transition(routeId, ACTION.PK_CONFIRM, principal)
   }
   // 一手回传修改反馈 → 待旅行社修订（反馈标注写回最新版本）
-  async pkFeedback(routeId: string, feedback: unknown, role: Role) {
-    const route = await this.transition(routeId, ACTION.PK_FEEDBACK, role)
+  async pkFeedback(routeId: string, feedback: unknown, principal: RoutePrincipal) {
+    const route = await this.transition(routeId, ACTION.PK_FEEDBACK, principal)
     const latest = await this.latestVersion(routeId)
     if (latest) {
       await this.prisma.routeVersion.update({
@@ -300,33 +442,41 @@ export class RoutesService {
     return route
   }
   // 旅行社修订重交 → 待一手确认
-  reviseByAgency(routeId: string, role: Role) {
-    return this.transition(routeId, ACTION.SUBMIT_DRAFT, role)
+  reviseByAgency(routeId: string, principal: RoutePrincipal) {
+    return this.transition(routeId, ACTION.SUBMIT_DRAFT, principal)
   }
   // 一手发报价 v1 → 待反馈
-  sendV1(routeId: string, role: Role) {
-    return this.transition(routeId, ACTION.SEND_V1, role)
+  sendV1(routeId: string, principal: RoutePrincipal) {
+    return this.transition(routeId, ACTION.SEND_V1, principal)
   }
   // 旅行社加价 → 待确认
-  agencyMarkup(routeId: string, role: Role) {
-    return this.transition(routeId, ACTION.AGENCY_MARKUP, role)
+  agencyMarkup(routeId: string, principal: RoutePrincipal) {
+    return this.transition(routeId, ACTION.AGENCY_MARKUP, principal)
   }
   // 游客确认 → 已确认
-  touristConfirm(routeId: string, role: Role) {
-    return this.transition(routeId, ACTION.TOURIST_CONFIRM, role)
+  touristConfirm(routeId: string, principal: RoutePrincipal) {
+    return this.transition(routeId, ACTION.TOURIST_CONFIRM, principal)
   }
   // 付款 → 已成单
-  pay(routeId: string, role: Role) {
-    return this.transition(routeId, ACTION.PAY, role)
+  pay(routeId: string, principal: RoutePrincipal) {
+    return this.transition(routeId, ACTION.PAY, principal)
   }
   // 拒绝 → 已流失
-  reject(routeId: string, role: Role) {
-    return this.transition(routeId, ACTION.REJECT, role)
+  reject(routeId: string, principal: RoutePrincipal) {
+    return this.transition(routeId, ACTION.REJECT, principal)
   }
 
   // 通用转移：service 层强制校验，非法抛 409
-  private async transition(routeId: string, action: ActionKey, role: Role) {
+  private async transition(routeId: string, action: ActionKey, principal: RoutePrincipal) {
     const route = await this.prisma.route.findUniqueOrThrow({ where: { id: routeId } })
+    // 省地接社不参与商业状态流转（提交草案/确认/加价等），其协作通过「行程编辑(saveVersion)」与「成本询价」完成
+    if (principal.role === 'provincial') {
+      throw new ForbiddenException('省地接社不参与商业状态流转，请通过行程编辑与成本询价协作')
+    }
+    // 物理隔绝：境外旅行社只能操作「本机构」路线；一手可操作全部
+    if (principal.role === 'agency' && route.agencyId !== principal.agencyId) {
+      throw new NotFoundException('路线不存在')
+    }
     let to: StatusKey
     try {
       to = applyTransition(route.statusKey, action)
@@ -343,7 +493,7 @@ export class RoutesService {
       data: { statusKey: to },
       include: { versions: { orderBy: { createdAt: 'desc' } } },
     })
-    return this.serialize(updated, role)
+    return this.serialize(updated, principal.role)
   }
 
   private async latestVersion(routeId: string) {
@@ -355,12 +505,22 @@ export class RoutesService {
     return vs[0] ?? null
   }
 
-  // 按角色序列化（字段级可见性）
+  // 按角色序列化（字段级可见性 + 机构物理隔绝）
+  // 视线剥离：境外旅行社不返回 provincialId；省地接社不返回 agencyId 与 agency(旅行社名称)，
+  // 确保双方互不知道对方的存在与机构标识（一手保留全部）。
   private serialize(route: any, role: Role) {
-    const versions = (route.versions ?? []).map((v: any) =>
-      this.serializeVersion(v, role),
-    )
-    return { ...route, versions }
+    const { versions, ...rest } = route
+    const safe: Record<string, unknown> = { ...rest }
+    if (role === 'agency') {
+      delete safe.provincialId
+    } else if (role === 'provincial') {
+      delete safe.agencyId
+      delete safe.agency
+    }
+    return {
+      ...safe,
+      versions: (versions ?? []).map((v: any) => this.serializeVersion(v, role)),
+    }
   }
 
   private serializeVersion(v: any, role: Role) {

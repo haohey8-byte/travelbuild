@@ -33,5 +33,8 @@ npm-debug.log*
 # Local temp
 temp/
 
+# Vite 构建期临时产物（勿入库）
+vite.config.ts.timestamp-*.mjs
+
 # 旧 npm 残留（切换到 pnpm 后遗留，可删）
 _npm_trash/

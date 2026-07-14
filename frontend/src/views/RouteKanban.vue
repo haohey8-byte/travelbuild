@@ -19,6 +19,8 @@ const STATUS_LABEL: Record<RouteStatusKey, string> = {
   awaiting_feedback: '待反馈',
   awaiting_confirm: '待确认',
   confirmed: '已确认',
+  booked: '已成单',
+  pending_followup: '待跟进',
   lost: '已流失',
 }
 const STATUSES = Object.keys(STATUS_LABEL) as RouteStatusKey[]
