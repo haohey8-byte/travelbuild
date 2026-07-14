@@ -19,7 +19,8 @@ export class OgPageController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    const protocol = String(req.get('x-forwarded-proto') || req.protocol || 'https')
+    // 生产环境 CloudBase 外部永远 https；LB 未传 x-forwarded-proto 时默认 https
+    const protocol = req.get('x-forwarded-proto') || 'https'
     const origin = `${protocol}://${req.get('host')}`
     const shareUrl = `${origin}/share/route/${encodeURIComponent(token)}`
     const coverUrl = `${origin}/share/og-cover.png`
@@ -49,9 +50,15 @@ export class OgPageController {
 
   @Get('og-cover.png')
   cover(@Res() res: Response) {
-    // 容器内 __dirname = /app/backend/dist/modules/routes，回退三级到 /app/backend/public
-    const file = join(__dirname, '..', '..', '..', 'public', 'og-cover.png')
-    if (!existsSync(file)) {
+    // 多候选路径兜底：兼容 __dirname / cwd / 不同构建输出层级
+    const candidates = [
+      join(__dirname, '..', '..', '..', 'public', 'og-cover.png'),
+      join(__dirname, '..', 'public', 'og-cover.png'),
+      join(process.cwd(), 'backend', 'public', 'og-cover.png'),
+      join(process.cwd(), 'public', 'og-cover.png'),
+    ]
+    const file = candidates.find((c) => existsSync(c))
+    if (!file) {
       res.status(404).end()
       return
     }
