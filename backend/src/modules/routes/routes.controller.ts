@@ -36,6 +36,12 @@ export class RoutesController {
     return this.svc.getVersions(id, user.role)
   }
 
+  // 反馈记录（H5 链接反馈 + 一手回传反馈），供协作双方查看
+  @Get(':id/feedback')
+  getFeedback(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.svc.getFeedback(id, user.role)
+  }
+
   @Get(':id/versions/:vid')
   getVersion(
     @Param('id') id: string,

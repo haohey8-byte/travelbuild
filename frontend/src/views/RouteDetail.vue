@@ -2,11 +2,11 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
-import { fetchRoute, saveVersion, shareRoute, routeAction } from '@/api/routes'
+import { fetchRoute, saveVersion, shareRoute, routeAction, fetchRouteFeedback } from '@/api/routes'
 import { useAuthStore } from '@/stores/auth'
 import { safeName, safeText } from '@/utils/name'
 import { shareH5Url, shareH5Caption } from '@/utils/share'
-import type { Route, RouteStatusKey, QuoteLevel } from '@/types'
+import type { Route, RouteStatusKey, QuoteLevel, RouteFeedbackItem } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -24,6 +24,16 @@ const savingDraft = ref(false)
 const savingNotify = ref(false)
 const doing = ref('')
 const shareLink = ref('')
+
+// —— 反馈记录（H5 链接反馈 + 一手回传反馈，协作双方可见）——
+const feedbackList = ref<RouteFeedbackItem[]>([])
+async function loadFeedback() {
+  try {
+    feedbackList.value = await fetchRouteFeedback(id)
+  } catch {
+    feedbackList.value = []
+  }
+}
 
 // —— 行程（按天）——
 interface Day {
@@ -157,10 +167,20 @@ async function load() {
     } else {
       quoteItems.value = []
     }
+    await loadFeedback()
   } catch (e: any) {
     err.value = e?.response?.data?.message || '加载失败'
   } finally {
     loading.value = false
+  }
+}
+
+function fmtTime(s?: string): string {
+  if (!s) return ''
+  try {
+    return new Date(s).toLocaleString()
+  } catch {
+    return s
   }
 }
 
@@ -228,6 +248,7 @@ async function onSaveNotify() {
       actionOk.value = '已保存新版本，但未生成分享链接'
     }
     await load()
+    await loadFeedback()
   } catch (e: any) {
     actionErr.value = e?.response?.data?.message || '保存并通知失败'
   } finally {
@@ -247,6 +268,7 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
     await routeAction(id, a.key, body)
     feedbackNote.value = ''
     await load()
+    await loadFeedback()
   } catch (e: any) {
     actionErr.value = e?.response?.data?.message || `${a.label}失败（可能状态不允许）`
   } finally {
@@ -417,6 +439,25 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
           <textarea v-model="feedbackNote" rows="3" placeholder="填写要回传给对方/旅行社的修改意见"></textarea>
         </div>
       </div>
+
+      <!-- 反馈记录（H5 链接反馈 + 一手回传反馈，协作双方均可见） -->
+      <section class="card fb-card">
+        <h3>
+          反馈记录
+          <span v-if="feedbackList.length" class="fb-count">{{ feedbackList.length }}</span>
+        </h3>
+        <ul v-if="feedbackList.length" class="fb-list">
+          <li v-for="fb in feedbackList" :key="fb.id" class="fb-item">
+            <div class="fb-meta">
+              <b>{{ fb.authorName || (fb.source === 'h5' ? '协作方' : '一手地接社') }}</b>
+              <span class="fb-tag" :class="fb.source">{{ fb.source === 'h5' ? 'H5 链接反馈' : '回传反馈' }}</span>
+              <span class="fb-time">{{ fmtTime(fb.createdAt) }}</span>
+            </div>
+            <p class="fb-content">{{ fb.content }}</p>
+          </li>
+        </ul>
+        <p v-else class="muted">暂无反馈意见。对方可在协作 H5 链接内提交修改意见，或在此回传反馈。</p>
+      </section>
     </template>
   </div>
 </template>
@@ -457,6 +498,20 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
 .btn.ghost.sm { padding: 2px 8px; font-size: 12px; }
 .btn.danger { border-color: var(--danger); color: var(--danger); }
 textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; font-family: inherit; box-sizing: border-box; }
+
+/* 反馈记录 */
+.fb-card { margin-top: 16px; }
+.fb-count { display: inline-block; min-width: 20px; text-align: center; margin-left: 8px; padding: 1px 8px; font-size: 12px; background: var(--brand); color: #fff; border-radius: 999px; }
+.fb-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.fb-item { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--card); }
+.fb-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.fb-meta b { color: var(--ink); }
+.fb-tag { padding: 1px 8px; border-radius: 999px; font-size: 12px; }
+.fb-tag.h5 { background: rgba(59,130,246,.12); color: #3b82f6; }
+.fb-tag.console { background: rgba(16,185,129,.12); color: #10b981; }
+.fb-time { margin-left: auto; }
+.fb-content { margin: 6px 0 0; font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.muted { color: var(--muted); font-size: 13px; }
 
 /* 响应式：窄屏单列、表横滑、tab 横滑 */
 @media (max-width: 900px) {

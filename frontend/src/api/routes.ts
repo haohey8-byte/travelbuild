@@ -1,5 +1,5 @@
 import client from './client'
-import type { Route, RouteVersion } from '@/types'
+import type { Route, RouteVersion, RouteFeedbackItem } from '@/types'
 
 // 路线与版本 —— 对应 doc/04-接口契约/路线与版本.md
 export async function fetchRoutes(params?: { status?: string; role?: string }): Promise<Route[]> {
@@ -40,5 +40,11 @@ export async function routeAction(
   body?: unknown,
 ): Promise<unknown> {
   const { data } = await client.post(`/routes/${routeId}/${action}`, body)
+  return data
+}
+
+// 反馈记录（H5 链接反馈 + 一手回传反馈），供协作双方查看
+export async function fetchRouteFeedback(routeId: string): Promise<RouteFeedbackItem[]> {
+  const { data } = await client.get(`/routes/${routeId}/feedback`)
   return data
 }

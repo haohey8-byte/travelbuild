@@ -2,8 +2,9 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { fetchH5Route, submitH5Feedback } from '@/api/h5'
+import { fetchRouteFeedback } from '@/api/routes'
 import { safeText } from '@/utils/name'
-import type { H5Route } from '@/types'
+import type { H5Route, RouteFeedbackItem } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -17,6 +18,22 @@ const authorName = ref('')
 const submitting = ref(false)
 const thanks = ref(false)
 const sendErr = ref('')
+const feedbackList = ref<RouteFeedbackItem[]>([])
+async function loadFeedback() {
+  try {
+    feedbackList.value = await fetchRouteFeedback(data.value!.routeId)
+  } catch {
+    feedbackList.value = []
+  }
+}
+function fmtTime(s?: string): string {
+  if (!s) return ''
+  try {
+    return new Date(s).toLocaleString()
+  } catch {
+    return s
+  }
+}
 
 const days = computed(() => {
   const it = data.value?.itinerary as { days?: any[] } | null
@@ -58,10 +75,11 @@ onMounted(async () => {
     const title = `${safeText(data.value.destination) || '定制行程'} · 定制行程方案`
     document.title = title
     updateOgMeta('og:title', title)
-    updateOgMeta(
+      updateOgMeta(
       'og:description',
       `PandaKing9 为您定制的${safeText(data.value.destination) || '行程'}方案${data.value.guestPrice != null ? `，对客总价 ¥${data.value.guestPrice.toLocaleString()}` : ''}`,
-    )
+      )
+      await loadFeedback()
   } catch {
     notFound.value = true
     document.title = '协作链接无效 · PandaKing9'
@@ -81,6 +99,7 @@ async function onSend() {
     await submitH5Feedback(token, feedback.value.trim(), authorName.value.trim() || undefined)
     thanks.value = true
     feedback.value = ''
+    if (data.value) await loadFeedback()
   } catch (e: any) {
     sendErr.value = e?.response?.data?.message || '提交失败'
   } finally {
@@ -133,6 +152,19 @@ function goHome() {
         <p v-if="sendErr" class="err">{{ sendErr }}</p>
         <p v-if="thanks" class="thanks">感谢反馈，已提交！</p>
       </div>
+
+      <div v-if="feedbackList.length" class="h5-fb-history">
+        <h3>已提交的反馈</h3>
+        <ul class="h5-fb-list">
+          <li v-for="fb in feedbackList" :key="fb.id" class="h5-fb-item">
+            <div class="h5-fb-meta">
+              <b>{{ fb.authorName || '协作方' }}</b>
+              <span class="h5-fb-time">{{ fmtTime(fb.createdAt) }}</span>
+            </div>
+            <p class="h5-fb-content">{{ fb.content }}</p>
+          </li>
+        </ul>
+      </div>
     </div>
   </div>
 </template>
@@ -153,4 +185,11 @@ function goHome() {
 .thanks { color: var(--ok); margin-top: 8px; }
 .err { color: var(--danger); margin-top: 8px; }
 h3 { font-size: 15px; margin: 14px 0 0; }
+.h5-fb-history { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
+.h5-fb-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.h5-fb-item { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.h5-fb-meta { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.h5-fb-meta b { color: var(--ink); }
+.h5-fb-time { margin-left: auto; }
+.h5-fb-content { margin: 6px 0 0; font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
 </style>

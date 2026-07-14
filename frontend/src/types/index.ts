@@ -100,6 +100,15 @@ export interface H5Feedback {
   createdAt: string
 }
 
+// 路线反馈记录（控制台与 H5 页共用）：H5 链接反馈 + 一手回传反馈
+export interface RouteFeedbackItem {
+  id: string
+  source: 'h5' | 'console'
+  authorName?: string | null
+  content: string
+  createdAt: string
+}
+
 export interface KbEntry {
   id: string
   title: string

@@ -210,6 +210,41 @@ export class RoutesService {
     }
   }
 
+  // 反馈记录（协作双方可见）：H5 链接提交的反馈 + 一手「回传反馈」(写在最新版本 itinerary.pkFeedback)
+  async getFeedback(routeId: string, role: Role = 'agency') {
+    const fb = await this.prisma.routeFeedback.findMany({
+      where: { routeId },
+      orderBy: { createdAt: 'asc' },
+    })
+    const h5 = fb.map((f) => ({
+      id: f.id,
+      source: 'h5' as const,
+      authorName: f.authorName,
+      content: f.content,
+      createdAt: f.createdAt.toISOString(),
+    }))
+    // 一手「回传反馈」写在最新版本的 itinerary.pkFeedback
+    const latest = await this.latestVersion(routeId)
+    const pk = latest?.itinerary && (latest.itinerary as { pkFeedback?: unknown }).pkFeedback
+    const consoleFb: {
+      id: string
+      source: 'console'
+      authorName: string
+      content: string
+      createdAt: string
+    }[] = []
+    if (typeof pk === 'string' && pk.trim()) {
+      consoleFb.push({
+        id: `pk-${latest!.id}`,
+        source: 'console',
+        authorName: '一手地接社',
+        content: pk,
+        createdAt: latest!.createdAt.toISOString(),
+      })
+    }
+    return [...h5, ...consoleFb]
+  }
+
   // 版本历史
   async getVersions(routeId: string, role: Role = 'agency') {
     const versions = await this.prisma.routeVersion.findMany({
