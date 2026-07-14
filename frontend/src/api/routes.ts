@@ -31,3 +31,14 @@ export async function shareRoute(
   const { data } = await client.post(`/routes/${routeId}/share`, role ? { role } : {})
   return data
 }
+
+// 状态流转动作（提交草案/确认采用/回传反馈/修订/发报价/加价/游客确认/付款/拒绝）
+// 后端按角色与状态机强制校验，非法转移返回 409
+export async function routeAction(
+  routeId: string,
+  action: string,
+  body?: unknown,
+): Promise<unknown> {
+  const { data } = await client.post(`/routes/${routeId}/${action}`, body)
+  return data
+}

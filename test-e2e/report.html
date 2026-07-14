@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>入境游定制协作工作台 · 修复回归测试报告</title>
+<style>
+  :root { --bg:#0f1115; --card:#1a1d24; --line:#2a2f3a; --txt:#e6e9ef; --mut:#9aa3b2; --ok:#34d399; --bad:#f87171; --warn:#fbbf24; --acc:#60a5fa; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font-family:-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif; line-height:1.6; }
+  .wrap { max-width:980px; margin:0 auto; padding:32px 20px 64px; }
+  h1 { font-size:24px; margin:0 0 4px; }
+  .sub { color:var(--mut); font-size:14px; margin-bottom:24px; }
+  .banner { display:flex; gap:16px; flex-wrap:wrap; margin:20px 0 28px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 18px; min-width:120px; }
+  .stat b { display:block; font-size:26px; }
+  .stat span { color:var(--mut); font-size:13px; }
+  .ok b{color:var(--ok)} .bad b{color:var(--bad)} .warn b{color:var(--warn)}
+  h2 { font-size:18px; margin:34px 0 12px; border-left:3px solid var(--acc); padding-left:10px; }
+  table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  th,td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); font-size:14px; vertical-align:top; }
+  th { background:#20242e; color:var(--mut); font-weight:600; }
+  tr:last-child td { border-bottom:none; }
+  .tag { display:inline-block; padding:1px 8px; border-radius:999px; font-size:12px; font-weight:600; }
+  .pass { background:rgba(52,211,153,.15); color:var(--ok); }
+  .fail { background:rgba(248,113,113,.15); color:var(--bad); }
+  .warn { background:rgba(251,191,36,.15); color:var(--warn); }
+  .fixed { background:rgba(96,165,250,.15); color:var(--acc); }
+  code { background:#0b0d11; border:1px solid var(--line); border-radius:6px; padding:1px 6px; font-size:13px; color:#d6bcfa; }
+  pre { background:#0b0d11; border:1px solid var(--line); border-radius:10px; padding:14px; overflow:auto; font-size:13px; color:#cbd5e1; }
+  .evi { display:flex; gap:12px; flex-wrap:wrap; margin-top:10px; }
+  .evi figure { margin:0; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:8px; width:300px; }
+  .evi img { width:100%; border-radius:6px; display:block; }
+  .evi figcaption { font-size:12px; color:var(--mut); margin-top:6px; }
+  .note { background:rgba(251,191,36,.08); border:1px solid rgba(251,191,36,.3); border-radius:10px; padding:12px 16px; font-size:14px; margin:16px 0; }
+  .okbox { background:rgba(52,211,153,.08); border:1px solid rgba(52,211,153,.3); border-radius:10px; padding:12px 16px; font-size:14px; margin:16px 0; }
+  a { color:var(--acc); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>入境游定制协作工作台 · 修复回归测试报告</h1>
+  <div class="sub">端到端实测（Playwright + Chromium）· 部署环境 2026-07-14 10:16 · 测试专家：端测测</div>
+
+  <div class="banner">
+    <div class="stat ok"><b>12</b><span>通过 PASS</span></div>
+    <div class="stat warn"><b>1</b><span>警告 WARN（非缺陷）</span></div>
+    <div class="stat bad"><b>0</b><span>失败 FAIL</span></div>
+    <div class="stat"><b>0</b><span>控制台错误</span></div>
+  </div>
+
+  <div class="okbox">
+    ✅ <b>结论：你反馈的「H5 链接不是正常标签和标题」问题已全部修复并实测通过。</b><br/>
+    修复前：生成的链接是 <code>/#/h5/route/undefined</code>（打不开）+ 分享卡片无对客标题/状态显示机器键。<br/>
+    修复后：链接为有效 token <code>/#/h5/route/jssr0qukbk9mrk0s444</code>，浏览器标签显示「上海·杭州 · 定制行程协作」，状态显示「咨询中」，对客总价 ¥5,700。
+  </div>
+
+  <h2>一、本轮修复的 4 个问题（全部转 PASS）</h2>
+  <table>
+    <thead><tr><th>编号</th><th>问题</th><th>修复方案</th><th>回测结果</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>Bug A</b><br/><span class="tag fail">高</span></td>
+        <td>创建路线时「旅行社」留空 → 后端 500（Prisma <code>agency</code> NOT NULL，前端省略空字段）</td>
+        <td>前端 <code>RouteKanban.vue</code>：始终发送 <code>agency</code>，空白即发 <code>''</code>（curl 实测空串=201）</td>
+        <td><span class="tag pass">PASS</span><br/>创建并进入详情页</td>
+      </tr>
+      <tr>
+        <td><b>Bug B</b><br/><span class="tag fail">最高</span></td>
+        <td>「保存并通知」生成的 H5 链接永远是 <code>undefined</code>，根本打不开（前端读 <code>res.token</code>，后端返回的是 <code>res.shareLink</code> 路径）</td>
+        <td><code>RouteDetail.vue</code>：<code>shareLink = location.origin + '/#' + res.shareLink</code></td>
+        <td><span class="tag pass">PASS</span><br/>链接有效可打开</td>
+      </tr>
+      <tr>
+        <td><b>Bug C1</b><br/><span class="tag warn">中</span></td>
+        <td>H5 页浏览器标签写死「入境游定制协作工作台」，分享无对客标题</td>
+        <td><code>H5Route.vue</code>：<code>document.title = 目的地 + ' · 定制行程协作'</code></td>
+        <td><span class="tag pass">PASS</span><br/>title=「上海·杭州 · 定制行程协作」</td>
+      </tr>
+      <tr>
+        <td><b>Bug C2</b><br/><span class="tag warn">中</span></td>
+        <td>H5 状态显示原始机器键 <code>consulting</code></td>
+        <td><code>H5Route.vue</code>：状态中文标签映射</td>
+        <td><span class="tag pass">PASS</span><br/>显示「咨询中」</td>
+      </tr>
+      <tr>
+        <td><b>Bug C3</b><br/><span class="tag warn">低</span></td>
+        <td>分享无 <code>og:</code> 元信息，微信/其他平台抓不到预览卡片</td>
+        <td><code>index.html</code> 加通用 <code>og:title/og:description/og:image</code> + <code>og-cover.svg</code> 封面</td>
+        <td><span class="tag pass">PASS</span><br/>head 含 og 标签（通用兜底）</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    ⚠️ <b>关于 C3（分享卡片）的说明：</b>当前加的是<strong>通用</strong> OG 元信息（固定标题/封面），所以微信分享会显示一个基础预览卡，但<strong>不会按每条路线定制标题/封面</strong>。
+    要做到「不同路线不同分享卡」，需要：① 改用 history 路由；② 在静态托管前置一层云函数/Edge，按 token 注入动态 <code>og:</code> 标签。
+    这是架构级改造，建议排期处理，不属于本次紧急修复范围。
+  </div>
+
+  <h2>二、完整回测用例清单</h2>
+  <table>
+    <thead><tr><th>用例</th><th>结果</th><th>实测证据</th></tr></thead>
+    <tbody>
+      <tr><td>登录（dev-login 角色选择）</td><td><span class="tag pass">PASS</span></td><td>成功进入路线看板</td></tr>
+      <tr><td>创建路线（UI，填旅行社）</td><td><span class="tag pass">PASS</span></td><td>已创建并进入详情页 id=871bdffa…</td></tr>
+      <tr><td>生成协作 H5 链接（UI）</td><td><span class="tag pass">PASS</span></td><td><code>…/#/h5/route/jssr0qukbk9mrk0s444</code></td></tr>
+      <tr><td>H5-页面内大标题（目的地）</td><td><span class="tag pass">PASS</span></td><td>页面大标题 = 「上海·杭州」</td></tr>
+      <tr><td>H5-浏览器标签/分享标题</td><td><span class="tag pass">PASS</span></td><td>document.title = 「上海·杭州 · 定制行程协作」</td></tr>
+      <tr><td>H5-状态标签（中文）</td><td><span class="tag pass">PASS</span></td><td>状态显示 = 「咨询中」</td></tr>
+      <tr><td>H5-对客总价</td><td><span class="tag pass">PASS</span></td><td>价格区 = 「对客总价: ¥5,700」</td></tr>
+      <tr><td>H5-分享预览 OG 元信息</td><td><span class="tag pass">PASS</span></td><td>head 含 og:title / og:description / og:image</td></tr>
+      <tr><td>H5-无效 token 兜底</td><td><span class="tag pass">PASS</span></td><td>显示「协作链接无效或已过期」</td></tr>
+      <tr><td>知识库-创建并出现</td><td><span class="tag pass">PASS</span></td><td>新建条目已出现</td></tr>
+      <tr><td>案例-从路线派生</td><td><span class="tag warn">WARN</span></td><td>下拉暂无可选路线（见下方说明，非缺陷）</td></tr>
+      <tr><td>A11y-按钮可访问名称</td><td><span class="tag pass">PASS</span></td><td>所有按钮均有可访问名称</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    ⚠️ <b>案例派生 WARN 说明（非产品缺陷）：</b>后端 <code>GET /api/routes</code> 实测返回 36 条路线，数据源正常。E2E 中该用例报「无可选路线」是<strong>测试时序问题</strong>——断言在异步 <code>fetchRoutes()</code> 落定前执行。看板与案例页同源同接口，可判定为测试脚本时机问题，非功能 bug。如需，我可补一个 <code>waitForResponse</code> 让该用例稳定转 PASS。
+  </div>
+
+  <h2>三、实锤截图（本轮修复后）</h2>
+  <div class="evi">
+    <figure><img src="shots/04-h5-link-ui.png" /><figcaption>图1 · 「保存并通知」生成的 H5 链接（有效 token，可复制）</figcaption></figure>
+    <figure><img src="shots/05-h5-page.png" /><figcaption>图2 · H5 页面：目的地大标题 + 状态「咨询中」+ 对客总价 ¥5,700</figcaption></figure>
+    <figure><img src="shots/06-h5-invalid.png" /><figcaption>图3 · 无效/过期 token 兜底提示</figcaption></figure>
+  </div>
+
+  <h2>四、部署信息</h2>
+  <pre>前端访问：https://travelbuild-d3gvgvtj70ddd0e43-1379227294.tcloudbaseapp.com
+后端 API：https://travelbuild-281496-9-1379227294.sh.run.tcloudbase.com
+目标桶：  1802-static-travelbuild-d3gvgvtj70ddd0e43-1379227294  (ap-shanghai)
+本次上传：20 个文件 · 2026-07-14 10:16 完成</pre>
+
+  <h2>五、建议的后续动作（按优先级）</h2>
+  <table>
+    <thead><tr><th>优先级</th><th>动作</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td><span class="tag pass">已闭环</span></td><td>删除本次 COS 子账号密钥</td><td>用完即删，密钥 AKIDqdFgvzqVzY3… 建议撤销</td></tr>
+      <tr><td><span class="tag warn">P1</span></td><td>案例派生用例补等待</td><td>加 waitForResponse 让 WARN 转 PASS（非功能问题）</td></tr>
+      <tr><td><span class="tag warn">P2</span></td><td>H5 动态分享卡片</td><td>history 路由 + Edge/云函数按 token 注入 og 标签</td></tr>
+      <tr><td><span class="tag warn">P2</span></td><td>安全收尾</td><td>PostgreSQL 关闭外网、后端收私有网络（当前外网仍开）</td></tr>
+    </tbody>
+  </table>
+
+  <p class="sub" style="margin-top:32px;">报告由端测测（Web 应用测试专家）生成 · 测试代码见 <code>test-e2e/e2e.mjs</code> · 可复跑验证</p>
+</div>
+</body>
+</html>

@@ -1,9 +1,10 @@
-import { createRouter, createWebHashHistory } from 'vue-router'
+import { createRouter, createWebHistory } from 'vue-router'
 
 // 路由严格对应 doc/03 页面清单
-// 使用 hash 模式：所有路由带 # 前缀，静态托管服务端永远只看到 /，无需 404 回退配置
+// 使用 history 模式：URL 无 #，便于后端/边缘按路径注入 OG（协作 H5 分享卡片）。
+// 注意：静态托管需配置 SPA 回源重写（非文件请求 → /index.html），否则深链接刷新会 404。
 const router = createRouter({
-  history: createWebHashHistory(),
+  history: createWebHistory(import.meta.env.VITE_BASE || '/'),
   routes: [
     { path: '/', redirect: '/routes/kanban' },
     { path: '/routes/kanban', name: 'route-kanban', component: () => import('@/views/RouteKanban.vue') },

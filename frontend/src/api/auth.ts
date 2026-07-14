@@ -21,3 +21,9 @@ export async function fetchInvite(token: string) {
   const { data } = await client.get(`/auth/invites/${token}`)
   return data
 }
+
+// 成员列表（需登录）
+export async function fetchMembers(): Promise<User[]> {
+  const { data } = await client.get('/auth/members')
+  return data
+}

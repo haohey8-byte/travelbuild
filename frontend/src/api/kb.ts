@@ -26,3 +26,12 @@ export async function createKb(payload: {
   const { data } = await client.post('/knowledge', payload)
   return data
 }
+
+export async function updateKb(id: string, payload: Partial<KbEntry>): Promise<KbEntry> {
+  const { data } = await client.put(`/knowledge/${id}`, payload)
+  return data
+}
+
+export async function deleteKb(id: string): Promise<void> {
+  await client.delete(`/knowledge/${id}`)
+}

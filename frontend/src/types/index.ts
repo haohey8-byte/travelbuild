@@ -21,7 +21,7 @@ export interface Route {
   travelDate: string | null
   statusKey: RouteStatusKey
   modeKey: 'collab' | 'solo'
-  version: string
+  version?: string
   lastAction?: string
   versions?: RouteVersion[]
 }
@@ -64,11 +64,20 @@ export interface LoginResult {
 
 export interface CaseItem {
   id: string
+  routeId?: string | null
+  title?: string
+  cover?: string
   destination: string
   days: number
   theme: string
+  themeTags?: string[]
+  highlights?: string[]
   priceRange: string
-  status: 'published' | 'draft' | 'offline'
+  refPriceRange?: string
+  compliant?: boolean
+  status: 'published' | 'draft' | 'offline' | 'unpublished'
+  createdAt?: string
+  publishedAt?: string | null
 }
 
 // —— 协作 H5（公开只读视图） ——

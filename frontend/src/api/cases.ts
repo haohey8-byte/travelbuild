@@ -27,3 +27,12 @@ export async function unpublishCase(id: string): Promise<CaseItem> {
   const { data } = await client.post(`/cases/${id}/unpublish`)
   return data
 }
+
+export async function updateCase(id: string, payload: Partial<CaseItem>): Promise<CaseItem> {
+  const { data } = await client.put(`/cases/${id}`, payload)
+  return data
+}
+
+export async function deleteCase(id: string): Promise<void> {
+  await client.delete(`/cases/${id}`)
+}

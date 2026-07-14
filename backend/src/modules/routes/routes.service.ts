@@ -138,7 +138,7 @@ export class RoutesService {
     const share = await this.prisma.routeShare.create({
       data: { token, routeId, versionId: vid, role },
     })
-    return { token: share.token, link: `/h5/route/${share.token}` }
+    return { token: share.token, link: `/share/route/${share.token}` }
   }
 
   // 协作 H5 只读视图（按 token 解析，报价仅暴露对客总价）
@@ -172,6 +172,8 @@ export class RoutesService {
       token,
       routeId: route.id,
       destination: route.destination,
+      customerNameCn: route.customerNameCn,
+      customerName: route.customerName,
       groupSize: route.groupSize,
       travelDate: route.travelDate ? route.travelDate.toISOString() : null,
       version: version.version,

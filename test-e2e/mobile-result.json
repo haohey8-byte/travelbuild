@@ -1,0 +1,42 @@
+[
+  {
+    "name": "移动端汉堡按钮可见",
+    "pass": true,
+    "info": ""
+  },
+  {
+    "name": "看板卡片渲染",
+    "pass": true,
+    "info": "卡片数=17"
+  },
+  {
+    "name": "看板无乱码(tofu/西里尔)",
+    "pass": true,
+    "info": "全部正常"
+  },
+  {
+    "name": "抽屉导航可展开",
+    "pass": true,
+    "info": ""
+  },
+  {
+    "name": "抽屉导航跳转知识库",
+    "pass": true,
+    "info": "https://travelbuild-d3gvgvtj70ddd0e43-1379227294.tcloudbaseapp.com/#/kb"
+  },
+  {
+    "name": "详情页移动端单列布局",
+    "pass": true,
+    "info": "grid 列数=1"
+  },
+  {
+    "name": "报价表横向滚动容器",
+    "pass": true,
+    "info": "tbl-wrap 数=1"
+  },
+  {
+    "name": "桌面端内联导航可见+汉堡隐藏",
+    "pass": true,
+    "info": ""
+  }
+]

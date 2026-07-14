@@ -1,0 +1,92 @@
+{
+  "summary": {
+    "total": 13,
+    "pass": 12,
+    "fail": 0,
+    "warn": 1,
+    "consoleErrors": [],
+    "pageErrors": []
+  },
+  "results": [
+    {
+      "name": "登录(dev-login 角色选择)",
+      "status": "PASS",
+      "detail": "成功进入路线看板",
+      "evidence": null
+    },
+    {
+      "name": "创建路线(UI, 填旅行社)",
+      "status": "PASS",
+      "detail": "已创建并进入详情页 id=871bdffa-c0bd-4b9a-ab31-bd49a9e27413",
+      "evidence": null
+    },
+    {
+      "name": "生成协作 H5 链接(UI)",
+      "status": "PASS",
+      "detail": "链接: https://travelbuild-d3gvgvtj70ddd0e43-1379227294.tcloudbaseapp.com/#/h5/route/jssr0qukbk9mrk0s444",
+      "evidence": {
+        "href": "https://travelbuild-d3gvgvtj70ddd0e43-1379227294.tcloudbaseapp.com/#/h5/route/jssr0qukbk9mrk0s444"
+      }
+    },
+    {
+      "name": "H5-页面内大标题(目的地)",
+      "status": "PASS",
+      "detail": "页面大标题 = 「上海·杭州」",
+      "evidence": null
+    },
+    {
+      "name": "H5-浏览器标签/分享卡片标题(document.title)",
+      "status": "PASS",
+      "detail": "document.title = 「上海·杭州 · 定制行程协作」",
+      "evidence": null
+    },
+    {
+      "name": "H5-状态标签(应为中文)",
+      "status": "PASS",
+      "detail": "状态显示 = 「咨询中」（正确）",
+      "evidence": null
+    },
+    {
+      "name": "H5-对客总价",
+      "status": "PASS",
+      "detail": "价格区 = 「对客总价: ¥5,700」",
+      "evidence": null
+    },
+    {
+      "name": "H5-分享预览 OG 元信息",
+      "status": "PASS",
+      "detail": "og:title=1 og:description=1 og:image=1（均为 0 → 微信/其他平台无正常预览卡片）",
+      "evidence": null
+    },
+    {
+      "name": "H5-静态 <head> 元信息",
+      "status": "PASS",
+      "detail": "head 含 og:title",
+      "evidence": null
+    },
+    {
+      "name": "H5-无效 token 兜底",
+      "status": "PASS",
+      "detail": "显示无效提示",
+      "evidence": null
+    },
+    {
+      "name": "知识库-创建并出现",
+      "status": "PASS",
+      "detail": "新建条目已出现",
+      "evidence": null
+    },
+    {
+      "name": "案例-从路线派生",
+      "status": "WARN",
+      "detail": "无可选路线",
+      "evidence": null
+    },
+    {
+      "name": "A11y-按钮可访问名称",
+      "status": "PASS",
+      "detail": "所有按钮均有可访问名称",
+      "evidence": null
+    }
+  ]
+}

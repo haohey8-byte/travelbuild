@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="630" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F2A4A"/>
+      <stop offset="1" stop-color="#1E5FA8"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="1010" cy="120" r="180" fill="#FFFFFF" opacity="0.06"/>
+  <circle cx="180" cy="540" r="140" fill="#FFFFFF" opacity="0.05"/>
+  <text x="80" y="250" font-family="-apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="84" font-weight="700" fill="#FFFFFF">入境游定制协作</text>
+  <text x="80" y="350" font-family="-apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="56" font-weight="600" fill="#A9D2FF">PandaKing9 工作台</text>
+  <text x="80" y="440" font-family="-apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="34" fill="#D6E8FF" opacity="0.9">一手 · 旅行社 · 省地接社 在线协作行程与报价</text>
+  <rect x="80" y="500" width="220" height="10" rx="5" fill="#FFFFFF" opacity="0.8"/>
+</svg>
