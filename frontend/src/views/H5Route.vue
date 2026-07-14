@@ -2,7 +2,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { fetchH5Route, submitH5Feedback, fetchH5Feedback } from '@/api/h5'
-import { safeText } from '@/utils/name'
+import { safeText, safeName } from '@/utils/name'
+import { shareH5Url, feedbackNotifyText, copyText } from '@/utils/share'
 import type { H5Route, RouteFeedbackItem } from '@/types'
 
 const route = useRoute()
@@ -18,6 +19,14 @@ const submitting = ref(false)
 const thanks = ref(false)
 const sendErr = ref('')
 const feedbackList = ref<RouteFeedbackItem[]>([])
+// 提交反馈后自动生成的通知文案（带主题+建议+H5链接），便于粘贴到微信同步对端
+const notifyText = ref('')
+const notifyTip = ref('')
+async function copyAgain() {
+  if (!notifyText.value) return
+  const ok = await copyText(notifyText.value)
+  notifyTip.value = ok ? '已再次复制，去微信粘贴发给对方 ✅' : '复制失败，请长按上方文字手动复制'
+}
 async function loadFeedback() {
   try {
     feedbackList.value = await fetchH5Feedback(token)
@@ -88,15 +97,32 @@ onMounted(async () => {
 })
 
 async function onSend() {
-  if (!feedback.value.trim()) {
+  const content = feedback.value.trim()
+  if (!content) {
     sendErr.value = '请填写反馈内容'
     return
   }
   submitting.value = true
   sendErr.value = ''
   try {
-    await submitH5Feedback(token, feedback.value.trim(), authorName.value.trim() || undefined)
+    await submitH5Feedback(token, content, authorName.value.trim() || undefined)
     thanks.value = true
+    // 生成「主题+反馈建议+H5链接」通知文案并复制，提示去微信粘贴同步对端
+    if (data.value) {
+      const text = feedbackNotifyText({
+        label: '新反馈',
+        subject: safeName(data.value.customerNameCn, data.value.customerName),
+        destination: data.value.destination,
+        authorName: authorName.value.trim() || undefined,
+        suggestion: content,
+        url: shareH5Url(token),
+      })
+      notifyText.value = text
+      const ok = await copyText(text)
+      notifyTip.value = ok
+        ? '通知文案已复制，去微信粘贴发给对方即可同步 ✅'
+        : '通知文案已生成，请长按上方文字手动复制后发到微信'
+    }
     feedback.value = ''
     if (data.value) await loadFeedback()
   } catch (e: any) {
@@ -150,6 +176,13 @@ function goHome() {
         </button>
         <p v-if="sendErr" class="err">{{ sendErr }}</p>
         <p v-if="thanks" class="thanks">感谢反馈，已提交！</p>
+        <div v-if="notifyText" class="notify-box">
+          <div class="notify-head">
+            <span>📋 {{ notifyTip || '通知文案（去微信粘贴发给对方）' }}</span>
+            <button class="btn ghost sm" @click="copyAgain">再复制</button>
+          </div>
+          <pre class="notify-text">{{ notifyText }}</pre>
+        </div>
       </div>
 
       <div v-if="feedbackList.length" class="h5-fb-history">
@@ -183,6 +216,10 @@ function goHome() {
 .h5-input { width: 100%; margin: 8px 0; padding: 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; box-sizing: border-box; font-family: inherit; }
 .thanks { color: var(--ok); margin-top: 8px; }
 .err { color: var(--danger); margin-top: 8px; }
+.notify-box { margin-top: 12px; border: 1px solid var(--brand); border-radius: 10px; padding: 10px 12px; background: rgba(59,130,246,.06); }
+.notify-head { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--brand); }
+.notify-head .btn { margin-left: auto; }
+.notify-text { margin: 8px 0 0; white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.6; color: var(--ink); font-family: inherit; }
 h3 { font-size: 15px; margin: 14px 0 0; }
 .h5-fb-history { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
 .h5-fb-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }

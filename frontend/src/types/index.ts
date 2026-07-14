@@ -84,6 +84,8 @@ export interface CaseItem {
 export interface H5Route {
   token: string
   routeId: string
+  customerName?: string | null
+  customerNameCn?: string | null
   destination: string
   groupSize: number
   travelDate: string | null

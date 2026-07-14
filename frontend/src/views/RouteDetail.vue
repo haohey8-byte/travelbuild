@@ -5,7 +5,7 @@ import { storeToRefs } from 'pinia'
 import { fetchRoute, saveVersion, shareRoute, routeAction, fetchRouteFeedback } from '@/api/routes'
 import { useAuthStore } from '@/stores/auth'
 import { safeName, safeText } from '@/utils/name'
-import { shareH5Url, shareH5Caption } from '@/utils/share'
+import { shareH5Url, shareH5Caption, feedbackNotifyText, copyText } from '@/utils/share'
 import type { Route, RouteStatusKey, QuoteLevel, RouteFeedbackItem } from '@/types'
 
 const route = useRoute()
@@ -140,6 +140,8 @@ const availableActions = computed(() => {
   return list
 })
 const feedbackNote = ref('')
+// 回传反馈后自动生成的通知文案（带主题+建议+H5链接），便于粘贴到微信同步一手
+const notifyTextConsole = ref('')
 
 const versionLabel = computed(() => data.value?.versions?.[0]?.version ?? 'v1')
 
@@ -264,9 +266,42 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
   doing.value = a.key
   actionErr.value = ''
   try {
-    const body = a.needNote ? { feedback: feedbackNote.value } : undefined
+    const note = feedbackNote.value
+    const body = a.needNote ? { feedback: note } : undefined
     await routeAction(id, a.key, body)
     feedbackNote.value = ''
+    // 回传反馈：生成通知文案并复制到剪贴板，提示去微信同步给一手地接社
+    if (a.key === 'feedback' && data.value) {
+      let link = shareLink.value
+      if (!link) {
+        try {
+          const s = await shareRoute(id)
+          link = s.token ? shareH5Url(s.token) : s.link || ''
+          shareLink.value = link
+        } catch {
+          link = ''
+        }
+      }
+      if (link) {
+        const text = feedbackNotifyText({
+          label: '旅行社回复',
+          subject: safeName(data.value.customerNameCn, data.value.customerName),
+          destination: safeText(data.value.destination),
+          authorName: user.value?.name || '旅行社',
+          suggestion: note,
+          url: link,
+        })
+        notifyTextConsole.value = text
+        const ok = await copyText(text)
+        actionOk.value = ok
+          ? '回传反馈已保存，通知文案已复制到剪贴板，去微信粘贴发给一手地接社'
+          : '回传反馈已保存，请手动复制下方通知文案发到微信'
+      } else {
+        actionOk.value = '回传反馈已保存'
+      }
+    } else {
+      actionOk.value = `${a.label}成功`
+    }
     await load()
     await loadFeedback()
   } catch (e: any) {
@@ -274,6 +309,11 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
   } finally {
     doing.value = ''
   }
+}
+async function copyConsoleNotify() {
+  if (!notifyTextConsole.value) return
+  const ok = await copyText(notifyTextConsole.value)
+  actionOk.value = ok ? '已再次复制，去微信粘贴发给一手地接社 ✅' : '复制失败，请手动选择上方文字复制'
 }
 </script>
 
@@ -302,6 +342,13 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
       </div>
       <p v-if="actionErr" class="err">{{ actionErr }}</p>
       <p v-if="actionOk" class="ok">{{ actionOk }}</p>
+      <div v-if="notifyTextConsole" class="fb-notify">
+        <div class="fb-notify-head">
+          <span>📋 通知文案（去微信粘贴发给一手地接社）</span>
+          <button class="btn ghost sm" @click="copyConsoleNotify">再复制</button>
+        </div>
+        <pre class="fb-notify-text">{{ notifyTextConsole }}</pre>
+      </div>
 
       <div class="tab-bar">
         <button :class="['tab', { active: tab === 'edit' }]" @click="tab = 'edit'">行程与报价</button>
@@ -469,6 +516,10 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
 .link { color: var(--info); text-decoration: none; font-size: 14px; }
 .err { color: var(--danger); }
 .ok { color: var(--success, #10b981); }
+.fb-notify { margin-top: 10px; border: 1px solid var(--brand); border-radius: 10px; padding: 10px 12px; background: rgba(59,130,246,.06); }
+.fb-notify-head { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--brand); }
+.fb-notify-head .btn { margin-left: auto; }
+.fb-notify-text { margin: 8px 0 0; white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.6; color: var(--ink); font-family: inherit; }
 .tab-bar { display: flex; gap: 8px; margin-bottom: 12px; }
 .tab { padding: 8px 16px; border: 1px solid var(--line); background: var(--card); border-radius: 8px; cursor: pointer; }
 .tab.active { color: var(--brand); border-color: var(--brand); }
