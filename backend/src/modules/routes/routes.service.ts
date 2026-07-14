@@ -115,9 +115,14 @@ export class RoutesService {
       },
     })
     // 对外 H5 链接（notify=true 且非草稿时生成协作共享 token）
-    const shareLink =
-      !draft && input.notify ? (await this.createShare(routeId, role, version.id)).link : null
-    return { version: this.serializeVersion(version, role), shareLink }
+    let shareToken: string | null = null
+    let shareLink: string | null = null
+    if (!draft && input.notify) {
+      const share = await this.createShare(routeId, role, version.id)
+      shareToken = share.token
+      shareLink = share.link
+    }
+    return { version: this.serializeVersion(version, role), shareLink, shareToken }
   }
 
   // 生成协作 H5 共享令牌（默认指向最新非草稿版本）

@@ -19,6 +19,7 @@ const loading = ref(true)
 const err = ref('')
 const tab = ref<'edit' | 'info' | 'flow'>('edit')
 const actionErr = ref('')
+const actionOk = ref('')
 const savingDraft = ref(false)
 const savingNotify = ref(false)
 const doing = ref('')
@@ -202,23 +203,29 @@ async function onSaveDraft() {
 async function onSaveNotify() {
   savingNotify.value = true
   actionErr.value = ''
+  actionOk.value = ''
   try {
-    const res = await saveVersion(id, {
+    const res = (await saveVersion(id, {
       itinerary: itinerary.value,
       quote: buildQuote(),
       draft: false,
       notify: true,
-    })
-    // 后端返回 /share/route/TOKEN；分享页由后端服务端渲染（带 OG 注入），需用后端域名
-    const link = res.token ? shareH5Url(res.token) : ''
+    })) as { shareToken?: string; shareLink?: string; version?: any }
+    // 后端返回 /share/route/TOKEN 或 shareToken；分享页由后端 SSR 注入 OG
+    const token = res.shareToken || res.shareLink?.split('/').pop() || ''
+    const link = token ? shareH5Url(token) : ''
     shareLink.value = link
     if (link && data.value) {
       const caption = shareH5Caption(data.value)
+      const text = `${caption}\n${link}`
       try {
-        await navigator.clipboard.writeText(`${caption}\n${link}`)
+        await navigator.clipboard.writeText(text)
+        actionOk.value = '协作 H5 链接已生成并复制到剪贴板，可粘贴到微信'
       } catch {
-        /* 忽略剪贴板异常 */
+        actionOk.value = '协作 H5 链接已生成，请手动复制下方链接'
       }
+    } else {
+      actionOk.value = '已保存新版本，但未生成分享链接'
     }
     await load()
   } catch (e: any) {
@@ -272,6 +279,7 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
         <a v-if="shareLink" :href="shareLink" target="_blank" class="link">打开协作 H5 ↗（已复制）</a>
       </div>
       <p v-if="actionErr" class="err">{{ actionErr }}</p>
+      <p v-if="actionOk" class="ok">{{ actionOk }}</p>
 
       <div class="tab-bar">
         <button :class="['tab', { active: tab === 'edit' }]" @click="tab = 'edit'">行程与报价</button>
@@ -419,6 +427,7 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
 .actions { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
 .link { color: var(--info); text-decoration: none; font-size: 14px; }
 .err { color: var(--danger); }
+.ok { color: var(--success, #10b981); }
 .tab-bar { display: flex; gap: 8px; margin-bottom: 12px; }
 .tab { padding: 8px 16px; border: 1px solid var(--line); background: var(--card); border-radius: 8px; cursor: pointer; }
 .tab.active { color: var(--brand); border-color: var(--brand); }
