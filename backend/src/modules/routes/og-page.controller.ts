@@ -19,7 +19,8 @@ export class OgPageController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    const origin = `${req.protocol}://${req.get('host')}`
+    const protocol = String(req.get('x-forwarded-proto') || req.protocol || 'https')
+    const origin = `${protocol}://${req.get('host')}`
     const shareUrl = `${origin}/share/route/${encodeURIComponent(token)}`
     const coverUrl = `${origin}/share/og-cover.png`
     try {
@@ -48,7 +49,8 @@ export class OgPageController {
 
   @Get('og-cover.png')
   cover(@Res() res: Response) {
-    const file = join(process.cwd(), 'public', 'og-cover.png')
+    // 容器内 __dirname = /app/backend/dist/modules/routes，回退三级到 /app/backend/public
+    const file = join(__dirname, '..', '..', '..', 'public', 'og-cover.png')
     if (!existsSync(file)) {
       res.status(404).end()
       return
