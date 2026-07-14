@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { fetchH5Route, submitH5Feedback } from '@/api/h5'
-import { fetchRouteFeedback } from '@/api/routes'
+import { fetchH5Route, submitH5Feedback, fetchH5Feedback } from '@/api/h5'
 import { safeText } from '@/utils/name'
 import type { H5Route, RouteFeedbackItem } from '@/types'
 
@@ -21,7 +20,7 @@ const sendErr = ref('')
 const feedbackList = ref<RouteFeedbackItem[]>([])
 async function loadFeedback() {
   try {
-    feedbackList.value = await fetchRouteFeedback(data.value!.routeId)
+    feedbackList.value = await fetchH5Feedback(token)
   } catch {
     feedbackList.value = []
   }

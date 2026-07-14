@@ -21,4 +21,10 @@ export class H5Controller {
   ) {
     return this.svc.submitFeedback(token, body?.content, body?.authorName)
   }
+
+  // 读取协作反馈（公开，免登录）—— H5 页展示历史反馈，形成闭环
+  @Get('route/:token/feedback')
+  getFeedback(@Param('token') token: string) {
+    return this.svc.getFeedbackByToken(token)
+  }
 }

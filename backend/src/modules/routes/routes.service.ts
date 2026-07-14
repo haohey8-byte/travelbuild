@@ -245,6 +245,16 @@ export class RoutesService {
     return [...h5, ...consoleFb]
   }
 
+  // 公开链路：凭 token 读取反馈（H5 页免登录展示历史反馈，避免 401）
+  async getFeedbackByToken(token: string) {
+    const share = await this.prisma.routeShare.findUnique({ where: { token } })
+    if (!share) throw new NotFoundException('协作链接无效')
+    if (share.expiresAt && share.expiresAt.getTime() < Date.now()) {
+      throw new NotFoundException('协作链接已过期')
+    }
+    return this.getFeedback(share.routeId)
+  }
+
   // 版本历史
   async getVersions(routeId: string, role: Role = 'agency') {
     const versions = await this.prisma.routeVersion.findMany({
