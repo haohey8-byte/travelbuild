@@ -34,12 +34,15 @@ export class RoutesController {
 
   @Post()
   create(@Body() body: any, @CurrentUser() user: AuthUser) {
-    return this.svc.create({
-      ...body,
-      createdById: user.id,
-      creatorRole: user.role,
-      creatorAgencyId: user.agencyId,
-    })
+    return this.svc.create(
+      {
+        ...body,
+        createdById: user.id,
+        creatorRole: user.role,
+        creatorAgencyId: user.agencyId,
+      },
+      user,
+    )
   }
 
   @Get(':id/versions')

@@ -106,7 +106,7 @@ export class RoutesService {
   }
 
   // 新建路线 + 客户档案
-  async create(input: CreateRouteInput) {
+  async create(input: CreateRouteInput, principal?: RoutePrincipal) {
     const modeKey = input.modeKey ?? 'collab'
     // 协作模式由旅行社发起草案 → 初始「咨询中」（未提交）；一手 solo 直接「待报价」
     const statusKey: StatusKey =
@@ -138,7 +138,7 @@ export class RoutesService {
         },
       })
     }
-    return this.findOne(route.id)
+    return this.findOne(route.id, principal)
   }
 
   // 保存并通知：生成新 version（version 自增），draft 决定是否对外
