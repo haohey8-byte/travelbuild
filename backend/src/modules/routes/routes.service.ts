@@ -298,7 +298,10 @@ export class RoutesService {
         )[0] ?? null
     }
     if (!version) throw new NotFoundException('该路线暂无对外版本')
-    const masked = maskQuotePublic(version.quote) as { totals?: { guestPrice?: number } }
+    const masked = maskQuotePublic(version.quote) as {
+      items?: { type?: string; guestPrice?: number }[]
+      totals?: { guestPrice?: number }
+    }
     return {
       token,
       routeId: route.id,
@@ -310,6 +313,8 @@ export class RoutesService {
       version: version.version,
       statusKey: route.statusKey,
       itinerary: version.itinerary,
+      // 净化报价：仅含对客报价（guestPrice），不含成本①/②/加价（公开 H5 不泄漏内部成本）
+      quote: masked,
       guestPrice: masked?.totals?.guestPrice ?? null,
     }
   }

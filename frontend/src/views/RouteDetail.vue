@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import {
@@ -26,6 +26,10 @@ import {
   provincialRouteH5Url,
 } from '@/utils/share'
 import type { Route, RouteStatusKey, QuoteLevel, RouteFeedbackItem } from '@/types'
+import { buildPdfModel, type PdfModel } from '@/utils/pdf-model'
+import { generatePdf } from '@/utils/pdf-export'
+import { PDF_LANG_OPTIONS, PDF_VERSION_LABEL, type PdfLang, type PdfVersion } from '@/utils/pdf-i18n'
+import RoutePdf from '@/components/RoutePdf.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -43,6 +47,72 @@ const savingDraft = ref(false)
 const savingNotify = ref(false)
 const doing = ref('')
 const shareLink = ref('')
+
+// —— PDF 多语言导出（PRD 5.8）——
+const pdfPanelOpen = ref(false)
+const pdfVersion = ref<PdfVersion>('internal')
+const pdfLang = ref<PdfLang>('zh')
+const pdfBusy = ref(false)
+const pdfErr = ref('')
+const pdfModel = ref<PdfModel | null>(null)
+const pdfWrap = ref<HTMLElement | null>(null)
+
+// 版本开放范围（权限矩阵 4.7 / 5.8）：一手=全部；旅行社=旅行社版+游客版；其余无
+const pdfVersionOptions = computed<{ value: PdfVersion; label: string }[]>(() => {
+  if (role.value === 'pandaking') {
+    return [
+      { value: 'internal', label: PDF_VERSION_LABEL.internal },
+      { value: 'agency', label: PDF_VERSION_LABEL.agency },
+      { value: 'tourist', label: PDF_VERSION_LABEL.tourist },
+    ]
+  }
+  if (role.value === 'agency') {
+    return [
+      { value: 'agency', label: PDF_VERSION_LABEL.agency },
+      { value: 'tourist', label: PDF_VERSION_LABEL.tourist },
+    ]
+  }
+  return []
+})
+const canExportPdf = computed(() => pdfVersionOptions.value.length > 0)
+
+async function onExportPdf() {
+  if (!data.value) return
+  pdfBusy.value = true
+  pdfErr.value = ''
+  try {
+    const model = await buildPdfModel({
+      route: {
+        customerName: data.value.customerName,
+        customerNameCn: data.value.customerNameCn,
+        destination: data.value.destination,
+        groupSize: data.value.groupSize,
+        travelDate: data.value.travelDate ?? null,
+        statusKey: data.value.statusKey,
+        version: data.value.version,
+      },
+      itinerary: itinerary.value,
+      quote: { items: quoteItems.value, totals: totals.value },
+      version: pdfVersion.value,
+      lang: pdfLang.value,
+      statusLabel: STATUS_LABEL[data.value.statusKey],
+      versionLabel: versionLabel.value,
+    })
+    pdfModel.value = model
+    await nextTick()
+    const safeName = (data.value.customerNameCn || data.value.customerName || 'route').replace(
+      /[\\/:*?"<>|]/g,
+      '_',
+    )
+    const filename = `${safeName}_${model.title}_${model.langName}.pdf`
+    if (pdfWrap.value) await generatePdf(pdfWrap.value, filename)
+    pdfPanelOpen.value = false
+  } catch (e: any) {
+    pdfErr.value = e?.message || '导出失败'
+  } finally {
+    pdfBusy.value = false
+  }
+}
 
 // —— 反馈记录（H5 链接反馈 + 一手回传反馈，协作双方可见）——
 const feedbackList = ref<RouteFeedbackItem[]>([])
@@ -466,9 +536,37 @@ async function copyConsoleNotify() {
         </button>
         <a v-if="shareLink" :href="shareLink" target="_blank" class="link">打开协作 H5 ↗</a>
         <button v-if="shareLink" class="btn ghost sm" @click="copyShareLink">复制链接</button>
+        <button v-if="canExportPdf" class="btn" @click="pdfPanelOpen = !pdfPanelOpen">📄 导出PDF</button>
+      </div>
+
+      <div v-if="canExportPdf && pdfPanelOpen" class="pdf-panel">
+        <div class="pdf-panel-row">
+          <span class="pdf-panel-label">版本</span>
+          <label v-for="o in pdfVersionOptions" :key="o.value" class="pdf-opt">
+            <input type="radio" :value="o.value" v-model="pdfVersion" /> {{ o.label }}
+          </label>
+        </div>
+        <div class="pdf-panel-row">
+          <span class="pdf-panel-label">语言</span>
+          <label v-for="o in PDF_LANG_OPTIONS" :key="o.value" class="pdf-opt">
+            <input type="radio" :value="o.value" v-model="pdfLang" /> {{ o.label }}
+          </label>
+        </div>
+        <div class="pdf-panel-actions">
+          <button class="btn btn-primary" :disabled="pdfBusy" @click="onExportPdf">
+            {{ pdfBusy ? '生成中…' : '生成并下载 PDF' }}
+          </button>
+          <button class="btn ghost" @click="pdfPanelOpen = false">取消</button>
+        </div>
+        <p v-if="pdfErr" class="err">{{ pdfErr }}</p>
       </div>
       <p v-if="actionErr" class="err">{{ actionErr }}</p>
       <p v-if="actionOk" class="ok">{{ actionOk }}</p>
+
+      <!-- 离屏 PDF 渲染容器（导出时填充，不直接显示） -->
+      <div ref="pdfWrap" class="pdf-offscreen" aria-hidden="true">
+        <RoutePdf v-if="pdfModel" :model="pdfModel" />
+      </div>
       <div v-if="notifyTextConsole" class="fb-notify">
         <div class="fb-notify-head">
           <span>📋 通知文案（去微信粘贴到协作群）</span>
@@ -761,6 +859,28 @@ textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border
 .fb-time { margin-left: auto; }
 .fb-content { margin: 6px 0 0; font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
 .muted { color: var(--muted); font-size: 13px; }
+
+/* PDF 多语言导出面板 */
+.pdf-panel {
+  border: 1px solid var(--brand, #3b82f6);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin: 10px 0;
+  background: rgba(59, 130, 246, 0.05);
+}
+.pdf-panel-row { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 8px; }
+.pdf-panel-label { font-weight: 600; color: var(--muted); min-width: 40px; }
+.pdf-opt { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer; }
+.pdf-panel-actions { display: flex; gap: 10px; margin-top: 4px; }
+/* 离屏渲染容器：保留布局尺寸供 html2canvas 截图，但移出可视区 */
+.pdf-offscreen {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 794px;
+  background: #fff;
+  z-index: -1;
+}
 
 /* 响应式：窄屏单列、表横滑、tab 横滑 */
 @media (max-width: 900px) {

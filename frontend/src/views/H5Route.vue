@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { fetchH5Route, submitH5Feedback, fetchH5Feedback } from '@/api/h5'
 import { safeText, safeName } from '@/utils/name'
 import { shareH5Url, shareH5Caption, collabNotifyText, copyText } from '@/utils/share'
 import type { H5Route, RouteFeedbackItem } from '@/types'
+import { buildPdfModel, type PdfModel } from '@/utils/pdf-model'
+import { generatePdf } from '@/utils/pdf-export'
+import { PDF_LANG_OPTIONS, type PdfLang } from '@/utils/pdf-i18n'
+import RoutePdf from '@/components/RoutePdf.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -24,6 +28,57 @@ const notifyText = ref('')
 const notifyTip = ref('')
 // 查看方随时把协作方案链接转发到微信群（复制「说明 + 链接」）
 const shareTip = ref('')
+
+// —— 导出游客版 PDF（PRD 5.8：旅行社在 H5 内导出游客版）——
+const pdfPanelOpen = ref(false)
+const pdfLang = ref<PdfLang>('zh')
+const pdfBusy = ref(false)
+const pdfErr = ref('')
+const pdfModel = ref<PdfModel | null>(null)
+const pdfWrap = ref<HTMLElement | null>(null)
+
+async function onExportTouristPdf() {
+  if (!data.value) return
+  pdfBusy.value = true
+  pdfErr.value = ''
+  try {
+    const d = data.value
+    const it = (d.itinerary as { days?: any[] }) ?? {}
+    const model = await buildPdfModel({
+      route: {
+        customerName: d.customerName ?? '',
+        customerNameCn: d.customerNameCn ?? '',
+        destination: d.destination ?? '',
+        groupSize: d.groupSize,
+        travelDate: d.travelDate,
+        statusKey: d.statusKey,
+        version: d.version,
+      },
+      itinerary: { days: it.days ?? [] },
+      quote: {
+        items: (d.quote?.items ?? []).map((q) => ({
+          type: q.type,
+          guestPrice: q.guestPrice ?? 0,
+        })) as any,
+        totals: { guestPrice: d.quote?.totals?.guestPrice ?? d.guestPrice ?? 0 },
+      },
+      version: 'tourist',
+      lang: pdfLang.value,
+      statusLabel: statusLabel(d.statusKey),
+      versionLabel: d.version,
+    })
+    pdfModel.value = model
+    await nextTick()
+    const safe = (d.customerNameCn || d.customerName || 'route').replace(/[\\/:*?"<>|]/g, '_')
+    const filename = `${safe}_${model.title}_${model.langName}.pdf`
+    if (pdfWrap.value) await generatePdf(pdfWrap.value, filename)
+    pdfPanelOpen.value = false
+  } catch (e: any) {
+    pdfErr.value = e?.message || '导出失败'
+  } finally {
+    pdfBusy.value = false
+  }
+}
 async function copyShareLink() {
   if (!data.value) return
   const caption = shareH5Caption(data.value)
@@ -168,6 +223,19 @@ function goHome() {
       <button class="btn ghost share-btn" @click="copyShareLink">📋 复制协作链接发到微信群</button>
       <p v-if="shareTip" class="share-tip">{{ shareTip }}</p>
 
+      <button class="btn ghost share-btn" @click="pdfPanelOpen = !pdfPanelOpen">📄 导出游客版PDF</button>
+      <div v-if="pdfPanelOpen" class="pdf-tourist-panel">
+        <span class="pdf-panel-label">语言</span>
+        <label v-for="o in PDF_LANG_OPTIONS" :key="o.value" class="pdf-opt">
+          <input type="radio" :value="o.value" v-model="pdfLang" /> {{ o.label }}
+        </label>
+        <button class="btn btn-primary" :disabled="pdfBusy" @click="onExportTouristPdf">
+          {{ pdfBusy ? '生成中…' : '生成并下载' }}
+        </button>
+        <button class="btn ghost" @click="pdfPanelOpen = false">取消</button>
+        <p v-if="pdfErr" class="err">{{ pdfErr }}</p>
+      </div>
+
       <h3>行程安排</h3>
       <div v-if="days.length">
         <div v-for="(d, i) in days" :key="i" class="day">
@@ -209,6 +277,11 @@ function goHome() {
           </li>
         </ul>
       </div>
+
+      <!-- 离屏 PDF 渲染容器（导出时填充，不直接显示） -->
+      <div ref="pdfWrap" class="pdf-offscreen" aria-hidden="true">
+        <RoutePdf v-if="pdfModel" :model="pdfModel" />
+      </div>
     </div>
   </div>
 </template>
@@ -242,4 +315,9 @@ h3 { font-size: 15px; margin: 14px 0 0; }
 .h5-fb-meta b { color: var(--ink); }
 .h5-fb-time { margin-left: auto; }
 .h5-fb-content { margin: 6px 0 0; font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.pdf-tourist-panel { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 12px; padding: 10px 12px; border: 1px solid var(--brand, #3b82f6); border-radius: 10px; background: rgba(59,130,246,.05); }
+.pdf-panel-label { font-weight: 600; color: var(--muted); min-width: 36px; }
+.pdf-opt { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer; }
+/* 离屏渲染容器：保留布局尺寸供 html2canvas 截图，并移出可视区 */
+.pdf-offscreen { position: fixed; left: -10000px; top: 0; width: 794px; background: #fff; z-index: -1; }
 </style>

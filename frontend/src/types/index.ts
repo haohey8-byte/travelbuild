@@ -113,6 +113,11 @@ export interface H5Route {
   statusKey: string
   itinerary: Record<string, unknown>
   guestPrice: number | null
+  // 净化报价：仅含对客报价（guestPrice），不含成本①/②/加价（公开 H5 不泄漏内部成本）
+  quote?: {
+    items?: { type: string; guestPrice: number | null }[]
+    totals?: { guestPrice: number | null }
+  } | null
 }
 
 export interface H5Feedback {
