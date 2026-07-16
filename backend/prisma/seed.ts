@@ -16,6 +16,18 @@ async function main() {
     create: { id: 'org-provincial-seed', name: '川内地接社', role: 'provincial' },
   })
 
+  // 真实机构（用户后续将邀请对应的微信账号归属到此）
+  await prisma.agency.upsert({
+    where: { id: 'agency-101ways-to-china' },
+    update: { name: '101 ways to china', role: 'agency' },
+    create: { id: 'agency-101ways-to-china', name: '101 ways to china', role: 'agency' },
+  })
+  await prisma.agency.upsert({
+    where: { id: 'provincial-xinjiang-hema' },
+    update: { name: '新疆河马旅行社', role: 'provincial' },
+    create: { id: 'provincial-xinjiang-hema', name: '新疆河马旅行社', role: 'provincial' },
+  })
+
   // 角色：一手 PandaKing / 境外旅行社 / 省地接社（含机构归属与层级）
   const pandaking = await prisma.user.upsert({
     where: { id: 'seed-pk' },
