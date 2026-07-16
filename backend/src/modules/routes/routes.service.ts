@@ -423,6 +423,9 @@ export class RoutesService {
     if (!principal) return
     const route = await this.prisma.route.findUnique({ where: { id: routeId } })
     if (!route) throw new NotFoundException('路线不存在')
+    // 旧 token 降级：agency/provincial 缺 agencyId 时视为 pandaking，跳过隔离校验
+    if (principal.role === 'agency' && !principal.agencyId) return
+    if (principal.role === 'provincial' && !principal.agencyId) return
     if (principal.role === 'agency' && route.agencyId !== principal.agencyId) {
       throw new NotFoundException('路线不存在')
     }
