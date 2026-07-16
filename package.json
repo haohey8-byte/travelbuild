@@ -16,5 +16,8 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "@cloudbase/cli": "^2.12.10"
   }
 }
