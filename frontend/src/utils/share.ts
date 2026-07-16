@@ -3,7 +3,7 @@
 // 因此分享链接必须指向「后端域名」而非前端静态托管域名（前端域名的 hash 路由无法被爬虫解析 token）。
 import { safeName, safeText } from '@/utils/name'
 
-const API_BASE = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:3000/api'
+const API_BASE = (import.meta.env.VITE_API_BASE as string) || '/api'
 const API_ORIGIN = API_BASE.replace(/\/api$/, '')
 
 export function shareH5Url(token: string): string {
