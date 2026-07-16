@@ -31,6 +31,12 @@ UPDATE "Route" SET "agencyId" = NULL
 WHERE "agencyId" IS NOT NULL
   AND "agencyId" NOT IN (SELECT "id" FROM "Agency");
 
+-- 3a) 同样清理 User.agencyId：早期测试数据可能写入任意字符串，
+--     不在此归并会导致下面 ADD CONSTRAINT User_agencyId_fkey 在已有行上校验失败。
+UPDATE "User" SET "agencyId" = NULL
+WHERE "agencyId" IS NOT NULL
+  AND "agencyId" NOT IN (SELECT "id" FROM "Agency");
+
 -- 3b) CostInquiry.provincialId 是 NOT NULL，先把指向未知机构的记录归到演示省地接社，避免外键失败。
 UPDATE "CostInquiry" SET "provincialId" = 'org-provincial-seed'
 WHERE "provincialId" NOT IN (SELECT "id" FROM "Agency");
