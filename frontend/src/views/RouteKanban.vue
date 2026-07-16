@@ -3,13 +3,16 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useRouteStore } from '@/stores/route'
+import { useAuthStore } from '@/stores/auth'
 import { createRoute } from '@/api/routes'
 import { safeName, safeText } from '@/utils/name'
 import type { Route, RouteStatusKey } from '@/types'
 
 const router = useRouter()
 const store = useRouteStore()
+const auth = useAuthStore()
 const { routes, loading } = storeToRefs(store)
+const { user } = storeToRefs(auth)
 
 const STATUS_LABEL: Record<RouteStatusKey, string> = {
   consulting: '咨询中',
@@ -117,7 +120,13 @@ async function onCreate() {
 </script>
 
 <template>
-  <div>
+  <div v-if="user?.role === 'provincial'" class="forbidden">
+    <h2>⛔ 无权限访问</h2>
+    <p>按系统权限设计，省地接社不进入控制台路线视图。</p>
+    <p>你的协作入口：账号页 →「我的成本询价」，或通过一手发来的 H5 链接填写成本。</p>
+  </div>
+
+  <div v-else>
     <div class="page-header">
       <h1 class="page-title">路线管理 · 看板</h1>
       <button class="btn btn-primary" @click="showCreate = true">+ 创建路线</button>
@@ -225,7 +234,7 @@ async function onCreate() {
           </li>
         </ol>
         <p class="guide-tip">
-          💡 页面顶部可切换「一手 / 境外旅行社 / 省地接社」三种视角对比同一份路线。H5 链接建议用<b>无痕窗口或手机</b>打开（模拟客户视角）。
+          💡 一个账号固定一个角色。如需以其他角色查看，请退出后用对应账号登录。H5 链接建议用<b>无痕窗口或手机</b>打开（模拟客户视角）。
         </p>
         <div class="modal-actions">
           <button class="btn btn-primary" @click="dismissGuide">开始使用</button>
@@ -239,6 +248,9 @@ async function onCreate() {
 </template>
 
 <style scoped>
+.forbidden { text-align: center; padding: 48px 20px; }
+.forbidden h2 { color: var(--danger); margin-bottom: 12px; }
+.forbidden p { color: var(--muted); margin: 8px 0; }
 .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .page-title { margin: 0; }
 .stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }

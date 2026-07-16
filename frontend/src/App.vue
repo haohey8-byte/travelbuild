@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
+import { roleLabel } from '@/utils/share'
 import type { Role } from '@/types'
 
 const { t } = useI18n()
@@ -13,12 +14,18 @@ const auth = useAuthStore()
 const isH5 = computed(() => route.meta.h5 === true)
 const needsLogin = computed(() => !auth.token && !isH5.value)
 
-const nav = [
-  { to: '/routes/kanban', label: t('nav.routes'), icon: '🗺' },
-  { to: '/kb', label: t('nav.kb'), icon: '📚' },
-  { to: '/cases', label: t('nav.cases'), icon: '🏆' },
-  { to: '/account', label: t('nav.account'), icon: '👤' },
-]
+const nav = computed(() => {
+  const base = [{ to: '/account', label: t('nav.account'), icon: '👤' }]
+  // 按 PRD 权限矩阵：省地接社无控制台路线视图，仅通过 H5 成本询价交互
+  if (auth.user?.role === 'provincial') return base
+  return [
+    { to: '/routes/kanban', label: t('nav.routes'), icon: '🗺' },
+    { to: '/kb', label: t('nav.kb'), icon: '📚' },
+    { to: '/cases', label: t('nav.cases'), icon: '🏆' },
+    ...base,
+  ]
+})
+
 
 const roles: { key: Role; label: string }[] = [
   { key: 'pandaking', label: '一手 PandaKing' },
@@ -41,9 +48,6 @@ function onNav(to: string) {
 
 async function onDevLogin(r: Role) {
   await auth.loginAsRole(r)
-}
-function onSwitchRole(e: Event) {
-  auth.loginAsRole((e.target as HTMLSelectElement).value as Role)
 }
 </script>
 
@@ -70,7 +74,7 @@ function onSwitchRole(e: Event) {
       <button class="hamburger" :class="{ open: menuOpen }" @click="toggleMenu" aria-label="菜单" :aria-expanded="menuOpen">
         <span></span><span></span><span></span>
       </button>
-      <div class="brand" @click="onNav('/routes/kanban')">PandaKing9<span class="brand-sub">协作工作台</span></div>
+      <div class="brand" @click="onNav(auth.user?.role === 'provincial' ? '/account' : '/routes/kanban')">PandaKing9<span class="brand-sub">协作工作台</span></div>
 
       <!-- 桌面端内联导航 -->
       <nav class="app-nav">
@@ -83,14 +87,9 @@ function onSwitchRole(e: Event) {
         >{{ item.label }}</a>
       </nav>
 
-      <!-- 桌面端角色切换 -->
+      <!-- 桌面端当前账号信息（真实账号固定角色，不再提供角色切换） -->
       <div class="role-switch">
-        <span class="who" v-if="auth.user">{{ auth.user.name }}</span>
-        <select :value="auth.currentRole" @change="onSwitchRole">
-          <option value="pandaking">一手 PandaKing</option>
-          <option value="agency">境外旅行社</option>
-          <option value="provincial">省地接社</option>
-        </select>
+        <span class="who" v-if="auth.user">{{ auth.user.name }} · {{ roleLabel(auth.user.role) }}</span>
         <button class="btn ghost sm" @click="auth.logout()">{{ t('account.logout') }}</button>
       </div>
     </header>
@@ -116,13 +115,8 @@ function onSwitchRole(e: Event) {
         </a>
       </nav>
       <div class="drawer-role">
-        <div class="dr-label">当前视角</div>
-        <div class="who" v-if="auth.user">{{ auth.user.name }}</div>
-        <select :value="auth.currentRole" @change="onSwitchRole">
-          <option value="pandaking">一手 PandaKing</option>
-          <option value="agency">境外旅行社</option>
-          <option value="provincial">省地接社</option>
-        </select>
+        <div class="dr-label">当前账号</div>
+        <div class="who" v-if="auth.user">{{ auth.user.name }} · {{ roleLabel(auth.user.role) }}</div>
         <button class="btn ghost sm full" @click="auth.logout()">{{ t('account.logout') }}</button>
       </div>
     </aside>

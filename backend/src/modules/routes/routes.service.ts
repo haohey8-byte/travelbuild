@@ -45,18 +45,18 @@ export class RoutesService {
   }
 
   // 列表（按角色字段级过滤 + 机构物理隔绝）
-  // 物理隔绝：一手见全部；境外旅行社仅见「本机构(agencyId)」路线；省地接社仅见「被分配(provincialId)」的路线。
+  // 物理隔绝：一手见全部；境外旅行社仅见「本机构(agencyId)」路线；省地接社**无控制台路线视图**（按 PRD 权限矩阵）。
   async findAll(status?: string, principal?: RoutePrincipal) {
     const role = principal?.role ?? 'agency'
-    const where: { statusKey?: string; agencyId?: string; provincialId?: string } = status
+    // 省地接社没有控制台路线列表权限（仅通过 H5 成本询价 / 协作 H5 交互）
+    if (role === 'provincial') return []
+    const where: { statusKey?: string; agencyId?: string } = status
       ? { statusKey: status }
       : {}
     // 旧 token 可能缺少 agencyId（DEV_BYPASS_AUTH 或历史 token），降级为 pandaking 视角避免看板空白
-    const effectiveRole = (role === 'agency' && !principal?.agencyId) || (role === 'provincial' && !principal?.agencyId) ? 'pandaking' : role
+    const effectiveRole = role === 'agency' && !principal?.agencyId ? 'pandaking' : role
     if (effectiveRole === 'agency') {
       where.agencyId = principal!.agencyId!
-    } else if (effectiveRole === 'provincial') {
-      where.provincialId = principal!.agencyId!
     }
     const routes = await this.prisma.route.findMany({
       where,
@@ -76,16 +76,14 @@ export class RoutesService {
         throw new NotFoundException('路线不存在')
       })
     const role = principal?.role ?? 'agency'
-    // 旧 token 降级：agency/provincial 缺 agencyId 时视为 pandaking，避免误报「路线不存在」
-    const effectiveRole = (role === 'agency' && !principal?.agencyId) || (role === 'provincial' && !principal?.agencyId) ? 'pandaking' : role
-    // 物理隔绝校验：境外旅行社仅见本机构路线；省地接社仅见被分配的路线
-    if (effectiveRole === 'agency' && (!principal?.agencyId || route.agencyId !== principal.agencyId)) {
+    // 省地接社没有控制台路线详情权限（按 PRD 权限矩阵）
+    if (role === 'provincial') {
       throw new NotFoundException('路线不存在')
     }
-    if (
-      effectiveRole === 'provincial' &&
-      (!principal?.agencyId || route.provincialId !== principal.agencyId)
-    ) {
+    // 旧 token 降级：agency 缺 agencyId 时视为 pandaking，避免误报「路线不存在」
+    const effectiveRole = role === 'agency' && !principal?.agencyId ? 'pandaking' : role
+    // 物理隔绝校验：境外旅行社仅见本机构路线
+    if (effectiveRole === 'agency' && (!principal?.agencyId || route.agencyId !== principal.agencyId)) {
       throw new NotFoundException('路线不存在')
     }
     return this.serialize(route, effectiveRole)
@@ -423,13 +421,13 @@ export class RoutesService {
     if (!principal) return
     const route = await this.prisma.route.findUnique({ where: { id: routeId } })
     if (!route) throw new NotFoundException('路线不存在')
-    // 旧 token 降级：agency/provincial 缺 agencyId 时视为 pandaking，跳过隔离校验
-    if (principal.role === 'agency' && !principal.agencyId) return
-    if (principal.role === 'provincial' && !principal.agencyId) return
-    if (principal.role === 'agency' && route.agencyId !== principal.agencyId) {
+    // 省地接社没有控制台路线操作权限（按 PRD 权限矩阵），所有交互均通过 H5 token 完成
+    if (principal.role === 'provincial') {
       throw new NotFoundException('路线不存在')
     }
-    if (principal.role === 'provincial' && route.provincialId !== principal.agencyId) {
+    // 旧 token 降级：agency 缺 agencyId 时视为 pandaking，跳过隔离校验
+    if (principal.role === 'agency' && !principal.agencyId) return
+    if (principal.role === 'agency' && route.agencyId !== principal.agencyId) {
       throw new NotFoundException('路线不存在')
     }
   }
