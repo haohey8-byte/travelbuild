@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useRouteStore } from '@/stores/route'
 import { useAuthStore } from '@/stores/auth'
-import { createRoute } from '@/api/routes'
+import { createRoute, deleteRoute } from '@/api/routes'
 import { fetchAgencies } from '@/api/auth'
 import { safeName, safeText } from '@/utils/name'
 import type { Route, RouteStatusKey, Agency } from '@/types'
@@ -146,6 +146,29 @@ async function onCreate() {
     creating.value = false
   }
 }
+
+// 一手删除路线（删除前后端归档快照到 RouteArchive 备份历史库）
+const isPandaking = computed(() => user.value?.role === 'pandaking')
+const pendingDelete = ref<Route | null>(null)
+const deleting = ref(false)
+function askDelete(r: Route, e: Event) {
+  e.stopPropagation() // 避免触发卡片跳转详情
+  pendingDelete.value = r
+}
+async function confirmDelete() {
+  if (!pendingDelete.value) return
+  deleting.value = true
+  try {
+    await deleteRoute(pendingDelete.value.id)
+    pendingDelete.value = null
+    await store.load()
+  } catch (e: any) {
+    console.error('删除路线失败:', e)
+    alert(e?.response?.data?.message || e?.message || '删除失败，请重试')
+  } finally {
+    deleting.value = false
+  }
+}
 </script>
 
 <template>
@@ -183,12 +206,17 @@ async function onCreate() {
         <div class="route-meta">{{ safeText(r.destination) || '未填目的地' }} · {{ verLabel(r) }} · {{ r.modeKey === 'collab' ? '协作' : '自营' }}</div>
         <span class="badge" :class="r.statusKey">{{ STATUS_LABEL[r.statusKey] }}</span>
         <div class="route-agency" v-if="safeText(r.agency)">旅行社：{{ safeText(r.agency) }}</div>
+        <button
+          v-if="isPandaking"
+          class="card-del"
+          title="删除路线（归档备份）"
+          @click="askDelete(r, $event)"
+        >🗑</button>
       </div>
       <p v-if="!filtered.length" class="muted">暂无路线</p>
     </div>
 
-    <div v-if="showCreate" class="modal-backdrop" @click.self="showCreate = false">
-      <div class="modal">
+    <div v-if="showCreate" class="modal-backdrop" @click.self="showCreate = false">      <div class="modal">
         <form @submit.prevent="onCreate">
           <h2>创建新路线</h2>
           <label>
@@ -239,6 +267,25 @@ async function onCreate() {
             <button type="submit" class="btn btn-primary" :disabled="creating">{{ creating ? '创建中...' : '创建' }}</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- 删除确认浮层（仅一手可见触发） -->
+    <div v-if="pendingDelete" class="modal-backdrop" @click.self="pendingDelete = null">
+      <div class="modal">
+        <h2>确认删除路线？</h2>
+        <p class="muted">
+          将删除「{{ displayName(pendingDelete) }}」及其所有版本、共享链接与反馈。
+        </p>
+        <p class="muted">
+          删除前系统会自动归档整条路线快照到<b>备份历史库</b>，可审计与溯源，无需担心数据丢失。
+        </p>
+        <div class="modal-actions">
+          <button type="button" class="btn" :disabled="deleting" @click="pendingDelete = null">取消</button>
+          <button type="button" class="btn btn-danger" :disabled="deleting" @click="confirmDelete">
+            {{ deleting ? '删除中...' : '确认删除' }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -296,6 +343,9 @@ async function onCreate() {
 .kanban-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
 .card { padding: 14px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; cursor: pointer; transition: box-shadow 0.15s, transform 0.05s; position: relative; }
 .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); transform: translateY(-2px); }
+.card-del { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border: none; border-radius: 8px; background: var(--bg); color: var(--muted); font-size: 14px; cursor: pointer; line-height: 1; opacity: 0; transition: opacity 0.15s, background 0.15s; }
+.card:hover .card-del { opacity: 1; }
+.card-del:hover { background: var(--danger); color: #fff; }
 .route-name { font-weight: 600; }
 .route-meta { color: var(--muted); font-size: 13px; margin-top: 4px; }
 .route-agency { color: var(--muted); font-size: 12px; margin-top: 6px; }
@@ -313,6 +363,8 @@ async function onCreate() {
 .modal label span { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
 .modal input, .modal select { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: inherit; box-sizing: border-box; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+.btn-danger { background: var(--danger); color: #fff; border: 1px solid var(--danger); }
+.btn-danger:hover { opacity: 0.9; }
 .err { color: var(--danger); font-size: 13px; }
 .guide { max-width: 480px; position: relative; }
 .guide-close { position: absolute; top: 8px; right: 12px; background: none; border: none; font-size: 24px; line-height: 1; color: var(--muted); cursor: pointer; padding: 4px; }

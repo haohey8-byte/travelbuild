@@ -176,3 +176,22 @@ model RouteFeedback {
   content   String
   createdAt DateTime @default(now())
 }
+
+// 路线备份历史库（一手删除路线时归档快照，便于审计与恢复溯源）
+// 删除为硬删，但删除前整条路线+关联数据快照写入本表，不破坏生产查询隔离。
+model RouteArchive {
+  id            String   @id @default(uuid())
+  routeId       String   // 原路线 id，便于回溯定位
+  routeData     Json     // 路线主记录快照
+  versions      Json?    // 路线版本（行程+报价）快照数组
+  shares        Json?    // 协作 H5 共享令牌快照数组
+  feedbacks     Json?    // 协作反馈快照数组
+  costInquiries Json?    // 成本询价快照数组
+  deletedById   String?  // 删除操作者用户 id（一手）
+  deletedByName String?  // 删除操作者名称，便于审计
+  reason        String?  // 删除原因（可选）
+  createdAt     DateTime @default(now())
+
+  @@index([routeId])
+  @@index([createdAt])
+}

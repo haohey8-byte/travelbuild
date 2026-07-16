@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
 import { RoutesService } from './routes.service'
@@ -43,6 +43,12 @@ export class RoutesController {
       },
       user,
     )
+  }
+
+  // 一手删除路线：删除前归档快照到 RouteArchive 备份历史库（仅一手 PandaKing 可操作）
+  @Delete(':id')
+  remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.svc.remove(id, user)
   }
 
   @Get(':id/versions')

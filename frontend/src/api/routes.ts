@@ -17,6 +17,12 @@ export async function createRoute(payload: unknown): Promise<Route> {
   return data
 }
 
+// 一手删除路线：后端先归档快照到 RouteArchive 备份历史库，再硬删（仅一手 PandaKing 可操作）
+export async function deleteRoute(id: string): Promise<{ id: string; archived: boolean }> {
+  const { data } = await client.delete(`/routes/${id}`)
+  return data
+}
+
 // 保存并通知：生成新 version
 export async function saveVersion(routeId: string, payload: unknown): Promise<RouteVersion> {
   const { data } = await client.post(`/routes/${routeId}/versions`, payload)

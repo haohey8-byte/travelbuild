@@ -185,9 +185,56 @@ export class RoutesService {
     return this.serialize(created, principal?.role ?? 'pandaking')
   }
 
+  // 一手删除路线 + 归档备份：删除前把路线主记录及关联数据快照写入 RouteArchive 历史表，
+  // 再硬删（cascade 删 versions/shares，手动删 feedbacks/costInquiries）。仅一手 PandaKing 可操作。
+  async remove(id: string, principal?: RoutePrincipal) {
+    // 权限：仅一手 PandaKing 可删除路线（按 PRD 权限矩阵）
+    if (principal && principal.role !== 'pandaking') {
+      throw new ForbiddenException('仅一手 PandaKing 可删除路线')
+    }
+    const route = await this.prisma.route
+      .findUnique({
+        where: { id },
+        include: {
+          versions: { orderBy: { createdAt: 'desc' } },
+          shares: true,
+        },
+      })
+      .catch(() => null)
+    if (!route) {
+      throw new NotFoundException('路线不存在')
+    }
+    // 关联数据快照（用于审计/恢复）
+    const feedbacks = await this.prisma.routeFeedback.findMany({ where: { routeId: id } })
+    const costInquiries = await this.prisma.costInquiry.findMany({ where: { routeId: id } })
+
+    // 写入备份历史库（整条路线 + 版本 + 共享 + 反馈 + 询价）
+    const deletedById = (principal as { id?: string })?.id ?? 'system'
+    const deletedByName = (principal as { name?: string })?.name ?? 'PandaKing'
+    await this.prisma.routeArchive.create({
+      data: {
+        routeId: route.id,
+        routeData: route as object,
+        versions: (route.versions ?? []) as object,
+        shares: (route.shares ?? []) as object,
+        feedbacks: feedbacks as object,
+        costInquiries: costInquiries as object,
+        deletedById,
+        deletedByName,
+        reason: null,
+      },
+    })
+
+    // 硬删：先清无 cascade 的孤儿子表，再删 route（cascade 删 versions/shares）
+    await this.prisma.routeFeedback.deleteMany({ where: { routeId: id } })
+    await this.prisma.costInquiry.deleteMany({ where: { routeId: id } })
+    await this.prisma.route.delete({ where: { id } })
+
+    return { id, archived: true }
+  }
+
   // 保存并通知：生成新 version（version 自增），draft 决定是否对外
-  async saveVersion(routeId: string, input: SaveVersionInput, principal?: RoutePrincipal) {
-    await this.assertVisible(routeId, principal)
+  async saveVersion(routeId: string, input: SaveVersionInput, principal?: RoutePrincipal) {    await this.assertVisible(routeId, principal)
     const role = principal?.role ?? 'agency'
     const versions = await this.prisma.routeVersion.findMany({ where: { routeId } })
     const max = versions.reduce((m, v) => {
