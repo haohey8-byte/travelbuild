@@ -138,7 +138,16 @@ export class RoutesService {
         },
       })
     }
-    return this.findOne(route.id, principal)
+    // 直接查询并返回（不走 findOne 的权限校验，因为刚创建的路线创建者必然可见）
+    const created = await this.prisma.route
+      .findUniqueOrThrow({
+        where: { id: route.id },
+        include: { versions: { orderBy: { createdAt: 'desc' } } },
+      })
+      .catch(() => {
+        throw new NotFoundException('路线不存在')
+      })
+    return this.serialize(created, principal?.role ?? 'pandaking')
   }
 
   // 保存并通知：生成新 version（version 自增），draft 决定是否对外
