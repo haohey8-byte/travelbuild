@@ -279,7 +279,7 @@ async function loadInquiries() {
 async function onAssignProvincial() {
   inquiryErr.value = ''
   if (!assignProvId.value.trim()) {
-    inquiryErr.value = '请填写省地接社机构编号'
+    inquiryErr.value = '请选择省地接社机构'
     return
   }
   try {
@@ -294,7 +294,7 @@ async function onCreateInquiry() {
   inquiryErr.value = ''
   copiedInquiry.value = false
   if (!inquiryProvId.value.trim()) {
-    inquiryErr.value = '请填写要询价的省地接社机构编号'
+    inquiryErr.value = '请选择要询价的省地接社机构'
     return
   }
   try {
@@ -772,6 +772,9 @@ async function copyConsoleNotify() {
           <button class="btn sm" :disabled="!inquiryProvId" @click="onCreateInquiry">发起成本询价</button>
         </div>
         <p v-if="inquiryErr" class="err">{{ inquiryErr }}</p>
+        <p v-if="!loadingProvincialAgencies && provincialAgencies.length === 0" class="err">
+          暂无省地接社机构，请先在「账号」页新建一个「省地接社」机构，再回来分配 / 发起询价。
+        </p>
         <div v-if="inquiryLink" class="link-box">
           <input :value="inquiryLink" class="input" readonly />
           <button class="btn ghost sm" @click="copyInquiryLink">{{ copiedInquiry ? '已复制 ✓' : '复制链接' }}</button>
