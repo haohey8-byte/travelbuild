@@ -27,6 +27,10 @@ export class CostInquiryService {
       throw new ForbiddenException('仅一手 PandaKing 可发起成本询价')
     }
     if (!provincialId?.trim()) throw new BadRequestException('必须指定省地接社机构编号')
+    const target = await this.prisma.agency.findUnique({ where: { id: provincialId.trim() } })
+    if (!target || target.role !== 'provincial') {
+      throw new BadRequestException('省地接社机构不存在或角色不是省地接社')
+    }
     const route = await this.prisma.route.findUnique({ where: { id: routeId } })
     if (!route) throw new NotFoundException('路线不存在')
     const ci = await this.prisma.costInquiry.create({

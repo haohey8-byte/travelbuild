@@ -95,12 +95,17 @@ export class RoutesService {
     if (principal && principal.role !== 'pandaking') {
       throw new ForbiddenException('仅一手 PandaKing 可分配省地接社')
     }
+    if (!provincialId?.trim()) throw new BadRequestException('必须指定省地接社机构')
+    const target = await this.prisma.agency.findUnique({ where: { id: provincialId.trim() } })
+    if (!target || target.role !== 'provincial') {
+      throw new BadRequestException('省地接社机构不存在或角色不是省地接社')
+    }
     const route = await this.prisma.route.findUniqueOrThrow({ where: { id: routeId } }).catch(() => {
       throw new NotFoundException('路线不存在')
     })
     const updated = await this.prisma.route.update({
       where: { id: routeId },
-      data: { provincialId },
+      data: { provincialId: provincialId.trim() },
       include: { versions: { orderBy: { createdAt: 'desc' } } },
     })
     return this.serialize(updated, principal?.role ?? 'pandaking')

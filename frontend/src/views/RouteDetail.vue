@@ -14,6 +14,7 @@ import {
   applyCostInquiry,
   createProvincialShare,
 } from '@/api/routes'
+import { fetchAgencies } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
 import { safeName, safeText } from '@/utils/name'
 import {
@@ -25,7 +26,7 @@ import {
   costInquiryH5Url,
   provincialRouteH5Url,
 } from '@/utils/share'
-import type { Route, RouteStatusKey, QuoteLevel, RouteFeedbackItem } from '@/types'
+import type { Route, RouteStatusKey, QuoteLevel, RouteFeedbackItem, Agency } from '@/types'
 import { buildPdfModel, type PdfModel } from '@/utils/pdf-model'
 import { generatePdf } from '@/utils/pdf-export'
 import { PDF_LANG_OPTIONS, PDF_VERSION_LABEL, type PdfLang, type PdfVersion } from '@/utils/pdf-i18n'
@@ -249,6 +250,21 @@ const inquiryLink = ref('')
 const inquiryErr = ref('')
 const copiedInquiry = ref(false)
 const applyingId = ref('')
+
+// 省地接社机构下拉选项（一手分配/询价用）
+const provincialAgencies = ref<Agency[]>([])
+const loadingProvincialAgencies = ref(false)
+async function loadProvincialAgencies() {
+  loadingProvincialAgencies.value = true
+  try {
+    const all = await fetchAgencies()
+    provincialAgencies.value = all.filter((a) => a.role === 'provincial')
+  } catch {
+    provincialAgencies.value = []
+  } finally {
+    loadingProvincialAgencies.value = false
+  }
+}
 async function loadInquiries() {
   if (role.value !== 'pandaking') return
   loadingInquiries.value = true
@@ -340,6 +356,7 @@ async function load() {
   loading.value = true
   err.value = ''
   try {
+    await loadProvincialAgencies()
     const r = await fetchRoute(id)
     data.value = r
     const v = r.versions?.[0]
@@ -741,12 +758,18 @@ async function copyConsoleNotify() {
           一手将路线分配给省地接社后，该省地接社可见此路线并参与行程规划；发起成本询价让其填写地接成本①，应用后写入路线报价。
         </p>
         <div class="ci-row">
-          <input v-model="assignProvId" class="input sm" placeholder="省地接社机构编号" />
-          <button class="btn sm" @click="onAssignProvincial">分配省地接社</button>
+          <select v-model="assignProvId" class="input sm" :disabled="loadingProvincialAgencies">
+            <option value="" disabled>{{ loadingProvincialAgencies ? '加载中…' : '请选择省地接社机构' }}</option>
+            <option v-for="a in provincialAgencies" :key="a.id" :value="a.id">{{ a.name }}（{{ a.id }}）</option>
+          </select>
+          <button class="btn sm" :disabled="!assignProvId" @click="onAssignProvincial">分配省地接社</button>
         </div>
         <div class="ci-row" style="margin-top: 10px">
-          <input v-model="inquiryProvId" class="input sm" placeholder="询价省地接社机构编号" />
-          <button class="btn sm" :disabled="!inquiryProvId.trim()" @click="onCreateInquiry">发起成本询价</button>
+          <select v-model="inquiryProvId" class="input sm" :disabled="loadingProvincialAgencies">
+            <option value="" disabled>{{ loadingProvincialAgencies ? '加载中…' : '请选择询价省地接社机构' }}</option>
+            <option v-for="a in provincialAgencies" :key="a.id" :value="a.id">{{ a.name }}（{{ a.id }}）</option>
+          </select>
+          <button class="btn sm" :disabled="!inquiryProvId" @click="onCreateInquiry">发起成本询价</button>
         </div>
         <p v-if="inquiryErr" class="err">{{ inquiryErr }}</p>
         <div v-if="inquiryLink" class="link-box">
@@ -774,7 +797,7 @@ async function copyConsoleNotify() {
             <thead><tr><th>省地接社</th><th>状态</th><th>成本①</th><th>操作</th></tr></thead>
             <tbody>
               <tr v-for="ci in costInquiries" :key="ci.id">
-                <td>{{ ci.provincialId }}</td>
+                <td>{{ provincialAgencies.find((a) => a.id === ci.provincialId)?.name || ci.provincialId }}</td>
                 <td>{{ ci.status === 'submitted' ? '已回传' : '待回传' }}</td>
                 <td>{{ ci.cost1 != null ? '¥' + Number(ci.cost1).toLocaleString() : '-' }}</td>
                 <td>
