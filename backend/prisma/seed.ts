@@ -27,6 +27,11 @@ async function main() {
     update: { name: '新疆河马旅行社', role: 'provincial' },
     create: { id: 'provincial-xinjiang-hema', name: '新疆河马旅行社', role: 'provincial' },
   })
+  await prisma.agency.upsert({
+    where: { id: 'provincial-chongqing-yuqing' },
+    update: { name: '重庆渝青旅游', role: 'provincial' },
+    create: { id: 'provincial-chongqing-yuqing', name: '重庆渝青旅游', role: 'provincial' },
+  })
 
   // 角色：一手 PandaKing / 境外旅行社 / 省地接社（含机构归属与层级）
   const pandaking = await prisma.user.upsert({
