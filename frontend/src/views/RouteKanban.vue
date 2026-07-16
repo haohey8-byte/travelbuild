@@ -5,8 +5,9 @@ import { storeToRefs } from 'pinia'
 import { useRouteStore } from '@/stores/route'
 import { useAuthStore } from '@/stores/auth'
 import { createRoute } from '@/api/routes'
+import { fetchAgencies } from '@/api/auth'
 import { safeName, safeText } from '@/utils/name'
-import type { Route, RouteStatusKey } from '@/types'
+import type { Route, RouteStatusKey, Agency } from '@/types'
 
 const router = useRouter()
 const store = useRouteStore()
@@ -44,7 +45,25 @@ const filtered = computed(() =>
   filter.value === 'all' ? routes.value : routes.value.filter((r) => r.statusKey === filter.value),
 )
 
-onMounted(() => store.load())
+// 机构列表（一手创建路线时用于选择境外旅行社）
+const agencies = ref<Agency[]>([])
+const loadingAgencies = ref(false)
+async function loadAgencies() {
+  if (user.value?.role !== 'pandaking') return
+  loadingAgencies.value = true
+  try {
+    agencies.value = await fetchAgencies()
+  } catch {
+    agencies.value = []
+  } finally {
+    loadingAgencies.value = false
+  }
+}
+
+onMounted(() => {
+  store.load()
+  loadAgencies()
+})
 
 // 操作指引浮层：首次访问自动弹出，关闭后写入 localStorage 不再打扰；右下角 ? 可随时重看
 const GUIDE_KEY = 'pk_guide_dismissed'
@@ -74,6 +93,7 @@ const form = ref({
   destination: '',
   country: 'China',
   agency: '',
+  agencyId: '',
   groupSize: 1,
   travelDate: '',
   modeKey: 'collab' as 'collab' | 'solo',
@@ -85,19 +105,27 @@ async function onCreate() {
     createErr.value = '请填写客户名（英文）和目的地'
     return
   }
+  if (user.value?.role === 'pandaking' && !form.value.agencyId.trim()) {
+    createErr.value = '一手创建路线必须选择境外旅行社'
+    return
+  }
   creating.value = true
   try {
-    await createRoute({
+    const payload: any = {
       customerName: form.value.customerName.trim(),
       customerNameCn: form.value.customerNameCn.trim() || undefined,
       destination: form.value.destination.trim(),
       country: form.value.country.trim() || 'China',
-      // 始终发送 agency：空白时传空字符串，避免后端 NOT NULL 约束触发 500
       agency: form.value.agency.trim(),
       groupSize: Number(form.value.groupSize) || 1,
       travelDate: form.value.travelDate || undefined,
       modeKey: form.value.modeKey,
-    })
+    }
+    // 一手必须传 agencyId；旅行社不传，后端自动取本机构
+    if (user.value?.role === 'pandaking') {
+      payload.agencyId = form.value.agencyId.trim()
+    }
+    await createRoute(payload)
     showCreate.value = false
     form.value = {
       customerName: '',
@@ -105,6 +133,7 @@ async function onCreate() {
       destination: '',
       country: 'China',
       agency: '',
+      agencyId: '',
       groupSize: 1,
       travelDate: '',
       modeKey: 'collab',
@@ -178,9 +207,16 @@ async function onCreate() {
             <span>国家</span>
             <input v-model="form.country" type="text" placeholder="China" autocomplete="off" />
           </label>
-          <label>
-            <span>旅行社</span>
-            <input v-model="form.agency" type="text" placeholder="境外旅行社名称" autocomplete="off" />
+          <label v-if="user?.role === 'pandaking'">
+            <span>境外旅行社 *</span>
+            <select v-model="form.agencyId" :disabled="loadingAgencies">
+              <option value="" disabled>{{ loadingAgencies ? '加载中…' : '请选择境外旅行社' }}</option>
+              <option v-for="a in agencies.filter(x => x.role === 'agency')" :key="a.id" :value="a.id">{{ a.name }}</option>
+            </select>
+          </label>
+          <label v-else-if="user?.role === 'agency'">
+            <span>所属机构</span>
+            <input :value="user?.agencyId || ''" type="text" disabled />
           </label>
           <label>
             <span>人数</span>

@@ -271,7 +271,44 @@ export class AuthService {
     }
   }
 
-  // 改成员角色（仅一手；不可将成员改为一手枢纽之外越权，但允许在机构角色间调整）
+  // 机构管理（Agency）：替换裸 agencyId 字符串，支持真实机构档案
+  // 一手：全部可管理；机构用户：只读本机构
+  async createAgency(
+    body: { id: string; name: string; role: Role; contact?: string },
+    caller: AuthPrincipal,
+  ) {
+    if (caller.role !== 'pandaking') {
+      throw new UnauthorizedException('仅一手 PandaKing 可创建机构')
+    }
+    if (!body.id?.trim() || !body.name?.trim()) {
+      throw new BadRequestException('机构编号与名称必填')
+    }
+    if (!['agency', 'provincial'].includes(body.role)) {
+      throw new BadRequestException('机构角色必须是 agency 或 provincial')
+    }
+    const existing = await this.prisma.agency.findUnique({ where: { id: body.id.trim() } })
+    if (existing) throw new ConflictException('机构编号已存在')
+    return this.prisma.agency.create({
+      data: {
+        id: body.id.trim(),
+        name: body.name.trim(),
+        role: body.role,
+        contact: body.contact?.trim() || null,
+      },
+    })
+  }
+
+  listAgencies(caller: AuthPrincipal) {
+    if (caller.role === 'pandaking') {
+      return this.prisma.agency.findMany({ orderBy: { createdAt: 'asc' } })
+    }
+    if (!caller.agencyId) return []
+    return this.prisma.agency.findMany({
+      where: { id: caller.agencyId },
+      orderBy: { createdAt: 'asc' },
+    })
+  }
+
   async updateMemberRole(id: string, role: Role, caller: AuthPrincipal) {
     if (caller.role !== 'pandaking') {
       throw new UnauthorizedException('仅一手 PandaKing 可调整成员角色')

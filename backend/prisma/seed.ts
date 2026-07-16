@@ -4,6 +4,18 @@ const prisma = new PrismaClient()
 
 // 幂等种子：以固定 id upsert，重复执行安全
 async function main() {
+  // 1) 机构（境外旅行社 / 省地接社）
+  const agencyOrg = await prisma.agency.upsert({
+    where: { id: 'org-agency-seed' },
+    update: { name: '环球旅行社', role: 'agency' },
+    create: { id: 'org-agency-seed', name: '环球旅行社', role: 'agency' },
+  })
+  const provincialOrg = await prisma.agency.upsert({
+    where: { id: 'org-provincial-seed' },
+    update: { name: '川内地接社', role: 'provincial' },
+    create: { id: 'org-provincial-seed', name: '川内地接社', role: 'provincial' },
+  })
+
   // 角色：一手 PandaKing / 境外旅行社 / 省地接社（含机构归属与层级）
   const pandaking = await prisma.user.upsert({
     where: { id: 'seed-pk' },
@@ -12,23 +24,23 @@ async function main() {
   })
   const agency = await prisma.user.upsert({
     where: { id: 'seed-agency' },
-    update: { agencyId: 'org-agency-seed', level: 'admin' },
+    update: { agencyId: agencyOrg.id, level: 'admin' },
     create: {
       id: 'seed-agency',
       name: '环球旅行社',
       role: 'agency',
-      agencyId: 'org-agency-seed',
+      agencyId: agencyOrg.id,
       level: 'admin',
     },
   })
   const provincial = await prisma.user.upsert({
     where: { id: 'seed-provincial' },
-    update: { agencyId: 'org-provincial-seed', level: 'admin' },
+    update: { agencyId: provincialOrg.id, level: 'admin' },
     create: {
       id: 'seed-provincial',
       name: '川内地接社',
       role: 'provincial',
-      agencyId: 'org-provincial-seed',
+      agencyId: provincialOrg.id,
       level: 'admin',
     },
   })
@@ -36,12 +48,12 @@ async function main() {
   // 一条演示邀请（机构管理员，7 天有效），用于 accept-invite 联调
   await prisma.invite.upsert({
     where: { id: 'seed-invite-1' },
-    update: { agencyId: 'org-agency-seed', level: 'admin' },
+    update: { agencyId: agencyOrg.id, level: 'admin' },
     create: {
       id: 'seed-invite-1',
       token: 'demo-invite-agency',
       role: 'agency',
-      agencyId: 'org-agency-seed',
+      agencyId: agencyOrg.id,
       level: 'admin',
       email: 'agency@example.com',
       expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000),
@@ -53,7 +65,7 @@ async function main() {
   // 一条协作路线 + 两个版本（演示双向回路数据）
   const route = await prisma.route.upsert({
     where: { id: 'seed-route-1' },
-    update: { statusKey: 'awaiting_pk_confirm', agencyId: 'org-agency-seed', provincialId: 'org-provincial-seed' },
+    update: { statusKey: 'awaiting_pk_confirm', agencyId: agencyOrg.id, provincialId: provincialOrg.id },
     create: {
       id: 'seed-route-1',
       customerName: 'Smith Family',
@@ -65,8 +77,8 @@ async function main() {
       travelDate: new Date('2026-10-01'),
       statusKey: 'awaiting_pk_confirm',
       modeKey: 'collab',
-      agencyId: 'org-agency-seed',
-      provincialId: 'org-provincial-seed',
+      agencyId: agencyOrg.id,
+      provincialId: provincialOrg.id,
       createdById: agency.id,
     },
   })

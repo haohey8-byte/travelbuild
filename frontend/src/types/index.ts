@@ -63,6 +63,14 @@ export interface User {
   disabled?: boolean
 }
 
+export interface Agency {
+  id: string
+  name: string
+  role: Role
+  contact?: string | null
+  createdAt: string
+}
+
 // 邀请（两层级邀请模型）
 export interface Invite {
   id: string

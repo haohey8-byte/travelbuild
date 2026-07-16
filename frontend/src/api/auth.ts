@@ -1,5 +1,5 @@
 import client from './client'
-import type { LoginResult, User, Role, Invite, PermissionMatrix } from '@/types'
+import type { LoginResult, User, Role, Invite, PermissionMatrix, Agency } from '@/types'
 
 // 认证 —— 对应 doc/04-接口契约/账号与认证.md
 export async function devLogin(role: Role): Promise<LoginResult> {
@@ -58,7 +58,19 @@ export async function updateMemberRole(id: string, role: Role): Promise<User> {
 }
 
 // 停用成员（仅一手）
-export async function disableMember(id: string): Promise<User> {
-  const { data } = await client.post(`/auth/members/${id}/disable`)
+// 机构管理（Agency）：替换裸 agencyId，支持真实机构档案
+export async function fetchAgencies(): Promise<Agency[]> {
+  const { data } = await client.get('/auth/agencies')
   return data
 }
+
+export async function createAgency(body: {
+  id: string
+  name: string
+  role: Role
+  contact?: string
+}): Promise<Agency> {
+  const { data } = await client.post('/auth/agencies', body)
+  return data
+}
+

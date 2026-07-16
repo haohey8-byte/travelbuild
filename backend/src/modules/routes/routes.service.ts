@@ -19,6 +19,7 @@ export interface CreateRouteInput {
   customerNameCn?: string
   country: string
   agency: string
+  agencyId?: string // 一手创建时必须指定境外旅行社机构编号
   destination: string
   groupSize?: number
   travelDate?: string
@@ -108,6 +109,40 @@ export class RoutesService {
   // 新建路线 + 客户档案
   async create(input: CreateRouteInput, principal?: RoutePrincipal) {
     const modeKey = input.modeKey ?? 'collab'
+    const role = principal?.role ?? 'agency'
+    // 省地接社不能创建路线（按 PRD 权限矩阵）
+    if (role === 'provincial') {
+      throw new ForbiddenException('省地接社无权创建路线')
+    }
+    let agencyId: string | null = null
+    let agencyName: string = input.agency?.trim() || ''
+    // 一手创建：必须指定 agencyId（选择境外旅行社）
+    if (role === 'pandaking') {
+      if (!input.agencyId?.trim()) {
+        throw new BadRequestException('一手创建路线必须指定境外旅行社（agencyId）')
+      }
+      const agencyOrg = await this.prisma.agency.findUnique({
+        where: { id: input.agencyId.trim() },
+      })
+      if (!agencyOrg || agencyOrg.role !== 'agency') {
+        throw new BadRequestException('指定的境外旅行社机构不存在')
+      }
+      agencyId = agencyOrg.id
+      agencyName = agencyOrg.name
+    } else if (role === 'agency') {
+      // 旅行社创建：必须已绑定机构，并自动归属本机构
+      if (!principal?.agencyId) {
+        throw new BadRequestException('当前旅行社账号未绑定机构，无法创建路线')
+      }
+      // 若前端传了 agencyId，必须与本机构一致（防止伪造）
+      if (input.agencyId?.trim() && input.agencyId.trim() !== principal.agencyId) {
+        throw new ForbiddenException('只能创建归属本机构的路线')
+      }
+      agencyId = principal.agencyId
+      // 优先使用本机构名称
+      const agencyOrg = await this.prisma.agency.findUnique({ where: { id: agencyId } })
+      agencyName = agencyOrg?.name || agencyName
+    }
     // 协作模式由旅行社发起草案 → 初始「咨询中」（未提交）；一手 solo 直接「待报价」
     const statusKey: StatusKey =
       modeKey === 'solo' ? STATUS.AWAITING_QUOTE : STATUS.CONSULTING
@@ -116,13 +151,13 @@ export class RoutesService {
         customerName: input.customerName,
         customerNameCn: input.customerNameCn,
         country: input.country,
-        agency: input.agency,
+        agency: agencyName,
         destination: input.destination,
         groupSize: input.groupSize ?? 1,
         travelDate: input.travelDate ? new Date(input.travelDate) : null,
         statusKey,
         modeKey,
-        agencyId: input.creatorAgencyId ?? null,
+        agencyId,
         createdById: input.createdById,
       },
     })

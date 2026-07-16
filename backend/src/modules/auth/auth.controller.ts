@@ -82,6 +82,22 @@ export class AuthController {
     return this.svc.getPermissionMatrix()
   }
 
+  // 机构管理（Agency）：替换裸 agencyId，支持真实机构档案
+  @Post('agencies')
+  @UseGuards(JwtAuthGuard)
+  createAgency(
+    @Body() body: { id: string; name: string; role: Role; contact?: string },
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.svc.createAgency(body, user as AuthPrincipal)
+  }
+
+  @Get('agencies')
+  @UseGuards(JwtAuthGuard)
+  listAgencies(@CurrentUser() user: AuthUser) {
+    return this.svc.listAgencies(user as AuthPrincipal)
+  }
+
   // 改成员角色（仅一手）
   @Put('members/:id/role')
   @UseGuards(JwtAuthGuard)
