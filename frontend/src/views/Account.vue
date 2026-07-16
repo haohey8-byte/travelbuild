@@ -2,10 +2,10 @@
 import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
-import { fetchMembers, createInvite, listInvites } from '@/api/auth'
+import { fetchMembers, createInvite, listInvites, fetchAgencies, createAgency } from '@/api/auth'
 import { listCostInquiries } from '@/api/routes'
 import { roleLabel, inviteH5Url, costInquiryH5Url, copyText } from '@/utils/share'
-import type { Role, User, Invite, CostInquiry } from '@/types'
+import type { Role, User, Invite, CostInquiry, Agency } from '@/types'
 
 const auth = useAuthStore()
 const { user, currentRole } = storeToRefs(auth)
@@ -47,6 +47,52 @@ const loadingInvites = ref(false)
 // —— 省地接社：我的成本询价 ——
 const myInquiries = ref<CostInquiry[]>([])
 const loadingInquiries = ref(false)
+
+// —— 机构管理 ——
+const agencies = ref<Agency[]>([])
+const loadingAgencies = ref(false)
+const showCreateAgency = ref(false)
+const newAgency = ref({ id: '', name: '', role: 'agency' as Role, contact: '' })
+const agencyErr = ref('')
+const agencySaving = ref(false)
+
+async function loadAgencies() {
+  if (!auth.token) return
+  loadingAgencies.value = true
+  try {
+    agencies.value = await fetchAgencies()
+  } catch {
+    agencies.value = []
+  } finally {
+    loadingAgencies.value = false
+  }
+}
+
+async function onCreateAgency() {
+  agencyErr.value = ''
+  if (!newAgency.value.id.trim() || !newAgency.value.name.trim()) {
+    agencyErr.value = '机构编号和名称必填'
+    return
+  }
+  agencySaving.value = true
+  try {
+    const created = await createAgency({
+      id: newAgency.value.id.trim(),
+      name: newAgency.value.name.trim(),
+      role: newAgency.value.role,
+      contact: newAgency.value.contact.trim() || undefined,
+    })
+    agencies.value.push(created)
+    showCreateAgency.value = false
+    newAgency.value = { id: '', name: '', role: 'agency', contact: '' }
+    // 如果正在邀请，自动选上新机构
+    if (!invAgencyId.value) invAgencyId.value = created.id
+  } catch (e: any) {
+    agencyErr.value = e?.response?.data?.message || '创建机构失败'
+  } finally {
+    agencySaving.value = false
+  }
+}
 async function loadMyInquiries() {
   if (user.value?.role !== 'provincial') return
   loadingInquiries.value = true
@@ -150,6 +196,7 @@ onMounted(() => {
   loadMembers()
   loadInvites()
   loadMyInquiries()
+  loadAgencies()
 })
 
 // 权限矩阵（只读展示）
@@ -216,8 +263,14 @@ const LEVEL_LABEL: Record<string, string> = { admin: '管理员', staff: '员工
           </select>
         </div>
         <div class="row">
-          <label>机构编号</label>
-          <input v-model="invAgencyId" class="input" placeholder="如 org-agency-abc（机构唯一标识）" />
+          <label>选择机构</label>
+          <select v-model="invAgencyId" class="input" :disabled="loadingAgencies">
+            <option value="" disabled>{{ loadingAgencies ? '加载中…' : '请选择机构' }}</option>
+            <option v-for="a in agencies.filter(x => x.role === invRole)" :key="a.id" :value="a.id">{{ a.name }} ({{ a.id }})</option>
+          </select>
+        </div>
+        <div class="row" v-if="invAgencyId === '' && agencies.length > 0">
+          <button class="btn ghost sm" @click="showCreateAgency = true" type="button">没有该机构？新建机构</button>
         </div>
       </template>
       <template v-else>
@@ -241,6 +294,39 @@ const LEVEL_LABEL: Record<string, string> = { admin: '管理员', staff: '员工
         <button class="btn ghost sm" @click="copyInviteLink">{{ copied ? '已复制 ✓' : '复制链接' }}</button>
       </div>
       <p v-if="inviteLink" class="tip">把上面链接发到微信群，受邀者点开即可成为「{{ roleLabel(invRole) }}{{ canInviteAdmin ? '管理员' : '员工' }}」。</p>
+    </div>
+
+    <!-- 新建机构弹窗 -->
+    <div v-if="showCreateAgency" class="modal-backdrop" @click.self="showCreateAgency = false">
+      <div class="modal">
+        <form @submit.prevent="onCreateAgency">
+          <h3>新建机构</h3>
+          <div class="row">
+            <label>机构编号</label>
+            <input v-model="newAgency.id" class="input" placeholder="如 org-agency-abc" />
+          </div>
+          <div class="row">
+            <label>机构名称</label>
+            <input v-model="newAgency.name" class="input" placeholder="环球旅行社" />
+          </div>
+          <div class="row">
+            <label>角色</label>
+            <select v-model="newAgency.role" class="input">
+              <option value="agency">境外旅行社</option>
+              <option value="provincial">省地接社</option>
+            </select>
+          </div>
+          <div class="row">
+            <label>联系方式(可选)</label>
+            <input v-model="newAgency.contact" class="input" placeholder="邮箱 / 电话" />
+          </div>
+          <p v-if="agencyErr" class="err">{{ agencyErr }}</p>
+          <div class="modal-actions">
+            <button type="button" class="btn" @click="showCreateAgency = false">取消</button>
+            <button type="submit" class="btn btn-primary" :disabled="agencySaving">{{ agencySaving ? '保存中…' : '保存' }}</button>
+          </div>
+        </form>
+      </div>
     </div>
 
     <!-- 一手可见的邀请记录 -->
@@ -350,4 +436,9 @@ const LEVEL_LABEL: Record<string, string> = { admin: '管理员', staff: '员工
 .err { color: var(--danger); margin-top: 12px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
 h3 { margin: 0 0 4px; }
+
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.modal { background: var(--card); border-radius: 14px; padding: 24px; width: 90%; max-width: 440px; box-shadow: 0 16px 40px rgba(0,0,0,0.2); max-height: 90vh; overflow: auto; }
+.modal h3 { margin: 0 0 16px; font-size: 18px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 </style>
