@@ -31,6 +31,10 @@ UPDATE "Route" SET "agencyId" = NULL
 WHERE "agencyId" IS NOT NULL
   AND "agencyId" NOT IN (SELECT "id" FROM "Agency");
 
+-- 3b) CostInquiry.provincialId 是 NOT NULL，先把指向未知机构的记录归到演示省地接社，避免外键失败。
+UPDATE "CostInquiry" SET "provincialId" = 'org-provincial-seed'
+WHERE "provincialId" NOT IN (SELECT "id" FROM "Agency");
+
 -- 4) 在 User 上添加外键约束
 ALTER TABLE "User" ADD CONSTRAINT "User_agencyId_fkey"
     FOREIGN KEY ("agencyId") REFERENCES "Agency"("id") ON DELETE SET NULL ON UPDATE CASCADE;
