@@ -113,32 +113,81 @@ export class CostInquiryService {
     }))
   }
 
-  // 一手将询价成本①写入路线报价（更新最新正式版本的 totals.cost1 并重算对客总价）
+  // 一手将询价成本①写入路线报价（按项目合并，并重新计算合计）
+  // 核心：省地接社反馈的 costItems 不是只写入 totals.cost1，而是写入 quote.items，
+  // 让报价表（按项目展示）和成本询价明细保持一致。
   async applyToRoute(inquiryId: string, caller: AuthPrincipal) {
     if (caller.role !== 'pandaking') {
       throw new ForbiddenException('仅一手 PandaKing 可应用成本询价')
     }
     const ci = await this.prisma.costInquiry.findUniqueOrThrow({ where: { id: inquiryId } })
-    if (ci.cost1 == null) throw new BadRequestException('该询价尚未提交成本①')
+    const rawCostItems = (ci.costItems as { name?: string; amount?: number }[] | undefined) ?? []
+    const hasCostItems = rawCostItems.length > 0
+    if (ci.cost1 == null && !hasCostItems) {
+      throw new BadRequestException('该询价尚未提交成本①')
+    }
+
+    // 找最新版本（不再限定 draft=false），确保前端正在编辑的版本能立即看到回填
     const latest = await this.prisma.routeVersion.findFirst({
-      where: { routeId: ci.routeId, draft: false },
+      where: { routeId: ci.routeId },
       orderBy: { createdAt: 'desc' },
     })
-    if (!latest) throw new BadRequestException('该路线暂无正式版本，无法写入成本①（请先保存非草稿版本）')
-    const q = (latest.quote as { items?: unknown[]; totals?: Record<string, number> }) || {
+    if (!latest) throw new BadRequestException('该路线暂无版本，无法写入成本①')
+
+    const q = (latest.quote as { items?: any[]; totals?: Record<string, number> }) || {
       items: [],
       totals: {},
     }
-    const totals = { ...(q.totals || {}) }
-    const cost1 = Number(ci.cost1)
-    totals.cost1 = cost1
-    totals.guestPrice =
-      (Number(totals.cost1) || 0) + (Number(totals.cost2) || 0) + (Number(totals.markup) || 0)
-    const newQuote = { ...q, totals }
+    const items: any[] = Array.isArray(q.items) ? JSON.parse(JSON.stringify(q.items)) : []
+
+    // 准备省地接社成本项：优先用 costItems；兼容旧数据只有 cost1 的情况
+    const costItems = rawCostItems.map((it) => ({
+      name: String(it.name || '').trim() || '未命名',
+      amount: Math.max(0, Number(it.amount) || 0),
+    }))
+    if (costItems.length === 0 && ci.cost1 != null) {
+      costItems.push({ name: '省地接社成本①', amount: Number(ci.cost1) })
+    }
+
+    // 合并：同名项目更新 cost1，否则追加新项目
+    for (const { name, amount } of costItems) {
+      if (!amount) continue
+      const existing = items.find((it) => String(it.name || '').trim() === name)
+      if (existing) {
+        existing.cost1 = amount
+        existing.guestPrice = amount + (Number(existing.cost2) || 0) + (Number(existing.markup) || 0)
+      } else {
+        items.push({
+          name,
+          type: 'other',
+          cost1: amount,
+          cost2: 0,
+          markup: 0,
+          guestPrice: amount,
+        })
+      }
+    }
+
+    // 从 items 重新计算 totals，保证 totals 和 items 永远一致
+    const totals = {
+      cost1: items.reduce((sum, it) => sum + (Number(it.cost1) || 0), 0),
+      cost2: items.reduce((sum, it) => sum + (Number(it.cost2) || 0), 0),
+      markup: items.reduce((sum, it) => sum + (Number(it.markup) || 0), 0),
+      guestPrice: items.reduce((sum, it) => sum + (Number(it.guestPrice) || 0), 0),
+    }
+
+    const newQuote = { ...q, items, totals }
     await this.prisma.routeVersion.update({
       where: { id: latest.id },
       data: { quote: newQuote as object },
     })
-    return { ok: true, routeId: ci.routeId, cost1 }
+
+    return {
+      ok: true,
+      routeId: ci.routeId,
+      versionId: latest.id,
+      cost1: totals.cost1,
+      costItems,
+    }
   }
 }
