@@ -9,6 +9,9 @@ import type { H5Route, RouteFeedbackItem } from '@/types'
 const route = useRoute()
 const router = useRouter()
 const token = route.params.token as string
+// 链接携带的可读信息（目的地 d / 客户名 c），用于微信中一眼区分与即时标题
+const qDest = (route.query.d as string) || ''
+const qCust = (route.query.c as string) || ''
 
 const data = ref<H5Route | null>(null)
 const notFound = ref(false)
@@ -72,8 +75,14 @@ const saveErr = ref('')
 const notifyText = ref('')
 const notifyTip = ref('')
 
-const subject = computed(() => (data.value ? safeName(data.value.customerNameCn, data.value.customerName) : ''))
-const destination = computed(() => data.value?.destination || '')
+const subject = computed(() => (data.value ? safeName(data.value.customerNameCn, data.value.customerName) : qCust))
+const destination = computed(() => data.value?.destination || qDest)
+// 页面标题：优先服务端返回，未加载时回退到链接携带的可读信息
+const pageTitle = computed(() => {
+  const dest = destination.value || '定制行程'
+  const who = subject.value
+  return who ? `${who} · ${dest} · 省地接社协作` : `${dest} · 省地接社协作`
+})
 
 function fmtTime(s?: string): string {
   if (!s) return ''
@@ -93,6 +102,8 @@ async function loadFeedback() {
 }
 
 onMounted(async () => {
+  // 先用链接携带的信息置标题，避免打开瞬间空白
+  document.title = pageTitle.value
   try {
     const d = await fetchH5Route(token)
     data.value = d
@@ -104,7 +115,7 @@ onMounted(async () => {
         cost1.value = d.costInquiry.cost1
       }
     }
-    document.title = `${safeText(d.destination) || '行程'} · 省地接社协作`
+    document.title = pageTitle.value
     await loadFeedback()
   } catch {
     notFound.value = true
@@ -180,11 +191,12 @@ function goHome() {
 
     <div v-else-if="notFound" class="center">
       <p>协作链接无效或已失效</p>
+      <p v-if="qDest || qCust" class="muted">{{ [qCust, qDest].filter(Boolean).join(' · ') }}</p>
       <button class="btn btn-primary" @click="goHome">返回工作台</button>
     </div>
 
     <div v-else-if="data" class="h5-card">
-      <h1 class="h5-title">{{ safeText(data.destination) || '定制行程' }} · 省地接社协作</h1>
+      <h1 class="h5-title">{{ pageTitle }}</h1>
       <div class="h5-meta">
         <span>客户: {{ safeName(data.customerNameCn, data.customerName) || '—' }}</span>
         <span>人数: {{ data.groupSize }}</span>

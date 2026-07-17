@@ -281,7 +281,14 @@ async function onStartCollab() {
   }
   try {
     const res = await createProvincialShare(id, collabProvId.value.trim())
-    collabLink.value = provincialRouteH5Url(res.token)
+    // 在协作链接后附加行程关键信息（目的地/客户名），便于微信沟通中一眼区分
+    const base = provincialRouteH5Url(res.token)
+    const params = new URLSearchParams()
+    if (data.value?.destination) params.set('d', data.value.destination)
+    const who = safeName(data.value?.customerNameCn, data.value?.customerName)
+    if (who) params.set('c', who)
+    const qs = params.toString()
+    collabLink.value = qs ? `${base}?${qs}` : base
     actionOk.value = `已向 ${collabProvId.value.trim()} 发起省地接社协作，链接可复制后发微信群`
     await load()
     await loadInquiries()

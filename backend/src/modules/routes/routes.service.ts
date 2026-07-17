@@ -452,17 +452,18 @@ export class RoutesService {
       ? await this.prisma.routeVersion.findUnique({ where: { id: share.versionId } })
       : null
     if (!version) {
+      // 协作 H5 不强制要求「已发布」版本：草稿版即可作为协作起点；
+      // 完全没有版本时从空白行程开始，允许省地接社从零协作编辑。
       version =
         (
           await this.prisma.routeVersion.findMany({
-            where: { routeId: share.routeId, draft: false },
+            where: { routeId: share.routeId },
             orderBy: { createdAt: 'desc' },
             take: 1,
           })
         )[0] ?? null
     }
-    if (!version) throw new NotFoundException('该路线暂无对外版本')
-    const masked = maskQuotePublic(version.quote) as {
+    const masked = maskQuotePublic(version?.quote ?? null) as {
       items?: { type?: string; guestPrice?: number }[]
       totals?: { guestPrice?: number }
     }
@@ -474,10 +475,11 @@ export class RoutesService {
       customerName: route.customerName,
       groupSize: route.groupSize,
       travelDate: route.travelDate ? route.travelDate.toISOString() : null,
-      version: version.version,
+      version: version?.version ?? null,
       statusKey: route.statusKey,
       role: share.role,
-      itinerary: version.itinerary,
+      // 无版本时给空行程，省地接社可新建第一天（provincialEdit 会自动落 v1）
+      itinerary: version?.itinerary ?? { days: [] },
       // 净化报价：仅含对客报价（guestPrice），不含成本①/②/加价（公开 H5 不泄漏内部成本）
       quote: masked,
       guestPrice: masked?.totals?.guestPrice ?? null,
