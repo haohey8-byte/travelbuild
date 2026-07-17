@@ -145,10 +145,15 @@ export class RoutesController {
     return this.svc.assignProvincial(id, body?.provincialId, user as any)
   }
 
-  // 一手生成「省地接社协作 H5」（可编辑行程）链接，复制发微信群给省地接社
+  // 一手发起「省地接社协作 H5」：一次操作完成分配省地接社 + 发起成本询价，
+  // 生成的统一链接可让省地接社同时编辑行程并填写成本①。
   @Post(':id/provincial-share')
-  createProvincialShare(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.svc.createProvincialShare(id, user as any)
+  createProvincialShare(
+    @Param('id') id: string,
+    @Body() body: { provincialId?: string },
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.svc.createProvincialShare(id, body?.provincialId, user as any)
   }
 
   // 旅行社加价 → 待确认

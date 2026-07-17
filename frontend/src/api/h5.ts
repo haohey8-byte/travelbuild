@@ -36,11 +36,11 @@ export async function submitH5CostInquiry(
   return data
 }
 
-// 省地接社协作 H5：保存编辑后的行程（价格保留上一版，由一手在成本询价闭环回填）
+// 省地接社协作 H5：保存编辑后的行程并提交成本①（可单独或一起提交）
 export async function editH5ProvincialRoute(
   token: string,
-  itinerary: unknown,
-): Promise<{ version: unknown; link: string }> {
-  const { data } = await client.post(`/h5/route/${token}/edit`, { itinerary })
+  payload: { itinerary?: unknown; cost1?: number | null },
+): Promise<{ version: unknown | null; costInquiry: { id: string; status: string; cost1: number | null }; link: string }> {
+  const { data } = await client.post(`/h5/route/${token}/edit`, payload)
   return data
 }

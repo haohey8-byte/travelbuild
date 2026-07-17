@@ -8,8 +8,6 @@ import {
   shareRoute,
   routeAction,
   fetchRouteFeedback,
-  assignProvincial,
-  createCostInquiry,
   listCostInquiries,
   applyCostInquiry,
   createProvincialShare,
@@ -23,7 +21,6 @@ import {
   collabNotifyText,
   roleLabel,
   copyText,
-  costInquiryH5Url,
   provincialRouteH5Url,
 } from '@/utils/share'
 import type { Route, RouteStatusKey, QuoteLevel, RouteFeedbackItem, Agency } from '@/types'
@@ -241,14 +238,13 @@ const notifyTextConsole = ref('')
 
 const versionLabel = computed(() => data.value?.versions?.[0]?.version ?? 'v1')
 
-// —— 成本询价（一手） ——
+// —— 省地接社协作（一手） ——
 const costInquiries = ref<{ id: string; routeId: string; provincialId: string; status: string; cost1: number | null; createdAt: string }[]>([])
 const loadingInquiries = ref(false)
-const assignProvId = ref('')
-const inquiryProvId = ref('')
-const inquiryLink = ref('')
-const inquiryErr = ref('')
-const copiedInquiry = ref(false)
+const collabProvId = ref('')
+const collabLink = ref('')
+const collabErr = ref('')
+const copiedCollab = ref(false)
 const applyingId = ref('')
 
 // 省地接社机构下拉选项（一手分配/询价用）
@@ -276,75 +272,42 @@ async function loadInquiries() {
     loadingInquiries.value = false
   }
 }
-async function onAssignProvincial() {
-  inquiryErr.value = ''
-  if (!assignProvId.value.trim()) {
-    inquiryErr.value = '请选择省地接社机构'
+async function onStartCollab() {
+  collabErr.value = ''
+  copiedCollab.value = false
+  if (!collabProvId.value.trim()) {
+    collabErr.value = '请选择要协作的省地接社机构'
     return
   }
   try {
-    await assignProvincial(id, assignProvId.value.trim())
-    actionOk.value = `已将路线分配给省地接社 ${assignProvId.value.trim()}，该省地接社现可看到此路线并参与协作`
+    const res = await createProvincialShare(id, collabProvId.value.trim())
+    collabLink.value = provincialRouteH5Url(res.token)
+    actionOk.value = `已向 ${collabProvId.value.trim()} 发起省地接社协作，链接可复制后发微信群`
     await load()
-  } catch (e: any) {
-    inquiryErr.value = e?.response?.data?.message || '分配失败'
-  }
-}
-async function onCreateInquiry() {
-  inquiryErr.value = ''
-  copiedInquiry.value = false
-  if (!inquiryProvId.value.trim()) {
-    inquiryErr.value = '请选择要询价的省地接社机构'
-    return
-  }
-  try {
-    const res = await createCostInquiry(id, inquiryProvId.value.trim())
-    inquiryLink.value = costInquiryH5Url(res.token)
     await loadInquiries()
   } catch (e: any) {
-    inquiryErr.value = e?.response?.data?.message || '发起询价失败'
+    collabErr.value = e?.response?.data?.message || '发起协作失败'
   }
 }
-async function copyInquiryLink() {
-  if (!inquiryLink.value) return
-  const ok = await copyText(inquiryLink.value)
-  copiedInquiry.value = ok
-  setTimeout(() => (copiedInquiry.value = false), 2000)
+async function copyCollabLink() {
+  if (!collabLink.value) return
+  const ok = await copyText(collabLink.value)
+  copiedCollab.value = ok
+  setTimeout(() => (copiedCollab.value = false), 2000)
 }
 async function onApplyInquiry(inqId: string) {
   applyingId.value = inqId
-  inquiryErr.value = ''
+  collabErr.value = ''
   try {
     await applyCostInquiry(inqId)
     actionOk.value = '已将省地接社成本①写入路线报价（成本①）'
     await load()
     await loadInquiries()
   } catch (e: any) {
-    inquiryErr.value = e?.response?.data?.message || '应用失败'
+    collabErr.value = e?.response?.data?.message || '应用失败'
   } finally {
     applyingId.value = ''
   }
-}
-
-// 一手生成「省地接社协作 H5」（可编辑行程），复制发微信群
-const provShareLink = ref('')
-const copiedProvShare = ref(false)
-const provShareErr = ref('')
-async function onGenProvShare() {
-  provShareErr.value = ''
-  copiedProvShare.value = false
-  try {
-    const res = await createProvincialShare(id)
-    provShareLink.value = provincialRouteH5Url(res.token)
-  } catch (e: any) {
-    provShareErr.value = e?.response?.data?.message || '生成协作 H5 失败（请先分配省地接社）'
-  }
-}
-async function copyProvShare() {
-  if (!provShareLink.value) return
-  const ok = await copyText(provShareLink.value)
-  copiedProvShare.value = ok
-  setTimeout(() => (copiedProvShare.value = false), 2000)
 }
 
 function displayName(r: Route): string {
@@ -751,49 +714,32 @@ async function copyConsoleNotify() {
         <p v-else class="muted">暂无反馈意见。对方可在协作 H5 链接内提交修改意见，或在此回传反馈。</p>
       </section>
 
-      <!-- 成本询价（仅一手）：分配省地接社 + 发起询价 + 应用 -->
+      <!-- 省地接社协作（仅一手）：选择机构 → 一次点击同时完成分配 + 发起成本询价 -->
       <section class="card fb-card" v-if="role === 'pandaking'">
-        <h3>成本询价（省地接社协作）</h3>
+        <h3>省地接社协作</h3>
         <p class="hint">
-          一手将路线分配给省地接社后，该省地接社可见此路线并参与行程规划；发起成本询价让其填写地接成本①，应用后写入路线报价。
+          一手选择省地接社后点击「发起协作」，系统自动完成分配并生成一个统一链接；
+          省地接社打开后既可编辑行程规划，也可填写成本①。
         </p>
         <div class="ci-row">
-          <select v-model="assignProvId" class="input sm" :disabled="loadingProvincialAgencies">
+          <select v-model="collabProvId" class="input sm" :disabled="loadingProvincialAgencies">
             <option value="" disabled>{{ loadingProvincialAgencies ? '加载中…' : '请选择省地接社机构' }}</option>
             <option v-for="a in provincialAgencies" :key="a.id" :value="a.id">{{ a.name }}（{{ a.id }}）</option>
           </select>
-          <button class="btn sm" :disabled="!assignProvId" @click="onAssignProvincial">分配省地接社</button>
+          <button class="btn sm" :disabled="!collabProvId" @click="onStartCollab">发起省地接社协作</button>
         </div>
-        <div class="ci-row" style="margin-top: 10px">
-          <select v-model="inquiryProvId" class="input sm" :disabled="loadingProvincialAgencies">
-            <option value="" disabled>{{ loadingProvincialAgencies ? '加载中…' : '请选择询价省地接社机构' }}</option>
-            <option v-for="a in provincialAgencies" :key="a.id" :value="a.id">{{ a.name }}（{{ a.id }}）</option>
-          </select>
-          <button class="btn sm" :disabled="!inquiryProvId" @click="onCreateInquiry">发起成本询价</button>
-        </div>
-        <p v-if="inquiryErr" class="err">{{ inquiryErr }}</p>
+        <p v-if="collabErr" class="err">{{ collabErr }}</p>
         <p v-if="!loadingProvincialAgencies && provincialAgencies.length === 0" class="err">
-          暂无省地接社机构，请先在「账号」页新建一个「省地接社」机构，再回来分配 / 发起询价。
+          暂无省地接社机构，请先在「账号」页新建一个「省地接社」机构，再回来发起协作。
         </p>
-        <div v-if="inquiryLink" class="link-box">
-          <input :value="inquiryLink" class="input" readonly />
-          <button class="btn ghost sm" @click="copyInquiryLink">{{ copiedInquiry ? '已复制 ✓' : '复制链接' }}</button>
-        </div>
-        <p v-if="inquiryLink" class="tip">把链接发到微信群，省地接社打开即填成本①。</p>
 
-        <div class="ci-row" style="margin-top: 12px">
-          <button class="btn sm" :disabled="!data?.provincialId" @click="onGenProvShare">
-            生成省地接社协作 H5（可编辑行程）
-          </button>
+        <div v-if="collabLink" class="link-box">
+          <input :value="collabLink" class="input" readonly />
+          <button class="btn ghost sm" @click="copyCollabLink">{{ copiedCollab ? '已复制 ✓' : '复制链接' }}</button>
         </div>
-        <p v-if="provShareErr" class="err">{{ provShareErr }}</p>
-        <div v-if="provShareLink" class="link-box">
-          <input :value="provShareLink" class="input" readonly />
-          <button class="btn ghost sm" @click="copyProvShare">{{ copiedProvShare ? '已复制 ✓' : '复制链接' }}</button>
-        </div>
-        <p v-if="provShareLink" class="tip">把链接发到微信群，省地接社打开即可编辑分配给自己的行程并提交规划建议。</p>
+        <p v-if="collabLink" class="tip">把链接发到微信群，省地接社打开即可编辑行程并填写成本①。</p>
 
-        <h3 style="margin-top: 18px">询价记录</h3>
+        <h3 style="margin-top: 18px">协作记录</h3>
         <p v-if="loadingInquiries">加载中…</p>
         <div v-else class="tbl-wrap">
           <table class="tbl">
@@ -815,7 +761,7 @@ async function copyConsoleNotify() {
                   <span v-else class="muted">待回传</span>
                 </td>
               </tr>
-              <tr v-if="!costInquiries.length"><td colspan="4" class="muted">暂无询价</td></tr>
+              <tr v-if="!costInquiries.length"><td colspan="4" class="muted">暂无协作</td></tr>
             </tbody>
           </table>
         </div>

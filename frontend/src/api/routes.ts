@@ -1,5 +1,16 @@
 import client from './client'
-import type { Route, RouteVersion, RouteFeedbackItem, CostInquiry, ProvincialShare } from '@/types'
+import type { Route, RouteVersion, RouteFeedbackItem, CostInquiry, ProvincialShare, RouteArchive } from '@/types'
+
+// 一手查看已删除路线的归档快照（列表 / 详情）
+export async function listRouteArchives(): Promise<RouteArchive[]> {
+  const { data } = await client.get('/route-archives')
+  return data
+}
+
+export async function fetchRouteArchive(id: string): Promise<RouteArchive> {
+  const { data } = await client.get(`/route-archives/${id}`)
+  return data
+}
 
 // 路线与版本 —— 对应 doc/04-接口契约/路线与版本.md
 export async function fetchRoutes(params?: { status?: string; role?: string }): Promise<Route[]> {
@@ -82,8 +93,11 @@ export async function applyCostInquiry(inquiryId: string): Promise<{ ok: boolean
   return data
 }
 
-// 一手生成「省地接社协作 H5」（可编辑行程）链接
-export async function createProvincialShare(routeId: string): Promise<ProvincialShare> {
-  const { data } = await client.post(`/routes/${routeId}/provincial-share`)
+// 一手发起「省地接社协作 H5」：一次操作完成分配 + 发起成本询价，返回统一协作链接
+export async function createProvincialShare(
+  routeId: string,
+  provincialId?: string,
+): Promise<ProvincialShare> {
+  const { data } = await client.post(`/routes/${routeId}/provincial-share`, provincialId ? { provincialId } : {})
   return data
 }

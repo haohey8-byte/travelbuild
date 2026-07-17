@@ -181,7 +181,10 @@ async function confirmDelete() {
   <div v-else>
     <div class="page-header">
       <h1 class="page-title">路线管理 · 看板</h1>
-      <button class="btn btn-primary" @click="showCreate = true">+ 创建路线</button>
+      <div class="header-actions">
+        <button v-if="isPandaking" class="btn ghost" @click="router.push('/route-archives')">归档历史</button>
+        <button class="btn btn-primary" @click="showCreate = true">+ 创建路线</button>
+      </div>
     </div>
 
     <div class="stats">
@@ -335,6 +338,7 @@ async function confirmDelete() {
 .forbidden h2 { color: var(--danger); margin-bottom: 12px; }
 .forbidden p { color: var(--muted); margin: 8px 0; }
 .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.header-actions { display: flex; align-items: center; gap: 10px; }
 .page-title { margin: 0; }
 .stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .chip { padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); cursor: pointer; font-size: 13px; }

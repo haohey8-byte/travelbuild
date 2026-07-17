@@ -119,12 +119,19 @@ export interface H5Route {
   travelDate: string | null
   version: string
   statusKey: string
+  role: Role
   itinerary: Record<string, unknown>
   guestPrice: number | null
   // 净化报价：仅含对客报价（guestPrice），不含成本①/②/加价（公开 H5 不泄漏内部成本）
   quote?: {
     items?: { type: string; guestPrice: number | null }[]
     totals?: { guestPrice: number | null }
+  } | null
+  // 仅省地接社协作 H5 返回
+  costInquiry?: {
+    id: string
+    status: 'pending' | 'submitted'
+    cost1: number | null
   } | null
 }
 
@@ -168,6 +175,21 @@ export interface H5CostInquiry {
     groupSize: number
     travelDate: string | null
   }
+}
+
+// 路线归档历史（一手删除路线时的备份快照）
+export interface RouteArchive {
+  id: string
+  routeId: string
+  routeData: object
+  versions?: object
+  shares?: object
+  feedbacks?: object
+  costInquiries?: object
+  deletedById?: string | null
+  deletedByName?: string | null
+  reason?: string | null
+  createdAt: string
 }
 
 // 省地接社协作 H5 令牌（一手生成，省地接社打开可编辑分配给自己的行程）

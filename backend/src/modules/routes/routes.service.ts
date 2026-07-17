@@ -10,6 +10,7 @@ import {
   validateStateMachine,
 } from './state-machine'
 import { hideCostsForRole, maskQuotePublic, Role } from './role-visibility'
+import { Prisma } from '@prisma/client'
 
 // 路线操作主体（来自 JWT 守卫注入）：用于机构间物理隔绝
 type RoutePrincipal = { role: Role; agencyId: string | null }
@@ -303,46 +304,109 @@ export class RoutesService {
     return { token: share.token, link: `/share/route/${share.token}` }
   }
 
-  // 一手生成「省地接社协作 H5」令牌：省地接社凭链接在 H5 内查看+编辑分配给自己的行程并反馈
-  async createProvincialShare(routeId: string, principal?: RoutePrincipal) {
+  // 一手生成「省地接社协作 H5」令牌：同时完成分配 + 发起成本询价，
+  // 一个 share 关联一个 CostInquiry，省地接社打开统一链接即可编辑行程并填写成本①。
+  async createProvincialShare(routeId: string, provincialId?: string, principal?: RoutePrincipal) {
     if (principal && principal.role !== 'pandaking') {
-      throw new ForbiddenException('仅一手 PandaKing 可生成省地接社协作 H5')
+      throw new ForbiddenException('仅一手 PandaKing 可发起省地接社协作')
     }
-    const route = await this.prisma.route
-      .findUniqueOrThrow({ where: { id: routeId } })
-      .catch(() => {
-        throw new NotFoundException('路线不存在')
-      })
-    if (!route.provincialId) {
-      throw new BadRequestException('请先将路线分配给省地接社，再生成协作 H5')
-    }
-    const token = Math.random().toString(36).slice(2) + Date.now().toString(36)
-    await this.prisma.routeShare.create({
-      data: { token, routeId, role: 'provincial' },
+    const route = await this.prisma.route.findUniqueOrThrow({ where: { id: routeId } }).catch(() => {
+      throw new NotFoundException('路线不存在')
     })
-    return { token, link: `/h5/provincial-route/${token}` }
+
+    // 如果调用方指定了省地接社，必须存在且角色正确；未指定则使用 route 上已分配的省地接社
+    const effectiveProvincialId = provincialId?.trim() || route.provincialId
+    if (!effectiveProvincialId) {
+      throw new BadRequestException('请指定要协作的省地接社机构')
+    }
+    const target = await this.prisma.agency.findUnique({ where: { id: effectiveProvincialId } })
+    if (!target || target.role !== 'provincial') {
+      throw new BadRequestException('省地接社机构不存在或角色不是省地接社')
+    }
+
+    const token = Math.random().toString(36).slice(2) + Date.now().toString(36)
+    const [, inquiry] = await this.prisma.$transaction([
+      this.prisma.route.update({
+        where: { id: routeId },
+        data: { provincialId: effectiveProvincialId },
+      }),
+      this.prisma.costInquiry.create({
+        data: {
+          routeId,
+          provincialId: effectiveProvincialId,
+          token: Math.random().toString(36).slice(2) + Date.now().toString(36),
+          status: 'pending',
+        },
+      }),
+    ])
+    const shareRecord = await this.prisma.routeShare.create({
+      data: { token, routeId, role: 'provincial', costInquiryId: inquiry.id },
+    })
+    return { token: shareRecord.token, link: `/h5/provincial-route/${shareRecord.token}` }
   }
 
-  // 省地接社凭令牌在 H5 内编辑分配给自己的行程（仅改行程，价格保留上一版），保存并生成新版本
-  async provincialEdit(token: string, itinerary: unknown) {
-    const share = await this.prisma.routeShare.findUnique({ where: { token } })
+  // 省地接社凭令牌在 H5 内编辑分配给自己的行程并填写成本①；
+  // 行程与成本可分别或一起提交，保存后同步一手。
+  async provincialEdit(
+    token: string,
+    input: { itinerary?: unknown; cost1?: number | null },
+  ) {
+    const share = await this.prisma.routeShare.findUnique({
+      where: { token },
+      include: { costInquiry: true },
+    })
     if (!share || share.role !== 'provincial') {
       throw new NotFoundException('协作链接无效')
     }
-    const latest = await this.latestVersion(share.routeId)
-    const next = (parseInt(String(latest?.version).replace(/\D/g, '') || '0', 10)) + 1
-    const version = await this.prisma.routeVersion.create({
-      data: {
-        routeId: share.routeId,
-        version: `v${next}`,
-        draft: false,
-        itinerary: itinerary as object,
-        quote: (latest?.quote as object) ?? null,
-      },
-    })
+    if (share.costInquiry == null) {
+      throw new NotFoundException('协作链接未关联成本询价')
+    }
+
+    const updates: any[] = []
+    let version: any = null
+    if (input.itinerary != null) {
+      const latest = await this.latestVersion(share.routeId)
+      const next = (parseInt(String(latest?.version).replace(/\D/g, '') || '0', 10)) + 1
+      version = await this.prisma.routeVersion.create({
+        data: {
+          routeId: share.routeId,
+          version: `v${next}`,
+          draft: false,
+          itinerary: input.itinerary as object,
+          quote: (latest?.quote as object) ?? null,
+        },
+      })
+    }
+
+    let costInquiryUpdated: any = null
+    if (input.cost1 != null) {
+      const cost1 = Number(input.cost1)
+      if (Number.isNaN(cost1) || cost1 < 0) {
+        throw new BadRequestException('成本①必须为非负数字')
+      }
+      if (share.costInquiry.status === 'submitted') {
+        throw new ConflictException('该询价已提交，不可重复提交')
+      }
+      costInquiryUpdated = await this.prisma.costInquiry.update({
+        where: { id: share.costInquiry.id },
+        data: { cost1: new Prisma.Decimal(cost1), status: 'submitted' },
+      })
+    }
+
     return {
-      version: this.serializeVersion(version, 'provincial'),
-      link: `/h5/route/${share.token}`,
+      version: version ? this.serializeVersion(version, 'provincial') : null,
+      costInquiry: costInquiryUpdated
+        ? {
+            id: costInquiryUpdated.id,
+            status: costInquiryUpdated.status,
+            cost1: Number(costInquiryUpdated.cost1),
+          }
+        : {
+            id: share.costInquiry.id,
+            status: share.costInquiry.status,
+            cost1: share.costInquiry.cost1 != null ? Number(share.costInquiry.cost1) : null,
+          },
+      link: `/h5/provincial-route/${share.token}`,
     }
   }
 
@@ -368,9 +432,13 @@ export class RoutesService {
     return { ...inQ, items, totals }
   }
 
-  // 协作 H5 只读视图（按 token 解析，报价仅暴露对客总价）
+  // 协作 H5 视图（按 token 解析，报价仅暴露对客总价）
+  // 对于省地接社协作 share，额外返回 costInquiry 状态/成本①，便于统一协作页编辑。
   async getH5(token: string) {
-    const share = await this.prisma.routeShare.findUnique({ where: { token } })
+    const share = await this.prisma.routeShare.findUnique({
+      where: { token },
+      include: { costInquiry: true },
+    })
     if (!share) throw new NotFoundException('协作链接无效')
     if (share.expiresAt && share.expiresAt.getTime() < Date.now()) {
       throw new NotFoundException('协作链接已过期')
@@ -398,7 +466,7 @@ export class RoutesService {
       items?: { type?: string; guestPrice?: number }[]
       totals?: { guestPrice?: number }
     }
-    return {
+    const result: any = {
       token,
       routeId: route.id,
       destination: route.destination,
@@ -408,11 +476,20 @@ export class RoutesService {
       travelDate: route.travelDate ? route.travelDate.toISOString() : null,
       version: version.version,
       statusKey: route.statusKey,
+      role: share.role,
       itinerary: version.itinerary,
       // 净化报价：仅含对客报价（guestPrice），不含成本①/②/加价（公开 H5 不泄漏内部成本）
       quote: masked,
       guestPrice: masked?.totals?.guestPrice ?? null,
     }
+    if (share.role === 'provincial' && share.costInquiry) {
+      result.costInquiry = {
+        id: share.costInquiry.id,
+        status: share.costInquiry.status,
+        cost1: share.costInquiry.cost1 != null ? Number(share.costInquiry.cost1) : null,
+      }
+    }
+    return result
   }
 
   // 协作 H5 反馈提交（客户/对方在链接内填写修改意见）

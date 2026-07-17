@@ -60,6 +60,11 @@ const fbText = ref('')
 const fbSending = ref(false)
 const fbErr = ref('')
 
+// —— 成本①（省地接社填写）——
+const cost1 = ref<number | null>(null)
+const alreadySubmitted = ref(false)
+const costInquiryId = ref<string | null>(null)
+
 // —— 保存并通知 ——
 const saving = ref(false)
 const saveOk = ref('')
@@ -92,6 +97,13 @@ onMounted(async () => {
     const d = await fetchH5Route(token)
     data.value = d
     parseItinerary(d.itinerary)
+    if (d.costInquiry) {
+      costInquiryId.value = d.costInquiry.id
+      if (d.costInquiry.status === 'submitted') {
+        alreadySubmitted.value = true
+        cost1.value = d.costInquiry.cost1
+      }
+    }
     document.title = `${safeText(d.destination) || '行程'} · 省地接社协作`
     await loadFeedback()
   } catch {
@@ -108,15 +120,22 @@ async function onSave() {
   saveOk.value = ''
   notifyText.value = ''
   try {
-    await editH5ProvincialRoute(token, itinerary.value)
-    saveOk.value = '行程已保存并同步给一手 ✅'
+    const payload: { itinerary: unknown; cost1?: number | null } = { itinerary: itinerary.value }
+    if (!alreadySubmitted.value && cost1.value != null && !Number.isNaN(Number(cost1.value))) {
+      payload.cost1 = Number(cost1.value)
+    }
+    await editH5ProvincialRoute(token, payload)
+    saveOk.value = '行程与成本①已保存并同步给一手 ✅'
+    if (payload.cost1 != null) alreadySubmitted.value = true
     if (data.value) {
+      const detail = cost1.value != null ? `成本① ¥${Number(cost1.value).toLocaleString()}` : undefined
       const text = collabNotifyText({
         kind: 'plan',
-        eventLabel: '更新了行程规划',
+        eventLabel: '更新了行程规划并回传成本',
         subject: subject.value,
         destination: destination.value,
         authorName: '省地接社',
+        detail,
         url: window.location.href,
       })
       notifyText.value = text
@@ -172,8 +191,8 @@ function goHome() {
         <span v-if="data.guestPrice != null">对客总价: ¥{{ Number(data.guestPrice).toLocaleString() }}</span>
       </div>
       <p class="hint">
-        您正在编辑<b>分配给本社的行程</b>。可修改城市/景点/住宿/餐饮等当地安排，保存后同步一手；
-        成本①请在「成本询价」H5 中填写。下方可提交行程规划修改建议。
+        您正在以<b>省地接社</b>身份协作本路线。可修改下方的城市/景点/住宿/餐饮等当地安排，
+        并填写成本①；提交后一手即可同步收到行程与地接成本。
       </p>
 
       <!-- 行程编辑 -->
@@ -204,6 +223,27 @@ function goHome() {
           </div>
         </div>
         <button class="btn" @click="addDay">+ 添加一天</button>
+      </section>
+
+      <!-- 成本① -->
+      <section class="edit-block cost">
+        <h3>地接成本①</h3>
+        <p class="hint">填写本路线的地接成本①（仅一手可见），与行程一起提交。</p>
+        <div v-if="alreadySubmitted" class="submitted">
+          <p>✅ 您已回传成本询价，无需重复提交。</p>
+          <p v-if="cost1 != null" class="cost-readonly">
+            成本①：<b>¥{{ Number(cost1).toLocaleString() }}</b>
+          </p>
+        </div>
+        <template v-else>
+          <input
+            v-model.number="cost1"
+            class="h5-input"
+            type="number"
+            min="0"
+            placeholder="如 12000"
+          />
+        </template>
       </section>
 
       <button class="btn btn-primary" :disabled="saving" @click="onSave">

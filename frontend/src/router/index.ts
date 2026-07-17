@@ -13,6 +13,8 @@ const router = createRouter({
     { path: '/kb', name: 'kb', component: () => import('@/views/KnowledgeBase.vue') },
     { path: '/account', name: 'account', component: () => import('@/views/Account.vue') },
     { path: '/cases', name: 'cases', component: () => import('@/views/Cases.vue') },
+    { path: '/route-archives', name: 'route-archives', component: () => import('@/views/RouteArchives.vue') },
+    { path: '/route-archives/:id', name: 'route-archive-detail', component: () => import('@/views/RouteArchiveDetail.vue'), props: true },
     // 协作 H5（公开，免登录，隐藏主导航）
     { path: '/h5/route/:token', name: 'h5-route', component: () => import('@/views/H5Route.vue'), meta: { h5: true } },
     // 邀请接受 H5（一手/管理员复制链接发到微信群，受邀者打开后接受）

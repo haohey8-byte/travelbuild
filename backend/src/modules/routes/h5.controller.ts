@@ -47,12 +47,12 @@ export class H5Controller {
     return this.costInquiry.submit(token, body?.cost1)
   }
 
-  // 省地接社协作 H5：编辑分配给自己的行程并保存（价格保留上一版）
+  // 省地接社协作 H5：保存编辑后的行程并提交成本①（可单独或一起提交）
   @Post('route/:token/edit')
   editRoute(
     @Param('token') token: string,
-    @Body() body: { itinerary: unknown },
+    @Body() body: { itinerary?: unknown; cost1?: number | null },
   ) {
-    return this.svc.provincialEdit(token, body?.itinerary)
+    return this.svc.provincialEdit(token, body)
   }
 }
