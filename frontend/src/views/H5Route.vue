@@ -57,6 +57,7 @@ async function onExportTouristPdf() {
       itinerary: { days: it.days ?? [] },
       quote: {
         items: (d.quote?.items ?? []).map((q) => ({
+          name: q.name,
           type: q.type,
           guestPrice: q.guestPrice ?? 0,
         })) as any,

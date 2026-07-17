@@ -48,10 +48,11 @@ export class H5Controller {
   }
 
   // 省地接社协作 H5：保存编辑后的行程并提交成本①（可单独或一起提交）
+  // 成本①支持按项目填写：{ name: string, amount: number }[]，系统自动合计
   @Post('route/:token/edit')
   editRoute(
     @Param('token') token: string,
-    @Body() body: { itinerary?: unknown; cost1?: number | null },
+    @Body() body: { itinerary?: unknown; cost1?: number | null; costItems?: { name?: string; amount?: number }[] },
   ) {
     return this.svc.provincialEdit(token, body)
   }

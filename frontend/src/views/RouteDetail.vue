@@ -23,7 +23,7 @@ import {
   copyText,
   provincialRouteH5Url,
 } from '@/utils/share'
-import type { Route, RouteStatusKey, QuoteLevel, RouteFeedbackItem, Agency } from '@/types'
+import type { Route, RouteStatusKey, QuoteLevel, RouteFeedbackItem, Agency, CostInquiry } from '@/types'
 import { buildPdfModel, type PdfModel } from '@/utils/pdf-model'
 import { generatePdf } from '@/utils/pdf-export'
 import { PDF_LANG_OPTIONS, PDF_VERSION_LABEL, type PdfLang, type PdfVersion } from '@/utils/pdf-i18n'
@@ -154,17 +154,17 @@ function removeMeal(d: Day, i: number) {
   d.meals.splice(i, 1)
 }
 
-// —— 报价（5 级：包车/酒店/门票/餐饮/其他）——
-const QUOTE_TYPES: { key: QuoteLevel['type']; label: string }[] = [
-  { key: 'vehicle', label: '包车' },
-  { key: 'hotel', label: '酒店' },
-  { key: 'ticket', label: '门票' },
-  { key: 'meal', label: '餐饮' },
-  { key: 'other', label: '其他' },
-]
+// —— 报价（项目可自定义名称，5 级成本分离）——
+const QUOTE_TYPE_LABELS: Record<string, string> = {
+  vehicle: '包车',
+  hotel: '酒店',
+  ticket: '门票',
+  meal: '餐饮',
+  other: '其他',
+}
 const quoteItems = ref<QuoteLevel[]>([])
 function newItem(): QuoteLevel {
-  return { type: 'vehicle', cost1: 0, cost2: 0, markup: 0, guestPrice: 0 }
+  return { name: '', type: 'other', cost1: 0, cost2: 0, markup: 0, guestPrice: 0 }
 }
 function addItem() {
   quoteItems.value.push(newItem())
@@ -175,8 +175,11 @@ function removeItem(i: number) {
 function itemGuest(it: QuoteLevel): number {
   return (Number(it.cost1) || 0) + (Number(it.cost2) || 0) + (Number(it.markup) || 0)
 }
+function itemName(it: QuoteLevel): string {
+  return it.name?.trim() || QUOTE_TYPE_LABELS[it.type || 'other'] || '其他'
+}
 const totals = computed(() => {
-  return quoteItems.value.reduce(
+  return quoteItems.value.reduce<{ cost1: number; cost2: number; markup: number; guestPrice: number }>(
     (acc, it) => {
       acc.cost1 += Number(it.cost1) || 0
       acc.cost2 += Number(it.cost2) || 0
@@ -239,7 +242,7 @@ const notifyTextConsole = ref('')
 const versionLabel = computed(() => data.value?.versions?.[0]?.version ?? 'v1')
 
 // —— 省地接社协作（一手） ——
-const costInquiries = ref<{ id: string; routeId: string; provincialId: string; status: string; cost1: number | null; createdAt: string }[]>([])
+const costInquiries = ref<CostInquiry[]>([])
 const loadingInquiries = ref(false)
 const collabProvId = ref('')
 const collabLink = ref('')
@@ -363,6 +366,7 @@ function fmtTime(s?: string): string {
 function buildQuote() {
   return {
     items: quoteItems.value.map((it) => ({
+      name: it.name,
       type: it.type,
       cost1: Number(it.cost1) || 0,
       cost2: Number(it.cost2) || 0,
@@ -622,9 +626,7 @@ async function copyConsoleNotify() {
             <tbody>
               <tr v-for="(it, i) in quoteItems" :key="i">
                 <td>
-                  <select v-model="it.type">
-                    <option v-for="t in QUOTE_TYPES" :key="t.key" :value="t.key">{{ t.label }}</option>
-                  </select>
+                  <input v-model="it.name" :placeholder="QUOTE_TYPE_LABELS[it.type || 'other'] || '项目名称'" />
                 </td>
                 <td v-if="showCost1">
                   <input type="number" v-model.number="it.cost1" :disabled="!canEditCost" />
@@ -752,22 +754,34 @@ async function copyConsoleNotify() {
           <table class="tbl">
             <thead><tr><th>省地接社</th><th>状态</th><th>成本①</th><th>操作</th></tr></thead>
             <tbody>
-              <tr v-for="ci in costInquiries" :key="ci.id">
-                <td>{{ provincialAgencies.find((a) => a.id === ci.provincialId)?.name || ci.provincialId }}</td>
-                <td>{{ ci.status === 'submitted' ? '已回传' : '待回传' }}</td>
-                <td>{{ ci.cost1 != null ? '¥' + Number(ci.cost1).toLocaleString() : '-' }}</td>
-                <td>
-                  <button
-                    v-if="ci.status === 'submitted'"
-                    class="btn ghost sm"
-                    :disabled="!!applyingId"
-                    @click="onApplyInquiry(ci.id)"
-                  >
-                    {{ applyingId === ci.id ? '应用中…' : '应用成本①' }}
-                  </button>
-                  <span v-else class="muted">待回传</span>
-                </td>
-              </tr>
+              <template v-for="ci in costInquiries" :key="ci.id">
+                <tr>
+                  <td>{{ provincialAgencies.find((a) => a.id === ci.provincialId)?.name || ci.provincialId }}</td>
+                  <td>{{ ci.status === 'submitted' ? '已回传' : '待回传' }}</td>
+                  <td>{{ ci.cost1 != null ? '¥' + Number(ci.cost1).toLocaleString() : '-' }}</td>
+                  <td>
+                    <button
+                      v-if="ci.status === 'submitted'"
+                      class="btn ghost sm"
+                      :disabled="!!applyingId"
+                      @click="onApplyInquiry(ci.id)"
+                    >
+                      {{ applyingId === ci.id ? '应用中…' : '应用成本①' }}
+                    </button>
+                    <span v-else class="muted">待回传</span>
+                  </td>
+                </tr>
+                <tr v-if="ci.costItems && ci.costItems.length" class="detail-row">
+                  <td colspan="4">
+                    <ul class="cost-items">
+                      <li v-for="(item, idx) in ci.costItems" :key="idx">
+                        <span>{{ item.name || '未命名' }}</span>
+                        <span>¥{{ Number(item.amount).toLocaleString() }}</span>
+                      </li>
+                    </ul>
+                  </td>
+                </tr>
+              </template>
               <tr v-if="!costInquiries.length"><td colspan="4" class="muted">暂无协作</td></tr>
             </tbody>
           </table>
@@ -824,6 +838,10 @@ textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border
 .ci-row { display: flex; gap: 8px; align-items: center; }
 .link-box { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
 .link-box .input { font-size: 12px; color: var(--muted); }
+.cost-items { list-style: none; margin: 0; padding: 8px 10px; background: var(--surface); border-radius: 8px; font-size: 13px; }
+.cost-items li { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed var(--line); }
+.cost-items li:last-child { border-bottom: none; }
+.detail-row td { padding-top: 0; }
 
 /* 反馈记录 */
 .fb-card { margin-top: 16px; }

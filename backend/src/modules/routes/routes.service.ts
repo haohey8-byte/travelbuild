@@ -346,10 +346,10 @@ export class RoutesService {
   }
 
   // 省地接社凭令牌在 H5 内编辑分配给自己的行程并填写成本①；
-  // 行程与成本可分别或一起提交，保存后同步一手。
+  // 行程与成本可分别或一起提交，成本①支持按项目自定义名称填写并自动合计。
   async provincialEdit(
     token: string,
-    input: { itinerary?: unknown; cost1?: number | null },
+    input: { itinerary?: unknown; cost1?: number | null; costItems?: { name?: string; amount?: number }[] },
   ) {
     const share = await this.prisma.routeShare.findUnique({
       where: { token },
@@ -379,17 +379,39 @@ export class RoutesService {
     }
 
     let costInquiryUpdated: any = null
-    if (input.cost1 != null) {
-      const cost1 = Number(input.cost1)
-      if (Number.isNaN(cost1) || cost1 < 0) {
-        throw new BadRequestException('成本①必须为非负数字')
-      }
+    const shouldSubmitCost = input.costItems != null || input.cost1 != null
+    if (shouldSubmitCost) {
       if (share.costInquiry.status === 'submitted') {
         throw new ConflictException('该询价已提交，不可重复提交')
       }
+
+      let costItems: { name: string; amount: number }[] = []
+      if (Array.isArray(input.costItems) && input.costItems.length > 0) {
+        costItems = input.costItems.map((it) => ({
+          name: String(it?.name || '').trim() || '未命名',
+          amount: Math.max(0, Number(it?.amount) || 0),
+        }))
+      }
+      let cost1 = Number(input.cost1 ?? 0)
+      if (costItems.length > 0) {
+        cost1 = costItems.reduce((s, it) => s + it.amount, 0)
+      } else if (input.cost1 != null) {
+        if (Number.isNaN(cost1) || cost1 < 0) {
+          throw new BadRequestException('成本①合计必须为非负数字')
+        }
+        costItems = [{ name: '地接成本', amount: cost1 }]
+      }
+      if (Number.isNaN(cost1) || cost1 < 0) {
+        throw new BadRequestException('成本①合计必须为非负数字')
+      }
+
       costInquiryUpdated = await this.prisma.costInquiry.update({
         where: { id: share.costInquiry.id },
-        data: { cost1: new Prisma.Decimal(cost1), status: 'submitted' },
+        data: {
+          cost1: new Prisma.Decimal(cost1),
+          costItems: costItems as Prisma.InputJsonValue,
+          status: 'submitted',
+        },
       })
     }
 
@@ -400,11 +422,13 @@ export class RoutesService {
             id: costInquiryUpdated.id,
             status: costInquiryUpdated.status,
             cost1: Number(costInquiryUpdated.cost1),
+            costItems: costInquiryUpdated.costItems as { name: string; amount: number }[] | undefined,
           }
         : {
             id: share.costInquiry.id,
             status: share.costInquiry.status,
             cost1: share.costInquiry.cost1 != null ? Number(share.costInquiry.cost1) : null,
+            costItems: share.costInquiry.costItems as { name: string; amount: number }[] | undefined,
           },
       link: `/h5/provincial-route/${share.token}`,
     }
@@ -489,6 +513,7 @@ export class RoutesService {
         id: share.costInquiry.id,
         status: share.costInquiry.status,
         cost1: share.costInquiry.cost1 != null ? Number(share.costInquiry.cost1) : null,
+        costItems: (share.costInquiry.costItems as { name: string; amount: number }[] | undefined) ?? [],
       }
     }
     return result

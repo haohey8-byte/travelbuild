@@ -75,9 +75,11 @@ function deriveItem(it: Partial<QuoteLevel> & { notes?: string }, lang: PdfLang)
   const cost2 = Number(it.cost2) || 0
   const markup = Number(it.markup) || 0
   const guestPrice = Number(it.guestPrice) || cost1 + cost2 + markup
+  const name = it.name?.trim()
+  const type = name || (it.type as string) || 'other'
   return {
-    type: (it.type as string) || 'other',
-    typeLabel: t(lang, `type_${it.type || 'other'}`),
+    type,
+    typeLabel: name || t(lang, `type_${(it.type as string) || 'other'}`),
     cost1,
     cost2,
     agencyQuote: cost1 + cost2,

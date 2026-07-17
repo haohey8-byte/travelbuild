@@ -148,8 +148,9 @@ model CostInquiry {
   provincialId String // 被询价的省地接社机构 org id（原 agencyId 改名，语义更清晰）
   provincialOrg Agency?     @relation(fields: [provincialId], references: [id], onDelete: SetNull, name: "CostInquiryProvincial")
   token        String      @unique
-  cost1        Decimal?    @db.Decimal(12, 2) // 省地接社填的成本①（地接成本）
+  cost1        Decimal?    @db.Decimal(12, 2) // 省地接社填的成本①（地接成本）合计
   cost2        Decimal?    @db.Decimal(12, 2) // 预留：省地接社次级成本（当前未强制使用）
+  costItems    Json?       // 省地接社填写的成本①明细 { name: string, amount: number }[]
   status       String      @default("pending") // pending | submitted
   share        RouteShare? @relation
   createdAt    DateTime    @default(now())

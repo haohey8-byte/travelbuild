@@ -32,7 +32,8 @@ export interface Route {
 }
 
 export interface QuoteLevel {
-  type: 'vehicle' | 'hotel' | 'ticket' | 'meal' | 'other'
+  name?: string // 项目名称可自定义（优先显示）
+  type?: 'vehicle' | 'hotel' | 'ticket' | 'meal' | 'other' // 旧数据/快速分类保留
   cost1?: number // 省地接社成本（成本①）
   cost2?: number // 一手利润（成本②）
   markup?: number // 旅行社加价
@@ -124,7 +125,7 @@ export interface H5Route {
   guestPrice: number | null
   // 净化报价：仅含对客报价（guestPrice），不含成本①/②/加价（公开 H5 不泄漏内部成本）
   quote?: {
-    items?: { type: string; guestPrice: number | null }[]
+    items?: { name?: string; type?: string; guestPrice: number | null }[]
     totals?: { guestPrice: number | null }
   } | null
   // 仅省地接社协作 H5 返回
@@ -132,6 +133,7 @@ export interface H5Route {
     id: string
     status: 'pending' | 'submitted'
     cost1: number | null
+    costItems?: CostInquiryItem[]
   } | null
 }
 
@@ -151,6 +153,11 @@ export interface RouteFeedbackItem {
   createdAt: string
 }
 
+export interface CostInquiryItem {
+  name: string
+  amount: number
+}
+
 // 成本询价（一手 ↔ 省地接社）
 export interface CostInquiry {
   id: string
@@ -159,6 +166,7 @@ export interface CostInquiry {
   token?: string
   status: 'pending' | 'submitted'
   cost1: number | null
+  costItems?: CostInquiryItem[]
   createdAt: string
 }
 
@@ -167,6 +175,7 @@ export interface H5CostInquiry {
   token: string
   status: string
   cost1: number | null
+  costItems?: CostInquiryItem[]
   route: {
     id: string
     customerName?: string | null

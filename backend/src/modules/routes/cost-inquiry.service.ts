@@ -54,6 +54,7 @@ export class CostInquiryService {
       token: ci.token,
       status: ci.status,
       cost1: ci.cost1 != null ? Number(ci.cost1) : null,
+      costItems: (ci.costItems as { name: string; amount: number }[] | undefined) ?? [],
       route: {
         id: route.id,
         customerName: route.customerName,
@@ -107,6 +108,7 @@ export class CostInquiryService {
       token: r.token,
       status: r.status,
       cost1: r.cost1 != null ? Number(r.cost1) : null,
+      costItems: (r.costItems as { name: string; amount: number }[] | undefined) ?? [],
       createdAt: r.createdAt.toISOString(),
     }))
   }

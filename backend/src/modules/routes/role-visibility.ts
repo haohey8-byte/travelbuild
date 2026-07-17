@@ -13,6 +13,7 @@
 export type Role = 'pandaking' | 'agency' | 'provincial'
 
 interface QuoteLevel {
+  name?: string
   type?: string
   cost1?: number
   cost2?: number
@@ -63,7 +64,7 @@ export function maskQuotePublic(quote: unknown): unknown {
   const guestPrice = q.totals?.guestPrice
   return {
     items: Array.isArray(q.items)
-      ? q.items.map((it) => ({ type: it.type, guestPrice: it.guestPrice }))
+      ? q.items.map((it) => ({ name: it.name, type: it.type, guestPrice: it.guestPrice }))
       : q.items,
     totals: { guestPrice },
   }

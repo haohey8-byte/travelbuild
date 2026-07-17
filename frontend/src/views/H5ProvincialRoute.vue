@@ -63,10 +63,23 @@ const fbText = ref('')
 const fbSending = ref(false)
 const fbErr = ref('')
 
-// —— 成本①（省地接社填写）——
-const cost1 = ref<number | null>(null)
+// —— 成本①（省地接社按项目填写）——
+interface CostItem { name: string; amount: number | null }
+const costItems = ref<CostItem[]>([{ name: '', amount: null }])
 const alreadySubmitted = ref(false)
 const costInquiryId = ref<string | null>(null)
+const totalCost = computed(() => costItems.value.reduce((s, it) => s + (Number(it.amount) || 0), 0))
+function addCostItem() {
+  costItems.value.push({ name: '', amount: null })
+}
+function removeCostItem(i: number) {
+  costItems.value.splice(i, 1)
+}
+function normalizeCostItems(): { name: string; amount: number }[] {
+  return costItems.value
+    .filter((it) => String(it.name).trim() || Number(it.amount) > 0)
+    .map((it) => ({ name: String(it.name || '').trim() || '未命名', amount: Math.max(0, Number(it.amount) || 0) }))
+}
 
 // —— 保存并通知 ——
 const saving = ref(false)
@@ -112,7 +125,16 @@ onMounted(async () => {
       costInquiryId.value = d.costInquiry.id
       if (d.costInquiry.status === 'submitted') {
         alreadySubmitted.value = true
-        cost1.value = d.costInquiry.cost1
+        if (d.costInquiry.costItems && d.costInquiry.costItems.length > 0) {
+          costItems.value = d.costInquiry.costItems.map((it) => ({ name: it.name, amount: it.amount }))
+        } else if (d.costInquiry.cost1 != null) {
+          costItems.value = [{ name: '地接成本', amount: d.costInquiry.cost1 }]
+        } else {
+          costItems.value = []
+        }
+      } else {
+        // 未提交时给一个默认项目提示，方便按项目填写
+        costItems.value = [{ name: '包车', amount: null }, { name: '酒店', amount: null }, { name: '门票', amount: null }]
       }
     }
     document.title = pageTitle.value
@@ -131,15 +153,17 @@ async function onSave() {
   saveOk.value = ''
   notifyText.value = ''
   try {
-    const payload: { itinerary: unknown; cost1?: number | null } = { itinerary: itinerary.value }
-    if (!alreadySubmitted.value && cost1.value != null && !Number.isNaN(Number(cost1.value))) {
-      payload.cost1 = Number(cost1.value)
+    const payload: { itinerary: unknown; cost1?: number; costItems?: { name: string; amount: number }[] } = { itinerary: itinerary.value }
+    const items = normalizeCostItems()
+    if (!alreadySubmitted.value && items.length > 0) {
+      payload.costItems = items
+      payload.cost1 = totalCost.value
     }
     await editH5ProvincialRoute(token, payload)
     saveOk.value = '行程与成本①已保存并同步给一手 ✅'
-    if (payload.cost1 != null) alreadySubmitted.value = true
+    if (payload.costItems) alreadySubmitted.value = true
     if (data.value) {
-      const detail = cost1.value != null ? `成本① ¥${Number(cost1.value).toLocaleString()}` : undefined
+      const detail = items.length ? `成本①合计 ¥${totalCost.value.toLocaleString()}` : undefined
       const text = collabNotifyText({
         kind: 'plan',
         eventLabel: '更新了行程规划并回传成本',
@@ -240,21 +264,25 @@ function goHome() {
       <!-- 成本① -->
       <section class="edit-block cost">
         <h3>地接成本①</h3>
-        <p class="hint">填写本路线的地接成本①（仅一手可见），与行程一起提交。</p>
+        <p class="hint">按项目填写本路线的地接成本①（仅一手可见），与行程一起提交。</p>
         <div v-if="alreadySubmitted" class="submitted">
           <p>✅ 您已回传成本询价，无需重复提交。</p>
-          <p v-if="cost1 != null" class="cost-readonly">
-            成本①：<b>¥{{ Number(cost1).toLocaleString() }}</b>
-          </p>
+          <ul class="cost-list">
+            <li v-for="(it, i) in costItems" :key="i">
+              <span class="cost-name">{{ it.name || '未命名' }}</span>
+              <span class="cost-amount">¥{{ Number(it.amount || 0).toLocaleString() }}</span>
+            </li>
+          </ul>
+          <p class="cost-total">合计：<b>¥{{ totalCost.toLocaleString() }}</b></p>
         </div>
         <template v-else>
-          <input
-            v-model.number="cost1"
-            class="h5-input"
-            type="number"
-            min="0"
-            placeholder="如 12000"
-          />
+          <div v-for="(it, i) in costItems" :key="i" class="cost-row">
+            <input v-model="it.name" class="h5-input name" placeholder="项目名称，如 包车" />
+            <input v-model.number="it.amount" class="h5-input amount" type="number" min="0" placeholder="金额" />
+            <button class="btn ghost sm" @click="removeCostItem(i)">×</button>
+          </div>
+          <p class="cost-total">合计：<b>¥{{ totalCost.toLocaleString() }}</b></p>
+          <button class="btn ghost" @click="addCostItem">+ 添加项目</button>
         </template>
       </section>
 
@@ -334,4 +362,15 @@ textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border
 .fb-time { margin-left: auto; }
 .fb-content { margin: 6px 0 0; font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
 .muted { color: var(--muted); font-size: 13px; }
+.cost-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.cost-row .h5-input { flex: 1; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; font-family: inherit; }
+.cost-row .h5-input.name { flex: 1.5; }
+.cost-row .h5-input.amount { flex: 1; }
+.cost-total { margin: 8px 0; font-size: 14px; color: var(--muted); }
+.cost-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.cost-list li { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.cost-list li:last-child { border-bottom: none; }
+.cost-name { color: var(--ink); }
+.cost-amount { font-weight: 600; }
+.submitted .cost-total { color: var(--ink); margin-top: 8px; }
 </style>
