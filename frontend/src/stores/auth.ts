@@ -1,22 +1,22 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import i18n from '@/i18n'
 import type { Role, User } from '@/types'
 import { devLogin, acceptInvite, fetchMe } from '@/api/auth'
 
 // 鉴权与全局上下文（角色切换、语言切换、登录态）
 export const useAuthStore = defineStore('auth', () => {
-  const currentRole = ref<Role>('pandaking')
+  const storedUser = localStorage.getItem('user')
+  const parsedUser: User | null = storedUser ? JSON.parse(storedUser) : null
   const locale = ref(localStorage.getItem('locale') || 'zh')
   const token = ref(localStorage.getItem('token') || '')
-  const user = ref<User | null>(
-    localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')!) : null,
-  )
+  const user = ref<User | null>(parsedUser)
+  // currentRole 必须与 user.role 保持强一致：页面刷新、loadMe 更新、dev 切换后都自动同步
+  const currentRole = computed<Role>(() => user.value?.role ?? 'pandaking')
 
   function setSession(res: { token: string; user: User }) {
     token.value = res.token
     user.value = res.user
-    currentRole.value = res.user.role
     localStorage.setItem('token', res.token)
     localStorage.setItem('user', JSON.stringify(res.user))
   }
