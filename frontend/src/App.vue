@@ -53,7 +53,7 @@ async function onDevLogin(r: Role) {
 
 <template>
   <!-- 公开 H5：独立移动页，无主导航 -->
-  <RouterView v-if="isH5" />
+  <RouterView v-if="isH5" :key="route.path" />
 
   <!-- 未登录：开发登录入口 -->
   <div v-else-if="needsLogin" class="login-gate">
@@ -122,7 +122,9 @@ async function onDevLogin(r: Role) {
     </aside>
 
     <main class="app-main">
-      <RouterView />
+      <!-- key=route.path：保证任何 route 切换（含详情→详情）都重新挂载组件，
+           触发 onMounted 重新拉取数据，避免复用组件导致「显示上一条路线的旧数据/空白」 -->
+      <RouterView :key="route.path" />
     </main>
   </div>
 </template>

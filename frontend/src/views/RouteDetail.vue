@@ -605,6 +605,16 @@ function spotCount(d: Day) {
 function mealCount(d: Day) {
   return d.meals.filter((x) => x && x.trim()).length
 }
+// 是否已有任何真实行程内容（用于展示「暂无行程」空状态，避免看起来像空白 bug）
+const hasItineraryContent = computed(() =>
+  itinerary.value.days.some(
+    (d) =>
+      (d.city && d.city.trim()) ||
+      (d.hotel && d.hotel.trim()) ||
+      d.spots.some((s) => s && s.trim()) ||
+      d.meals.some((m) => m && m.trim()),
+  ),
+)
 
 // 价格回调链路合计
 const derivedTotals = computed(() => calcDerived(quoteItems.value))
@@ -771,6 +781,10 @@ const collabEvents = computed<CollabEvent[]>(() => {
             <h2>行程路线</h2>
             <span class="pill st-neutral sm">共 {{ itinerary.days.length }} 天</span>
           </div>
+
+          <p v-if="!hasItineraryContent" class="itinerary-empty">
+            该路线暂未规划行程，可直接编辑下方第 1 天，或点「＋ 新增一天」开始排期。
+          </p>
 
           <div v-for="(d, di) in itinerary.days" :key="di" class="day">
             <div class="day-row" @click="toggleDay(di)">
@@ -1189,6 +1203,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
 /* ===== 行程日（可折叠）===== */
 .day { border-bottom: 1px solid var(--k-line); }
 .day:last-of-type { border-bottom: none; }
+.itinerary-empty { margin: 12px 18px 0; padding: 10px 12px; background: var(--amber-50); border: 1px dashed var(--amber-200); border-radius: 9px; color: var(--amber-800); font-size: 13px; line-height: 1.6; }
 .day-row { display: flex; align-items: center; gap: 14px; padding: 14px 18px; cursor: pointer; }
 .day-row:hover { background: #fafbfc; }
 .day-badge { width: 40px; height: 40px; border-radius: 10px; background: var(--teal-50); border: 1px solid var(--teal-200); color: var(--teal-600); font-weight: 800; font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
