@@ -568,9 +568,21 @@ async function onSubmitSuggestion(who: 'agency' | 'provincial') {
     }
   }
 
-  // 3) 生成通知文案（指向一手控制台路线链接）并复制到剪贴板，便于粘贴到微信群同步一手
-  const base = (import.meta.env.VITE_BASE as string) || '/'
-  const link = `${window.location.origin}${base}#/routes/${id}`
+  // 3) 生成通知文案（指向公开免登录的 H5 分享页）并复制到剪贴板，便于粘贴到微信群同步
+  let link = ''
+  try {
+    const s = await shareRoute(id, role.value)
+    link = s.token ? shareH5Url(s.token) : ''
+  } catch (shareErr: any) {
+    actionErr.value = shareErr?.response?.data?.message || '生成分享链接失败，通知文案未生成'
+    savingNotify.value = false
+    return
+  }
+  if (!link) {
+    actionErr.value = '生成分享链接失败，通知文案未生成'
+    savingNotify.value = false
+    return
+  }
   const text = collabNotifyText({
     kind: note ? 'feedback' : 'plan',
     eventLabel: who === 'agency' ? '提交报价建议' : '提交成本建议',

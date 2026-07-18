@@ -4,7 +4,27 @@
 import { safeName, safeText } from '@/utils/name'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string) || '/api'
-const API_ORIGIN = API_BASE.replace(/\/api$/, '')
+
+// 从 VITE_API_BASE 解析后端 origin：
+// - 若配置为绝对 URL（如 https://host/api），去掉 /api 得到 https://host
+// - 若配置为相对路径（如 /api），则无法得知后端域名，回退为空字符串，
+//   此时 shareH5Url 生成相对路径 /share/route/:token（仅开发期 Vite 代理可用）
+function getApiOrigin(): string {
+  try {
+    const url = new URL(API_BASE, typeof window !== 'undefined' ? window.location.href : 'http://localhost')
+    // 如果 API_BASE 是相对路径，new URL 会基于 window.location 拼接，但这不是我们想要的生产行为；
+    // 因此只有 API_BASE 本身包含协议头时才信任解析出的 origin。
+    if (API_BASE.startsWith('http://') || API_BASE.startsWith('https://')) {
+      const origin = url.origin
+      return origin.endsWith('/api') ? origin.slice(0, -4) : origin
+    }
+  } catch {
+    /* ignore */
+  }
+  return ''
+}
+
+const API_ORIGIN = getApiOrigin()
 
 export function shareH5Url(token: string): string {
   return `${API_ORIGIN}/share/route/${token}`
