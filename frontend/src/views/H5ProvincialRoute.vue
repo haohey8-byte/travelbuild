@@ -4,7 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { fetchH5Route, submitH5Feedback, fetchH5Feedback, editH5ProvincialRoute } from '@/api/h5'
 import { safeName, safeText } from '@/utils/name'
 import { collabNotifyText, copyText } from '@/utils/share'
-import type { H5Route, RouteFeedbackItem } from '@/types'
+import QuoteTable from '@/components/QuoteTable.vue'
+import type { H5Route, RouteFeedbackItem, QuoteLevel } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -63,22 +64,15 @@ const fbText = ref('')
 const fbSending = ref(false)
 const fbErr = ref('')
 
-// —— 成本①（省地接社按项目填写）——
-interface CostItem { name: string; amount: number | null }
-const costItems = ref<CostItem[]>([{ name: '', amount: null }])
+// —— 成本①（省地接社按项目填写；与一手/旅行社共用同一报价表组件，利润默认 0）——
+const quoteItems = ref<QuoteLevel[]>([])
 const alreadySubmitted = ref(false)
 const costInquiryId = ref<string | null>(null)
-const totalCost = computed(() => costItems.value.reduce((s, it) => s + (Number(it.amount) || 0), 0))
-function addCostItem() {
-  costItems.value.push({ name: '', amount: null })
-}
-function removeCostItem(i: number) {
-  costItems.value.splice(i, 1)
-}
-function normalizeCostItems(): { name: string; amount: number }[] {
-  return costItems.value
-    .filter((it) => String(it.name).trim() || Number(it.amount) > 0)
-    .map((it) => ({ name: String(it.name || '').trim() || '未命名', amount: Math.max(0, Number(it.amount) || 0) }))
+const totalCost = computed(() => quoteItems.value.reduce((s, it) => s + (Number(it.cost1) || 0), 0))
+function normalizeCostItems(): { name: string; cost1: number }[] {
+  return quoteItems.value
+    .filter((it) => String(it.name).trim() || Number(it.cost1) > 0)
+    .map((it) => ({ name: String(it.name || '').trim() || '未命名', cost1: Math.max(0, Number(it.cost1) || 0) }))
 }
 
 // —— 保存并通知 ——
@@ -126,15 +120,25 @@ onMounted(async () => {
       if (d.costInquiry.status === 'submitted') {
         alreadySubmitted.value = true
         if (d.costInquiry.costItems && d.costInquiry.costItems.length > 0) {
-          costItems.value = d.costInquiry.costItems.map((it) => ({ name: it.name, amount: it.amount }))
+          quoteItems.value = d.costInquiry.costItems.map((it) => ({
+            name: it.name,
+            type: 'other',
+            cost1: it.amount,
+            profit1Mode: 'amount',
+            profit1: 0,
+          }))
         } else if (d.costInquiry.cost1 != null) {
-          costItems.value = [{ name: '地接成本', amount: d.costInquiry.cost1 }]
+          quoteItems.value = [{ name: '地接成本', type: 'other', cost1: d.costInquiry.cost1, profit1Mode: 'amount', profit1: 0 }]
         } else {
-          costItems.value = []
+          quoteItems.value = []
         }
       } else {
-        // 未提交时给一个默认项目提示，方便按项目填写
-        costItems.value = [{ name: '包车', amount: null }, { name: '酒店', amount: null }, { name: '门票', amount: null }]
+        // 未提交时给默认项目，方便按项目填写地接成本①
+        quoteItems.value = [
+          { name: '包车', type: 'vehicle', cost1: 0, profit1Mode: 'amount', profit1: 0 },
+          { name: '酒店', type: 'hotel', cost1: 0, profit1Mode: 'amount', profit1: 0 },
+          { name: '门票', type: 'ticket', cost1: 0, profit1Mode: 'amount', profit1: 0 },
+        ]
       }
     }
     document.title = pageTitle.value
@@ -156,7 +160,7 @@ async function onSave() {
     const payload: { itinerary: unknown; items?: { name: string; cost1: number }[] } = { itinerary: itinerary.value }
     const items = normalizeCostItems()
     if (!alreadySubmitted.value && items.length > 0) {
-      payload.items = items.map((it) => ({ name: it.name, cost1: it.amount }))
+      payload.items = items.map((it) => ({ name: it.name, cost1: it.cost1 }))
     }
     await editH5ProvincialRoute(token, payload)
     saveOk.value = '行程与成本①已保存并同步给一手 ✅'
@@ -260,29 +264,13 @@ function goHome() {
         <button class="btn" @click="addDay">+ 添加一天</button>
       </section>
 
-      <!-- 成本① -->
+      <!-- 成本①（与一手/旅行社共用同一报价表；省地接社仅填成本，利润默认 0） -->
       <section class="edit-block cost">
         <h3>地接成本①</h3>
-        <p class="hint">按项目填写本路线的地接成本①（仅一手可见），与行程一起提交。</p>
-        <div v-if="alreadySubmitted" class="submitted">
-          <p>✅ 您已回传成本询价，无需重复提交。</p>
-          <ul class="cost-list">
-            <li v-for="(it, i) in costItems" :key="i">
-              <span class="cost-name">{{ it.name || '未命名' }}</span>
-              <span class="cost-amount">¥{{ Number(it.amount || 0).toLocaleString() }}</span>
-            </li>
-          </ul>
-          <p class="cost-total">合计：<b>¥{{ totalCost.toLocaleString() }}</b></p>
-        </div>
-        <template v-else>
-          <div v-for="(it, i) in costItems" :key="i" class="cost-row">
-            <input v-model="it.name" class="h5-input name" placeholder="项目名称，如 包车" />
-            <input v-model.number="it.amount" class="h5-input amount" type="number" min="0" placeholder="金额" />
-            <button class="btn ghost sm" @click="removeCostItem(i)">×</button>
-          </div>
-          <p class="cost-total">合计：<b>¥{{ totalCost.toLocaleString() }}</b></p>
-          <button class="btn ghost" @click="addCostItem">+ 添加项目</button>
-        </template>
+        <p class="hint">按项目填写本路线的地接成本①（仅一手可见），与行程一起提交。利润默认 0。</p>
+        <QuoteTable v-model:items="quoteItems" role="provincial" />
+        <p class="cost-total">合计：<b>¥{{ totalCost.toLocaleString() }}</b></p>
+        <p v-if="alreadySubmitted" class="submitted-tip">✅ 您已回传过成本询价，修改后再次保存即可更新。</p>
       </section>
 
       <button class="btn btn-primary" :disabled="saving" @click="onSave">

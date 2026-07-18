@@ -25,9 +25,11 @@ import {
 } from '@/utils/share'
 import type { Route, RouteStatusKey, QuoteLevel, RouteFeedbackItem, Agency, CostInquiry } from '@/types'
 import { buildPdfModel, type PdfModel } from '@/utils/pdf-model'
+import { calcDerived, calcGuestPrice } from '@/utils/quote'
 import { generatePdf } from '@/utils/pdf-export'
 import { PDF_LANG_OPTIONS, PDF_VERSION_LABEL, type PdfLang, type PdfVersion } from '@/utils/pdf-i18n'
 import RoutePdf from '@/components/RoutePdf.vue'
+import QuoteTable from '@/components/QuoteTable.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -78,6 +80,8 @@ async function onExportPdf() {
   if (!data.value) return
   pdfBusy.value = true
   pdfErr.value = ''
+  const d = calcDerived(quoteItems.value)
+  const gp = calcGuestPrice(d.quoteA, profit2Mode.value, profit2.value)
   try {
     const model = await buildPdfModel({
       route: {
@@ -93,12 +97,12 @@ async function onExportPdf() {
       quote: {
         items: quoteItems.value,
         totals: {
-          cost1: derived.value.cost1,
-          profit1: derived.value.profit1,
-          quoteA: derived.value.quoteA,
+          cost1: d.cost1,
+          profit1: d.profit1,
+          quoteA: d.quoteA,
           profit2Mode: profit2Mode.value,
           profit2: Number(profit2.value) || 0,
-          guestPrice: guestPrice.value,
+          guestPrice: gp,
         },
       },
       version: pdfVersion.value,
@@ -165,70 +169,16 @@ function removeMeal(d: Day, i: number) {
 }
 
 // —— 报价（项目可自定义名称；成本① + 利润1 = 报价A；报价A + 利润2 = 对客价）——
-const QUOTE_TYPE_LABELS: Record<string, string> = {
-  vehicle: '包车',
-  hotel: '酒店',
-  ticket: '门票',
-  meal: '餐饮',
-  other: '其他',
-}
+// 价格表已抽取为共用组件 QuoteTable（一手/旅行社/省地接社同页），此处仅保留数据与角色标志。
 const quoteItems = ref<QuoteLevel[]>([])
-function newItem(): QuoteLevel {
-  return { name: '', type: 'other', cost1: 0, profit1Mode: 'amount', profit1: 0 }
-}
-function addItem() {
-  quoteItems.value.push(newItem())
-}
-function removeItem(i: number) {
-  quoteItems.value.splice(i, 1)
-}
-// 利润折算：金额直接加；百分比按基准（成本①）折算
-function profitToAmount(base: number, mode: string | undefined, value: number | undefined): number {
-  const v = Number(value) || 0
-  return mode === 'percent' ? base * (v / 100) : v
-}
-// 行级 PandaKing 报价A = 成本① + 利润1（元直接加，% 按成本折算）
-function itemQuoteA(it: QuoteLevel): number {
-  const cost1 = Number(it.cost1) || 0
-  const profit1 = Number(it.profit1) || 0
-  return it.profit1Mode === 'percent' ? cost1 * (1 + profit1 / 100) : cost1 + profit1
-}
-function itemName(it: QuoteLevel): string {
-  return it.name?.trim() || QUOTE_TYPE_LABELS[it.type || 'other'] || '其他'
-}
-// 由 items 派生的 PandaKing 层合计（成本① / 利润1 / 报价A）
-const derived = computed<{ cost1: number; profit1: number; quoteA: number }>(() => {
-  const acc = { cost1: 0, profit1: 0, quoteA: 0 }
-  for (const it of quoteItems.value) {
-    const cost1 = Number(it.cost1) || 0
-    acc.cost1 += cost1
-    acc.profit1 += profitToAmount(cost1, it.profit1Mode, it.profit1)
-    acc.quoteA += itemQuoteA(it)
-  }
-  return acc
-})
-// 境外旅行社利润2（元/%），作用于报价A 合计 → 对客价
+// 境外旅行社利润2（元/%），作用于报价A 合计 → 对客价（由 QuoteTable 双向绑定）
 const profit2Mode = ref<'amount' | 'percent'>('amount')
 const profit2 = ref(0)
-const guestPrice = computed(() => {
-  const quoteA = derived.value.quoteA
-  return profit2Mode.value === 'percent'
-    ? quoteA * (1 + Number(profit2.value) / 100)
-    : quoteA + Number(profit2.value)
-})
 // 当前角色
 const role = computed(() => auth.currentRole)
 const isPk = computed(() => role.value === 'pandaking')
 const isAgency = computed(() => role.value === 'agency')
 const isProv = computed(() => role.value === 'provincial')
-// 可编辑性：一手全编辑；旅行社仅改利润2；省地接社仅改成本①（利润默认 0）
-const canEditCost1 = computed(() => role.value === 'pandaking' || role.value === 'provincial')
-const canEditProfit1 = computed(() => role.value === 'pandaking')
-const canEditProfit2 = computed(() => role.value === 'pandaking' || role.value === 'agency')
-// 列标签：旅行社视角成本列显示 PandaKing「报价A」作为自身成本基线
-const costColLabel = computed(() => (isAgency.value ? '报价A（成本）' : '成本①'))
-const profitColLabel = computed(() => (isAgency.value ? '利润②' : '利润①'))
-const quoteColLabel = computed(() => (isAgency.value ? '对客价' : '报价A'))
 
 // —— 状态流转 ——
 const STATUS_LABEL: Record<RouteStatusKey, string> = {
@@ -401,6 +351,7 @@ function fmtTime(s?: string): string {
 }
 
 function buildQuote() {
+  const d = calcDerived(quoteItems.value)
   return {
     items: quoteItems.value.map((it) => ({
       name: it.name,
@@ -410,12 +361,12 @@ function buildQuote() {
       profit1: Number(it.profit1) || 0,
     })),
     totals: {
-      cost1: derived.value.cost1,
-      profit1: derived.value.profit1,
-      quoteA: derived.value.quoteA,
+      cost1: d.cost1,
+      profit1: d.profit1,
+      quoteA: d.quoteA,
       profit2Mode: profit2Mode.value,
       profit2: Number(profit2.value) || 0,
-      guestPrice: guestPrice.value,
+      guestPrice: calcGuestPrice(d.quoteA, profit2Mode.value, profit2.value),
     },
   }
 }
@@ -652,77 +603,8 @@ async function copyConsoleNotify() {
           <p v-else-if="isAgency" class="hint">
             您看到的「报价A」是一手 PandaKing 的报价（即您的成本），在此加上<b>利润②</b>即生成对客价。
           </p>
-          <div class="tbl-wrap">
-          <table class="quote">
-            <thead>
-              <tr>
-                <th>项目</th>
-                <th>{{ costColLabel }}</th>
-                <th v-if="!isAgency">{{ profitColLabel }}</th>
-                <th v-if="!isAgency">{{ quoteColLabel }}</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(it, i) in quoteItems" :key="i">
-                <td>
-                  <input v-model="it.name" :placeholder="QUOTE_TYPE_LABELS[it.type || 'other'] || '项目名称'" :disabled="!isPk" />
-                </td>
-                <td>
-                  <input
-                    v-if="!isAgency"
-                    type="number"
-                    v-model.number="it.cost1"
-                    :disabled="!canEditCost1"
-                  />
-                  <span v-else class="ro">¥{{ Math.round(itemQuoteA(it)).toLocaleString() }}</span>
-                </td>
-                <td v-if="!isAgency">
-                  <template v-if="canEditProfit1">
-                    <select v-model="it.profit1Mode" class="mode">
-                      <option value="amount">元</option>
-                      <option value="percent">%</option>
-                    </select>
-                    <input type="number" v-model.number="it.profit1" />
-                  </template>
-                  <span v-else class="ro">¥0</span>
-                </td>
-                <td v-if="!isAgency" class="ro">¥{{ Math.round(itemQuoteA(it)).toLocaleString() }}</td>
-                <td><button class="btn ghost sm" @click="removeItem(i)" :disabled="!isPk">×</button></td>
-              </tr>
-            </tbody>
-            <tfoot>
-              <tr>
-                <td>合计</td>
-                <td class="ro">¥{{ Math.round(isAgency ? derived.quoteA : derived.cost1).toLocaleString() }}</td>
-                <td v-if="!isAgency" class="ro">¥{{ Math.round(derived.profit1).toLocaleString() }}</td>
-                <td v-if="!isAgency" class="ro total">¥{{ Math.round(derived.quoteA).toLocaleString() }}</td>
-                <td></td>
-              </tr>
-            </tfoot>
-          </table>
-          </div>
-          <button class="btn" @click="addItem" :disabled="!isPk">+ 添加报价项</button>
+          <QuoteTable v-model:items="quoteItems" v-model:profit2Mode="profit2Mode" v-model:profit2="profit2" :role="role" />
 
-          <!-- 境外旅行社对客价（利润2）：一手可预填，旅行社正式设定 -->
-          <div class="guest-box" v-if="isPk || isAgency">
-            <div class="guest-row">
-              <span class="guest-label">{{ isAgency ? '我的成本（报价A）' : '报价A 合计' }}</span>
-              <span class="ro">¥{{ Math.round(derived.quoteA).toLocaleString() }}</span>
-            </div>
-            <div class="guest-row">
-              <span class="guest-label">{{ isAgency ? '利润②' : '境外旅行社利润②（预览）' }}</span>
-              <select v-model="profit2Mode" :disabled="!canEditProfit2" class="mode">
-                <option value="amount">元</option>
-                <option value="percent">%</option>
-              </select>
-              <input type="number" v-model.number="profit2" :disabled="!canEditProfit2" />
-            </div>
-            <div class="guest-row total">
-              <span class="guest-label">{{ isAgency ? '对客价' : '对客价（含利润②）' }}</span>
-              <span class="ro total">¥{{ Math.round(guestPrice).toLocaleString() }}</span>
-            </div>
-          </div>
           <p v-if="isPk" class="tip">
             境外旅行社打开同一页面（角色=旅行社）时，报价A 即为其成本，加利润②生成对客价。agency 与 provincial 价格彼此不可见。
           </p>
@@ -799,7 +681,7 @@ async function copyConsoleNotify() {
 
       <!-- 省地接社协作（仅一手）：选择机构 → 一次点击同时完成分配 + 发起成本询价 -->
       <section class="card fb-card" v-if="role === 'pandaking'">
-        <h3>省地接社协作</h3>
+        <h3>省地接社协作 <span class="pk-only">PandaKing 专享</span></h3>
         <p class="hint">
           一手选择省地接社后点击「发起协作」，系统自动完成分配并生成一个统一链接；
           省地接社打开后既可编辑行程规划，也可填写成本①。
@@ -822,7 +704,7 @@ async function copyConsoleNotify() {
         </div>
         <p v-if="collabLink" class="tip">把链接发到微信群，省地接社打开即可编辑行程并填写成本①。</p>
 
-        <h3 style="margin-top: 18px">协作记录</h3>
+        <h3 style="margin-top: 18px">协作记录 <span class="pk-only">PandaKing 专享</span></h3>
         <p v-if="loadingInquiries">加载中…</p>
         <div v-else class="tbl-wrap">
           <table class="tbl">
@@ -898,6 +780,7 @@ async function copyConsoleNotify() {
 .role-tag.pandaking { background: rgba(200,16,46,.12); color: #c8102e; }
 .role-tag.agency { background: rgba(59,130,246,.12); color: #3b82f6; }
 .role-tag.provincial { background: rgba(16,185,129,.12); color: #10b981; }
+.pk-only { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 12px; background: rgba(200,16,46,.1); color: #c8102e; font-weight: 400; vertical-align: middle; }
 .quote .mode { width: auto; min-width: 56px; display: inline-block; margin-right: 4px; }
 .guest-box { margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--surface); }
 .guest-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; }

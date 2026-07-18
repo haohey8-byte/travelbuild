@@ -82,13 +82,15 @@ export class RoutesController {
   }
 
   // 生成协作 H5 共享令牌 + 链接（含当前对外版本）
+  // 默认 public=true：对外客户链接仅暴露对客价，杜绝内部成本泄漏；
+  // 仅在显式传入 public:false 时按 role 生成角色视图链接（如旅行社协作视图）。
   @Post(':id/share')
   share(
     @Param('id') id: string,
-    @Body() body: { role?: Role },
+    @Body() body: { role?: Role; public?: boolean },
     @CurrentUser() user: AuthUser,
   ) {
-    return this.svc.createShare(id, body?.role ?? user.role)
+    return this.svc.createShare(id, body?.role ?? user.role, undefined, body?.public ?? true)
   }
 
   // 旅行社提交草案 → 待一手确认

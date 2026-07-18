@@ -48,6 +48,7 @@ export interface QuoteLevel {
   // 兼容旧字段（历史数据迁移期保留）：cost2=旧一手利润、markup=旧旅行社加价
   cost2?: number
   markup?: number
+  guestPrice?: number // 行级/合计对客价（冗余，便于 PDF 与公开 H5 复用）
 }
 
 // 报价合计 —— 两层数据流

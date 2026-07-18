@@ -165,6 +165,7 @@ model RouteShare {
   route          Route         @relation(fields: [routeId], references: [id], onDelete: Cascade)
   versionId      String?
   role           Role          @default(agency) // 预览角色：决定 H5 内报价可见性
+  public         Boolean       @default(false) // 公开(对客)链接：仅暴露对客价 guestPrice，不泄漏内部成本①/利润
   costInquiryId  String?       @unique // 省地接社协作 H5 关联的成本询价（一个 share 对应一个询价）
   costInquiry    CostInquiry?  @relation(fields: [costInquiryId], references: [id], onDelete: SetNull)
   createdAt      DateTime      @default(now())

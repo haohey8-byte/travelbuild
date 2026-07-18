@@ -272,10 +272,11 @@ export class RoutesService {
       },
     })
     // 对外 H5 链接（notify=true 且非草稿时生成协作共享 token）
+    // 该链接面向「客户/协作对方」公开，强制 public=true：仅暴露对客价 guestPrice，杜绝内部成本泄漏。
     let shareToken: string | null = null
     let shareLink: string | null = null
     if (!draft && input.notify) {
-      const share = await this.createShare(routeId, principal?.role ?? 'agency', version.id)
+      const share = await this.createShare(routeId, principal?.role ?? 'agency', version.id, true)
       shareToken = share.token
       shareLink = share.link
     }
@@ -287,7 +288,8 @@ export class RoutesService {
   }
 
   // 生成协作 H5 共享令牌（默认指向最新非草稿版本）
-  async createShare(routeId: string, role: Role = 'agency', versionId?: string) {
+  // isPublic=true 时仅暴露对客价 guestPrice（客户看板）；否则按 role 做字段级可见性。
+  async createShare(routeId: string, role: Role = 'agency', versionId?: string, isPublic = false) {
     let vid = versionId
     if (!vid) {
       const vers = await this.prisma.routeVersion.findMany({
@@ -302,7 +304,7 @@ export class RoutesService {
     }
     const token = Math.random().toString(36).slice(2) + Date.now().toString(36)
     const share = await this.prisma.routeShare.create({
-      data: { token, routeId, versionId: vid, role },
+      data: { token, routeId, versionId: vid, role, public: isPublic },
     })
     return { token: share.token, link: `/share/route/${share.token}` }
   }
@@ -505,7 +507,11 @@ export class RoutesService {
           })
         )[0] ?? null
     }
-    const visible = hideCostsForRole(version?.quote ?? null, share.role) as {
+    // 公开(对客)链接：仅暴露对客价 guestPrice，不泄漏内部成本①/利润；
+    // 其余按 share.role 做字段级可见性（省地接社仅成本①、旅行社见报价A、一手全见）。
+    const visible = (share.public
+      ? maskQuotePublic(version?.quote ?? null)
+      : hideCostsForRole(version?.quote ?? null, share.role)) as {
       items?: any[]
       totals?: any
     }
