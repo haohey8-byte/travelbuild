@@ -72,18 +72,20 @@ function columnsFor(v: PdfVersion): PdfColumn[] {
 
 function deriveItem(it: Partial<QuoteLevel> & { notes?: string }, lang: PdfLang): PdfItem {
   const cost1 = Number(it.cost1) || 0
-  const cost2 = Number(it.cost2) || 0
-  const markup = Number(it.markup) || 0
-  const guestPrice = Number(it.guestPrice) || cost1 + cost2 + markup
+  const profit1Mode = it.profit1Mode
+  const profit1 = Number(it.profit1) || 0
+  const profit1Amt = profit1Mode === 'percent' ? (cost1 * profit1) / 100 : profit1
+  const quoteA = cost1 + profit1Amt
+  const guestPrice = Number(it.guestPrice) || quoteA
   const name = it.name?.trim()
   const type = name || (it.type as string) || 'other'
   return {
     type,
     typeLabel: name || t(lang, `type_${(it.type as string) || 'other'}`),
     cost1,
-    cost2,
-    agencyQuote: cost1 + cost2,
-    markup,
+    cost2: profit1Amt, // 利润①金额（旧 cost2 列复用）
+    agencyQuote: quoteA, // 报价A（旧 agencyQuote 列复用）
+    markup: 0, // 行级无利润②
     guestPrice,
     notes: it.notes,
   }
@@ -104,7 +106,7 @@ export async function buildPdfModel(opts: {
   itinerary: { days?: RawDay[] }
   quote: {
     items?: (Partial<QuoteLevel> & { notes?: string })[]
-    totals?: { cost1?: number; cost2?: number; markup?: number; guestPrice?: number }
+    totals?: { cost1?: number; profit1?: number; quoteA?: number; profit2Mode?: string; profit2?: number; guestPrice?: number }
   }
   version: PdfVersion
   lang: PdfLang
@@ -127,17 +129,24 @@ export async function buildPdfModel(opts: {
   )
 
   const items = (quote.items ?? []).map((it) => deriveItem(it, lang))
-  const tot = quote.totals ?? {}
+  const tot: any = quote.totals ?? {}
+  const profit2Amt =
+    tot.profit2Mode === 'percent'
+      ? (Number(tot.quoteA) || 0) * (Number(tot.profit2) || 0) / 100
+      : Number(tot.profit2) || 0
   const totals = deriveItem(
     {
       type: 'other',
       cost1: tot.cost1,
-      cost2: tot.cost2,
-      markup: tot.markup,
+      profit1Mode: tot.profit2Mode as any,
+      profit1: tot.profit2,
       guestPrice: tot.guestPrice,
     },
     lang,
   )
+  totals.cost2 = Number(tot.profit1) || 0 // 利润①合计
+  totals.agencyQuote = Number(tot.quoteA) || 0 // 报价A 合计
+  totals.markup = profit2Amt // 利润②金额（合计行）
   totals.typeLabel = t(lang, 'col_totals')
 
   const statusTr = target ? await translateText(statusLabel, target) : statusLabel

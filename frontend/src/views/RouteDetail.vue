@@ -90,7 +90,17 @@ async function onExportPdf() {
         version: data.value.version,
       },
       itinerary: itinerary.value,
-      quote: { items: quoteItems.value, totals: totals.value },
+      quote: {
+        items: quoteItems.value,
+        totals: {
+          cost1: derived.value.cost1,
+          profit1: derived.value.profit1,
+          quoteA: derived.value.quoteA,
+          profit2Mode: profit2Mode.value,
+          profit2: Number(profit2.value) || 0,
+          guestPrice: guestPrice.value,
+        },
+      },
       version: pdfVersion.value,
       lang: pdfLang.value,
       statusLabel: STATUS_LABEL[data.value.statusKey],
@@ -154,7 +164,7 @@ function removeMeal(d: Day, i: number) {
   d.meals.splice(i, 1)
 }
 
-// —— 报价（项目可自定义名称，5 级成本分离）——
+// —— 报价（项目可自定义名称；成本① + 利润1 = 报价A；报价A + 利润2 = 对客价）——
 const QUOTE_TYPE_LABELS: Record<string, string> = {
   vehicle: '包车',
   hotel: '酒店',
@@ -164,7 +174,7 @@ const QUOTE_TYPE_LABELS: Record<string, string> = {
 }
 const quoteItems = ref<QuoteLevel[]>([])
 function newItem(): QuoteLevel {
-  return { name: '', type: 'other', cost1: 0, cost2: 0, markup: 0, guestPrice: 0 }
+  return { name: '', type: 'other', cost1: 0, profit1Mode: 'amount', profit1: 0 }
 }
 function addItem() {
   quoteItems.value.push(newItem())
@@ -172,31 +182,53 @@ function addItem() {
 function removeItem(i: number) {
   quoteItems.value.splice(i, 1)
 }
-function itemGuest(it: QuoteLevel): number {
-  return (Number(it.cost1) || 0) + (Number(it.cost2) || 0) + (Number(it.markup) || 0)
+// 利润折算：金额直接加；百分比按基准（成本①）折算
+function profitToAmount(base: number, mode: string | undefined, value: number | undefined): number {
+  const v = Number(value) || 0
+  return mode === 'percent' ? base * (v / 100) : v
+}
+// 行级 PandaKing 报价A = 成本① + 利润1（元直接加，% 按成本折算）
+function itemQuoteA(it: QuoteLevel): number {
+  const cost1 = Number(it.cost1) || 0
+  const profit1 = Number(it.profit1) || 0
+  return it.profit1Mode === 'percent' ? cost1 * (1 + profit1 / 100) : cost1 + profit1
 }
 function itemName(it: QuoteLevel): string {
   return it.name?.trim() || QUOTE_TYPE_LABELS[it.type || 'other'] || '其他'
 }
-const totals = computed(() => {
-  return quoteItems.value.reduce<{ cost1: number; cost2: number; markup: number; guestPrice: number }>(
-    (acc, it) => {
-      acc.cost1 += Number(it.cost1) || 0
-      acc.cost2 += Number(it.cost2) || 0
-      acc.markup += Number(it.markup) || 0
-      acc.guestPrice += itemGuest(it)
-      return acc
-    },
-    { cost1: 0, cost2: 0, markup: 0, guestPrice: 0 },
-  )
+// 由 items 派生的 PandaKing 层合计（成本① / 利润1 / 报价A）
+const derived = computed<{ cost1: number; profit1: number; quoteA: number }>(() => {
+  const acc = { cost1: 0, profit1: 0, quoteA: 0 }
+  for (const it of quoteItems.value) {
+    const cost1 = Number(it.cost1) || 0
+    acc.cost1 += cost1
+    acc.profit1 += profitToAmount(cost1, it.profit1Mode, it.profit1)
+    acc.quoteA += itemQuoteA(it)
+  }
+  return acc
 })
-// 当前角色可编辑/可见的成本字段
+// 境外旅行社利润2（元/%），作用于报价A 合计 → 对客价
+const profit2Mode = ref<'amount' | 'percent'>('amount')
+const profit2 = ref(0)
+const guestPrice = computed(() => {
+  const quoteA = derived.value.quoteA
+  return profit2Mode.value === 'percent'
+    ? quoteA * (1 + Number(profit2.value) / 100)
+    : quoteA + Number(profit2.value)
+})
+// 当前角色
 const role = computed(() => auth.currentRole)
-const canEditCost = computed(() => role.value === 'pandaking')
-// 旅行社可在报价基础上加价生成对游客报价（成本①/② 由一手填写，旅行社不可改）
-const canEditMarkup = computed(() => role.value === 'pandaking' || role.value === 'agency')
-const showCost1 = computed(() => role.value === 'pandaking' || role.value === 'provincial')
-const showCost2 = computed(() => role.value === 'pandaking')
+const isPk = computed(() => role.value === 'pandaking')
+const isAgency = computed(() => role.value === 'agency')
+const isProv = computed(() => role.value === 'provincial')
+// 可编辑性：一手全编辑；旅行社仅改利润2；省地接社仅改成本①（利润默认 0）
+const canEditCost1 = computed(() => role.value === 'pandaking' || role.value === 'provincial')
+const canEditProfit1 = computed(() => role.value === 'pandaking')
+const canEditProfit2 = computed(() => role.value === 'pandaking' || role.value === 'agency')
+// 列标签：旅行社视角成本列显示 PandaKing「报价A」作为自身成本基线
+const costColLabel = computed(() => (isAgency.value ? '报价A（成本）' : '成本①'))
+const profitColLabel = computed(() => (isAgency.value ? '利润②' : '利润①'))
+const quoteColLabel = computed(() => (isAgency.value ? '对客价' : '报价A'))
 
 // —— 状态流转 ——
 const STATUS_LABEL: Record<RouteStatusKey, string> = {
@@ -340,10 +372,15 @@ async function load() {
       itinerary.value = { days: [newDay(1)] }
     }
     if (v?.quote && typeof v.quote === 'object') {
-      const q = v.quote as { items?: QuoteLevel[] }
+      const q = v.quote as { items?: QuoteLevel[]; totals?: Record<string, unknown> }
       quoteItems.value = (q.items ?? []).map((it) => ({ ...it }))
+      const t: any = q.totals || {}
+      profit2Mode.value = t.profit2Mode === 'percent' ? 'percent' : 'amount'
+      profit2.value = Number(t.profit2) || 0
     } else {
       quoteItems.value = []
+      profit2Mode.value = 'amount'
+      profit2.value = 0
     }
     await loadFeedback()
     await loadInquiries()
@@ -369,15 +406,16 @@ function buildQuote() {
       name: it.name,
       type: it.type,
       cost1: Number(it.cost1) || 0,
-      cost2: Number(it.cost2) || 0,
-      markup: Number(it.markup) || 0,
-      guestPrice: itemGuest(it),
+      profit1Mode: (it.profit1Mode as 'amount' | 'percent') ?? 'amount',
+      profit1: Number(it.profit1) || 0,
     })),
     totals: {
-      cost1: totals.value.cost1,
-      cost2: totals.value.cost2,
-      markup: totals.value.markup,
-      guestPrice: totals.value.guestPrice,
+      cost1: derived.value.cost1,
+      profit1: derived.value.profit1,
+      quoteA: derived.value.quoteA,
+      profit2Mode: profit2Mode.value,
+      profit2: Number(profit2.value) || 0,
+      guestPrice: guestPrice.value,
     },
   }
 }
@@ -604,54 +642,90 @@ async function copyConsoleNotify() {
         </section>
 
         <section class="card">
-          <h3>报价（5 级成本分离）</h3>
-          <p v-if="!canEditCost" class="hint">
-            当前角色（{{ role }}）按权限仅可见部分成本字段；完整编辑请切换为一手 PandaKing。
+          <h3>
+            报价明细
+            <span class="role-tag" :class="role">{{ roleLabel(role) }}</span>
+          </h3>
+          <p v-if="isProv" class="hint">
+            省地接社只需填写<b>成本①</b>（利润默认 0）；成本①由本页直接保存并即时回填一手 PandaKing。左侧行程规划可直接编辑。
           </p>
-          <p v-if="role === 'provincial'" class="hint">
-            省地接社可见自身成本①（只读）。地接成本由一手发起的「成本询价 H5」回填；左侧行程规划可直接编辑保存，参与协作。
+          <p v-else-if="isAgency" class="hint">
+            您看到的「报价A」是一手 PandaKing 的报价（即您的成本），在此加上<b>利润②</b>即生成对客价。
           </p>
           <div class="tbl-wrap">
           <table class="quote">
             <thead>
               <tr>
                 <th>项目</th>
-                <th v-if="showCost1">成本①</th>
-                <th v-if="showCost2">成本②(利润)</th>
-                <th>加价④</th>
-                <th>对客价⑤</th>
+                <th>{{ costColLabel }}</th>
+                <th v-if="!isAgency">{{ profitColLabel }}</th>
+                <th v-if="!isAgency">{{ quoteColLabel }}</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="(it, i) in quoteItems" :key="i">
                 <td>
-                  <input v-model="it.name" :placeholder="QUOTE_TYPE_LABELS[it.type || 'other'] || '项目名称'" />
+                  <input v-model="it.name" :placeholder="QUOTE_TYPE_LABELS[it.type || 'other'] || '项目名称'" :disabled="!isPk" />
                 </td>
-                <td v-if="showCost1">
-                  <input type="number" v-model.number="it.cost1" :disabled="!canEditCost" />
+                <td>
+                  <input
+                    v-if="!isAgency"
+                    type="number"
+                    v-model.number="it.cost1"
+                    :disabled="!canEditCost1"
+                  />
+                  <span v-else class="ro">¥{{ Math.round(itemQuoteA(it)).toLocaleString() }}</span>
                 </td>
-                <td v-if="showCost2">
-                  <input type="number" v-model.number="it.cost2" :disabled="!canEditCost" />
+                <td v-if="!isAgency">
+                  <template v-if="canEditProfit1">
+                    <select v-model="it.profit1Mode" class="mode">
+                      <option value="amount">元</option>
+                      <option value="percent">%</option>
+                    </select>
+                    <input type="number" v-model.number="it.profit1" />
+                  </template>
+                  <span v-else class="ro">¥0</span>
                 </td>
-                <td><input type="number" v-model.number="it.markup" :disabled="!canEditMarkup" /></td>
-                <td class="ro">¥{{ itemGuest(it).toLocaleString() }}</td>
-                <td><button class="btn ghost sm" @click="removeItem(i)">×</button></td>
+                <td v-if="!isAgency" class="ro">¥{{ Math.round(itemQuoteA(it)).toLocaleString() }}</td>
+                <td><button class="btn ghost sm" @click="removeItem(i)" :disabled="!isPk">×</button></td>
               </tr>
             </tbody>
             <tfoot>
               <tr>
                 <td>合计</td>
-                <td v-if="showCost1" class="ro">¥{{ totals.cost1.toLocaleString() }}</td>
-                <td v-if="showCost2" class="ro">¥{{ totals.cost2.toLocaleString() }}</td>
-                <td class="ro">¥{{ totals.markup.toLocaleString() }}</td>
-                <td class="ro total">¥{{ totals.guestPrice.toLocaleString() }}</td>
+                <td class="ro">¥{{ Math.round(isAgency ? derived.quoteA : derived.cost1).toLocaleString() }}</td>
+                <td v-if="!isAgency" class="ro">¥{{ Math.round(derived.profit1).toLocaleString() }}</td>
+                <td v-if="!isAgency" class="ro total">¥{{ Math.round(derived.quoteA).toLocaleString() }}</td>
                 <td></td>
               </tr>
             </tfoot>
           </table>
           </div>
-          <button class="btn" @click="addItem">+ 添加报价项</button>
+          <button class="btn" @click="addItem" :disabled="!isPk">+ 添加报价项</button>
+
+          <!-- 境外旅行社对客价（利润2）：一手可预填，旅行社正式设定 -->
+          <div class="guest-box" v-if="isPk || isAgency">
+            <div class="guest-row">
+              <span class="guest-label">{{ isAgency ? '我的成本（报价A）' : '报价A 合计' }}</span>
+              <span class="ro">¥{{ Math.round(derived.quoteA).toLocaleString() }}</span>
+            </div>
+            <div class="guest-row">
+              <span class="guest-label">{{ isAgency ? '利润②' : '境外旅行社利润②（预览）' }}</span>
+              <select v-model="profit2Mode" :disabled="!canEditProfit2" class="mode">
+                <option value="amount">元</option>
+                <option value="percent">%</option>
+              </select>
+              <input type="number" v-model.number="profit2" :disabled="!canEditProfit2" />
+            </div>
+            <div class="guest-row total">
+              <span class="guest-label">{{ isAgency ? '对客价' : '对客价（含利润②）' }}</span>
+              <span class="ro total">¥{{ Math.round(guestPrice).toLocaleString() }}</span>
+            </div>
+          </div>
+          <p v-if="isPk" class="tip">
+            境外旅行社打开同一页面（角色=旅行社）时，报价A 即为其成本，加利润②生成对客价。agency 与 provincial 价格彼此不可见。
+          </p>
         </section>
       </div>
 
@@ -820,6 +894,18 @@ async function copyConsoleNotify() {
 .quote input, .quote select { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; }
 .quote .ro { font-weight: 600; }
 .quote .total { color: var(--brand); font-size: 15px; }
+.role-tag { display: inline-block; margin-left: 10px; padding: 2px 10px; border-radius: 999px; font-size: 12px; vertical-align: middle; }
+.role-tag.pandaking { background: rgba(200,16,46,.12); color: #c8102e; }
+.role-tag.agency { background: rgba(59,130,246,.12); color: #3b82f6; }
+.role-tag.provincial { background: rgba(16,185,129,.12); color: #10b981; }
+.quote .mode { width: auto; min-width: 56px; display: inline-block; margin-right: 4px; }
+.guest-box { margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--surface); }
+.guest-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+.guest-label { color: var(--muted); font-size: 13px; min-width: 150px; }
+.guest-row.total { border-top: 1px dashed var(--line); padding-top: 8px; margin-top: 8px; }
+.guest-row.total .guest-label { color: var(--ink); font-weight: 600; }
+.guest-box .mode { width: auto; min-width: 56px; }
+.guest-box input[type=number] { width: 140px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 14px; }
 .hint { color: var(--muted); font-size: 13px; }
 .kv { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; }
 .kv div { display: flex; gap: 8px; }

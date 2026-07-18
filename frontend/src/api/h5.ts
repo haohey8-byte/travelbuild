@@ -39,7 +39,7 @@ export async function submitH5CostInquiry(
 // 省地接社协作 H5：保存编辑后的行程并提交成本①（可单独或一起提交）
 export async function editH5ProvincialRoute(
   token: string,
-  payload: { itinerary?: unknown; cost1?: number | null; costItems?: CostInquiryItem[] },
+  payload: { itinerary?: unknown; items?: { name: string; cost1: number }[] },
 ): Promise<{ version: unknown | null; costInquiry: { id: string; status: string; cost1: number | null; costItems?: CostInquiryItem[] }; link: string }> {
   const { data } = await client.post(`/h5/route/${token}/edit`, payload)
   return data

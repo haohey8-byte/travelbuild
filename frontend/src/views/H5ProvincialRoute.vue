@@ -153,15 +153,14 @@ async function onSave() {
   saveOk.value = ''
   notifyText.value = ''
   try {
-    const payload: { itinerary: unknown; cost1?: number; costItems?: { name: string; amount: number }[] } = { itinerary: itinerary.value }
+    const payload: { itinerary: unknown; items?: { name: string; cost1: number }[] } = { itinerary: itinerary.value }
     const items = normalizeCostItems()
     if (!alreadySubmitted.value && items.length > 0) {
-      payload.costItems = items
-      payload.cost1 = totalCost.value
+      payload.items = items.map((it) => ({ name: it.name, cost1: it.amount }))
     }
     await editH5ProvincialRoute(token, payload)
     saveOk.value = '行程与成本①已保存并同步给一手 ✅'
-    if (payload.costItems) alreadySubmitted.value = true
+    if (payload.items) alreadySubmitted.value = true
     if (data.value) {
       const detail = items.length ? `成本①合计 ¥${totalCost.value.toLocaleString()}` : undefined
       const text = collabNotifyText({
