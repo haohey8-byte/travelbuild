@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>路线详情 · 行程 & 报价 高保真原型 v2</title>
+<style>
+  :root{
+    --bg:#F4F5F7; --card:#FFFFFF; --line:#E6E8EB; --ink:#1F2329; --muted:#8A9099;
+    --teal-50:#E6F7F1; --teal-200:#5DCAA5; --teal-600:#0F6E56;
+    --blue-50:#EAF4FC; --blue-200:#85B7EB; --blue-600:#185FA5; --blue-800:#0E3F73;
+    --purple-50:#F1EFFC; --purple-200:#AFA9EC; --purple-600:#534AB7; --purple-800:#3A338A;
+    --amber-50:#FEF6E7; --amber-200:#FAC775; --amber-600:#C8881A; --amber-800:#633806;
+    --green-50:#F1F8E8; --green-200:#97C459; --green-600:#3B6D11; --green-800:#27490B;
+    --red-50:#FCEBEB; --red-200:#F09595; --red-600:#A32D2D; --red-800:#7A1F1F;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);padding:24px;}
+  .page{max-width:1240px;margin:0 auto;}
+  /* 头部 */
+  .head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;}
+  .head .left{display:flex;gap:12px;align-items:flex-start;}
+  .back{width:36px;height:36px;border-radius:9px;border:1px solid var(--line);background:#fff;font-size:18px;cursor:pointer;color:var(--muted);}
+  .head h1{font-size:22px;font-weight:700;}
+  .chips{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;}
+  .chip{background:#fff;border:1px solid var(--line);border-radius:999px;padding:4px 11px;font-size:12px;color:var(--ink);}
+  .chip b{color:var(--muted);font-weight:500;margin-right:4px;}
+  .head .actions{display:flex;gap:10px;align-items:center;}
+  .pill{display:inline-flex;align-items:center;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid transparent;white-space:nowrap;}
+  .st-awaiting_quote{background:var(--blue-50);border-color:var(--blue-200);color:var(--blue-800);}
+  .st-role{background:var(--purple-50);border-color:var(--purple-200);color:var(--purple-800);}
+  .btn{border-radius:8px;padding:9px 15px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid transparent;}
+  .btn-ghost{background:#fff;border-color:var(--line);color:var(--ink);}
+  .btn-primary{background:var(--teal-600);color:#fff;border:none;}
+  /* 两栏 */
+  .cols{display:grid;grid-template-columns:1.25fr 1fr;gap:18px;align-items:start;}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;}
+  .panel-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--line);}
+  .panel-head h2{font-size:16px;font-weight:700;}
+  /* 行程日 */
+  .day{border-bottom:1px solid var(--line);}
+  .day:last-child{border-bottom:none;}
+  .day-row{display:flex;align-items:center;gap:14px;padding:14px 18px;cursor:pointer;}
+  .day-badge{width:40px;height:40px;border-radius:10px;background:var(--teal-50);border:1px solid var(--teal-200);color:var(--teal-600);font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .day-main{flex:1;}
+  .day-title{font-weight:700;font-size:14px;}
+  .day-sub{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;}
+  .tag{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:3px 8px;font-size:11px;color:var(--muted);}
+  .tag b{color:var(--ink);font-weight:600;}
+  .chev{color:var(--muted);font-size:13px;transition:transform .2s;}
+  .chev.open{transform:rotate(180deg);}
+  /* 展开编辑 */
+  .day-edit{padding:4px 18px 20px 72px;background:#FBFCFD;border-top:1px dashed var(--line);}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .field{display:flex;flex-direction:column;gap:5px;}
+  .field.full{grid-column:1/3;}
+  .field label{font-size:12px;color:var(--muted);font-weight:600;}
+  .field input,.field select,.field textarea{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;color:var(--ink);}
+  .field textarea{resize:vertical;min-height:56px;}
+  .edit-bar{display:flex;justify-content:space-between;align-items:center;margin-top:14px;}
+  .edit-bar .del{background:var(--red-50);border:1px solid var(--red-200);color:var(--red-600);border-radius:7px;padding:6px 12px;font-size:12px;cursor:pointer;}
+  .edit-bar .ok{background:var(--teal-600);color:#fff;border:none;border-radius:7px;padding:6px 14px;font-size:12px;cursor:pointer;}
+  /* 底部新增一天 */
+  .add-day{display:flex;padding:14px 18px;border-top:1px solid var(--line);background:#FBFCFD;}
+  .add-day .btn{flex:1;text-align:center;background:var(--teal-50);color:var(--teal-600);border:1px dashed var(--teal-200);}
+  /* 报价表（v2 简化：成本 + 利润 = 报价） */
+  .qtbl{width:100%;border-collapse:collapse;}
+  .qtbl th{font-size:11px;color:var(--muted);font-weight:600;text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);}
+  .qtbl td{padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  .qtbl .proj{font-weight:600;width:24%;}
+  .qtbl .proj input{border:1px solid var(--line);border-radius:7px;padding:7px 8px;font-size:13px;width:100%;background:#fff;}
+  .qtbl .cost{width:20%;}
+  .qtbl .cost input{border:1px solid var(--line);border-radius:7px;padding:7px 8px;font-size:13px;width:100%;background:var(--blue-50);}
+  .qtbl .profit{width:30%;}
+  .profit-wrap{display:flex;gap:6px;align-items:center;}
+  .profit-wrap input{border:1px solid var(--line);border-radius:7px;padding:7px 8px;font-size:13px;width:100%;background:#fff;}
+  .profit-wrap select{border:1px solid var(--line);border-radius:7px;padding:7px 4px;font-size:12px;background:#fff;color:var(--ink);cursor:pointer;}
+  .qtbl .quote{width:20%;}
+  .qtbl .calc{color:var(--teal-600);font-weight:800;font-size:13px;}
+  .qtbl .rm{color:var(--red-200);cursor:pointer;font-weight:700;text-align:center;}
+  .qadd{width:100%;margin-top:10px;background:var(--teal-50);color:var(--teal-600);border:1px dashed var(--teal-200);border-radius:8px;padding:9px;font-size:13px;font-weight:600;cursor:pointer;}
+  .totals{padding:14px 18px;background:#FBFCFD;border-top:1px solid var(--line);}
+  .trow2{display:flex;justify-content:space-between;font-size:13px;padding:5px 0;}
+  .trow2.total{border-top:1px solid var(--line);margin-top:6px;padding-top:10px;font-weight:800;font-size:15px;}
+  .trow2 .v{color:var(--teal-600);}
+  /* 协作卡 */
+  .collab{margin:14px 18px;padding:14px;border:1px solid var(--amber-200);background:var(--amber-50);border-radius:10px;}
+  .collab .ttl{font-size:13px;font-weight:700;color:var(--amber-800);margin-bottom:8px;display:flex;align-items:center;gap:8px;}
+  .collab .body{font-size:12px;color:var(--ink);margin-bottom:10px;}
+  .collab .acts{display:flex;gap:8px;}
+  .collab .acts .btn{font-size:12px;padding:6px 11px;}
+  .savebar{display:flex;gap:10px;padding:14px 18px;border-top:1px solid var(--line);}
+  .savebar .btn{flex:1;text-align:center;}
+  .note{font-size:11px;color:var(--muted);padding:0 18px 16px;line-height:1.6;}
+  .formula{display:inline-block;background:var(--purple-50);color:var(--purple-800);border:1px solid var(--purple-200);border-radius:6px;padding:2px 7px;font-weight:700;font-size:11px;margin:0 2px;}
+</style>
+</head>
+<body>
+<div class="page">
+  <!-- 头部 -->
+  <div class="head">
+    <div class="left">
+      <button class="back">‹</button>
+      <div>
+        <h1>成都 · 九寨沟 7 日定制</h1>
+        <div class="chips">
+          <span class="chip"><b>客户</b>John Smith</span>
+          <span class="chip"><b>国籍</b>美国</span>
+          <span class="chip"><b>人数</b>6 人</span>
+          <span class="chip"><b>出行</b>2026-08-12</span>
+          <span class="chip"><b>旅行社</b>泰旅 A 社</span>
+          <span class="chip"><b>模式</b>自行</span>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <span class="pill st-awaiting_quote">待报价</span>
+      <button class="btn btn-ghost">归档</button>
+      <button class="btn btn-ghost">预览</button>
+    </div>
+  </div>
+
+  <div class="cols">
+    <!-- 左：行程路线 -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>行程路线</h2>
+        <span class="pill st-awaiting_quote" style="font-size:11px;padding:3px 10px;">共 3 天</span>
+      </div>
+
+      <!-- D1 折叠 -->
+      <div class="day">
+        <div class="day-row">
+          <div class="day-badge">D1</div>
+          <div class="day-main">
+            <div class="day-title">成都接机 → 宽窄巷子 → 锦里</div>
+            <div class="day-sub">
+              <span class="tag">📅 08-12</span>
+              <span class="tag"><b>交通</b>包车</span>
+              <span class="tag"><b>住宿</b>成都香格里拉</span>
+              <span class="tag"><b>用餐</b>晚</span>
+            </div>
+          </div>
+          <div class="chev">▾</div>
+        </div>
+      </div>
+
+      <!-- D2 展开 -->
+      <div class="day">
+        <div class="day-row">
+          <div class="day-badge">D2</div>
+          <div class="day-main">
+            <div class="day-title">成都 → 九寨沟（途经叠溪海子）</div>
+            <div class="day-sub">
+              <span class="tag">📅 08-13</span>
+              <span class="tag"><b>交通</b>大巴</span>
+              <span class="tag"><b>住宿</b>九寨沟悦榕庄</span>
+              <span class="tag"><b>用餐</b>早 / 晚</span>
+            </div>
+          </div>
+          <div class="chev open">▾</div>
+        </div>
+        <div class="day-edit">
+          <div class="grid">
+            <div class="field"><label>日期</label><input value="2026-08-13" /></div>
+            <div class="field"><label>当日标题</label><input value="成都 → 九寨沟（途经叠溪海子）" /></div>
+            <div class="field"><label>城市 / 区域</label><input value="成都 → 阿坝州九寨沟县" /></div>
+            <div class="field"><label>交通方式</label>
+              <select><option>大巴</option><option>包车</option><option>高铁</option><option>飞机</option><option>自驾</option></select>
+            </div>
+            <div class="field full"><label>景点 / 活动</label>
+              <textarea>上午成都出发，沿岷江而上；中午抵达叠溪海子午餐；下午抵达九寨沟，入住酒店后自由活动。</textarea>
+            </div>
+            <div class="field"><label>用餐</label>
+              <select><option>早 / 晚</option><option>早 / 午 / 晚</option><option>仅晚</option><option>不含餐</option></select>
+            </div>
+            <div class="field"><label>住宿酒店</label><input value="九寨沟悦榕庄" /></div>
+            <div class="field full"><label>备注</label><input value="车程约 8 小时，建议备晕车药；海拔逐步升高。" /></div>
+          </div>
+          <div class="edit-bar">
+            <button class="del">删除当天</button>
+            <button class="ok">保存当天</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- D3 折叠 -->
+      <div class="day">
+        <div class="day-row">
+          <div class="day-badge">D3</div>
+          <div class="day-main">
+            <div class="day-title">九寨沟一日游（Y 字型三条沟）</div>
+            <div class="day-sub">
+              <span class="tag">📅 08-14</span>
+              <span class="tag"><b>交通</b>景区观光车</span>
+              <span class="tag"><b>住宿</b>九寨沟悦榕庄</span>
+              <span class="tag"><b>用餐</b>早 / 午 / 晚</span>
+            </div>
+          </div>
+          <div class="chev">▾</div>
+        </div>
+      </div>
+
+      <!-- 底部：新增一天（调整点 1） -->
+      <div class="add-day">
+        <button class="btn">＋ 新增一天</button>
+      </div>
+    </div>
+
+    <!-- 右：报价明细（v2 简化逻辑） -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>报价明细</h2>
+        <span class="pill st-role">报价方 · 一手地接社 PandaKing</span>
+      </div>
+
+      <table class="qtbl">
+        <thead>
+          <tr>
+            <th class="proj">项目</th>
+            <th class="cost">成本①</th>
+            <th class="profit">利润（元 / %）</th>
+            <th class="quote">报价</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proj"><input value="包车" /></td>
+            <td class="cost"><input value="8000" /></td>
+            <td class="profit">
+              <div class="profit-wrap"><input value="2000" /><select><option>元</option><option>%</option></select></div>
+            </td>
+            <td class="quote"><span class="calc">¥10,000</span></td>
+            <td class="rm">×</td>
+          </tr>
+          <tr>
+            <td class="proj"><input value="酒店" /></td>
+            <td class="cost"><input value="6000" /></td>
+            <td class="profit">
+              <div class="profit-wrap"><input value="25" /><select><option>%</option><option>元</option></select></div>
+            </td>
+            <td class="quote"><span class="calc">¥7,500</span></td>
+            <td class="rm">×</td>
+          </tr>
+          <tr>
+            <td class="proj"><input value="门票" /></td>
+            <td class="cost"><input value="2400" /></td>
+            <td class="profit">
+              <div class="profit-wrap"><input value="800" /><select><option>元</option><option>%</option></select></div>
+            </td>
+            <td class="quote"><span class="calc">¥3,200</span></td>
+            <td class="rm">×</td>
+          </tr>
+          <tr>
+            <td class="proj"><input value="餐饮" /></td>
+            <td class="cost"><input value="3000" /></td>
+            <td class="profit">
+              <div class="profit-wrap"><input value="1200" /><select><option>元</option><option>%</option></select></div>
+            </td>
+            <td class="quote"><span class="calc">¥4,200</span></td>
+            <td class="rm">×</td>
+          </tr>
+          <tr>
+            <td class="proj"><input value="导游" /></td>
+            <td class="cost"><input value="2000" /></td>
+            <td class="profit">
+              <div class="profit-wrap"><input value="1000" /><select><option>元</option><option>%</option></select></div>
+            </td>
+            <td class="quote"><span class="calc">¥3,000</span></td>
+            <td class="rm">×</td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="padding:0 18px;">
+        <button class="qadd">＋ 添加项目（自定义名称）</button>
+      </div>
+
+      <div class="totals">
+        <div class="trow2"><span>成本①合计</span><span class="v">¥21,400</span></div>
+        <div class="trow2"><span>利润合计</span><span class="v">¥6,500</span></div>
+        <div class="trow2 total"><span>报价合计（→ 境外旅行社）</span><span class="v">¥27,900</span></div>
+      </div>
+
+      <!-- 省地接社协作 -->
+      <div class="collab">
+        <div class="ttl">🔗 省地接社协作 <span class="pill st-awaiting_quote" style="font-size:10px;padding:2px 8px;">待回传</span></div>
+        <div class="body">已向 <b>成都地接社</b> 发起协作，等待成本价回填。回填后自动并入上表「成本①」列。</div>
+        <div class="acts">
+          <button class="btn btn-ghost">复制协作链接</button>
+          <button class="btn btn-primary">应用成本①</button>
+        </div>
+      </div>
+
+      <div class="savebar">
+        <button class="btn btn-ghost">保存草稿</button>
+        <button class="btn btn-primary">保存并通知</button>
+      </div>
+      <div class="note">
+        简单逻辑：<span class="formula">报价 = 成本 + 利润</span>。利润可按 <b>金额（元）</b> 或 <b>比例（%）</b> 填写，报价自动计算。
+        境外旅行社沿用同一公式：<span class="formula">对客价 = 本报价(成本) + 利润</span>。
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
