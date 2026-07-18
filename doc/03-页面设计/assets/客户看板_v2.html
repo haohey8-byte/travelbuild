@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>客户看板 · 高保真原型 v2</title>
+<style>
+  :root{
+    /* 9 色阶设计系统（来自设计文档 §10） */
+    --bg:#F4F5F7; --card:#FFFFFF; --line:#E6E8EB; --ink:#1F2329; --muted:#8A9099;
+    --teal-50:#E6F7F1; --teal-200:#5DCAA5; --teal-600:#0F6E56; --teal-800:#0B5240;
+    --blue-50:#EAF4FC; --blue-200:#85B7EB; --blue-600:#185FA5; --blue-800:#0E3F73;
+    --purple-50:#F1EFFC; --purple-200:#AFA9EC; --purple-600:#534AB7; --purple-800:#3A338A;
+    --amber-50:#FEF6E7; --amber-200:#FAC775; --amber-600:#C8881A; --amber-800:#633806;
+    --green-50:#F1F8E8; --green-200:#97C459; --green-600:#3B6D11; --green-800:#27490B;
+    --red-50:#FCEBEB; --red-200:#F09595; --red-600:#A32D2D; --red-800:#7A1F1F;
+    --coral-50:#FDEFE9; --coral-200:#F0997B; --coral-600:#B5502E; --coral-800:#712B13;
+    --gray-50:#F4F4F2; --gray-200:#B4B2A9; --gray-600:#6B6A64; --gray-800:#444441;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);padding:28px;}
+  .page{max-width:1200px;margin:0 auto;}
+  /* 顶栏 */
+  .topbar{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:18px;}
+  .topbar h1{font-size:24px;font-weight:700;letter-spacing:.5px;}
+  .topbar .sub{color:var(--muted);font-size:13px;margin-top:4px;}
+  .actions{display:flex;gap:10px;}
+  .btn{border-radius:8px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid transparent;}
+  .btn-ghost{background:#fff;border-color:var(--line);color:var(--ink);}
+  .btn-primary{background:var(--teal-600);color:#fff;}
+  /* 统计卡 */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:18px;}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;position:relative;overflow:hidden;}
+  .stat::before{content:"";position:absolute;left:0;top:0;right:0;height:4px;background:var(--gray-200);}
+  .stat.amber::before{background:var(--amber-200);}
+  .stat.red::before{background:var(--red-200);}
+  .stat.green::before{background:var(--green-200);}
+  .stat .label{font-size:13px;color:var(--muted);}
+  .stat .num{font-size:30px;font-weight:800;margin-top:8px;}
+  .stat.amber .num{color:var(--amber-600);}
+  .stat.red .num{color:var(--red-600);}
+  .stat.green .num{color:var(--green-600);}
+  .stat .num .unit{font-size:14px;color:var(--muted);font-weight:600;margin-left:4px;}
+  /* 筛选栏 */
+  .filterbar{display:flex;gap:10px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:14px;flex-wrap:wrap;}
+  .select{appearance:none;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 30px 8px 12px;font-size:13px;color:var(--ink);background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M3 4.5L6 7.5L9 4.5' stroke='%238A9099' stroke-width='1.5' fill='none'/></svg>");background-repeat:no-repeat;background-position:right 10px center;}
+  .search{flex:1;min-width:200px;display:flex;gap:8px;}
+  .search input{flex:1;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;}
+  .search .btn{background:var(--teal-600);color:#fff;border:none;}
+  /* 表格 */
+  .table{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;}
+  .thead,.trow{display:grid;grid-template-columns:2.4fr 1.2fr 1.6fr 1fr 1.1fr;}
+  .thead{background:#FBFBFC;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted);font-weight:600;}
+  .thead>div{padding:12px 16px;}
+  .trow{border-bottom:1px solid var(--line);align-items:center;cursor:pointer;transition:background .15s;}
+  .trow:last-child{border-bottom:none;}
+  .trow:hover{background:#FAFBFC;}
+  .trow>div{padding:12px 16px;font-size:13px;}
+  .cust{display:flex;align-items:center;gap:12px;}
+  .avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;flex-shrink:0;}
+  .cust .name{font-weight:600;font-size:14px;}
+  .cust .meta{color:var(--muted);font-size:12px;margin-top:2px;}
+  .dest .main{font-weight:600;}
+  .dest .sub{color:var(--muted);font-size:12px;margin-top:2px;}
+  /* 标签 */
+  .pill{display:inline-flex;align-items:center;padding:4px 11px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid transparent;}
+  .mode-solo{background:var(--blue-50);border-color:var(--blue-200);color:var(--blue-800);}
+  .mode-collab{background:var(--purple-50);border-color:var(--purple-200);color:var(--purple-800);}
+  .st-consulting{background:var(--gray-50);border-color:var(--gray-200);color:var(--gray-800);}
+  .st-awaiting_pk_confirm,.st-awaiting_agency_revision{background:var(--amber-50);border-color:var(--amber-200);color:var(--amber-800);}
+  .st-awaiting_quote{background:var(--blue-50);border-color:var(--blue-200);color:var(--blue-800);}
+  .st-awaiting_feedback{background:var(--purple-50);border-color:var(--purple-200);color:var(--purple-800);}
+  .st-awaiting_confirm,.st-booked{background:var(--teal-50);border-color:var(--teal-200);color:var(--teal-800);}
+  .st-confirmed{background:var(--green-50);border-color:var(--green-200);color:var(--green-800);}
+  .st-pending_followup{background:var(--red-50);border-color:var(--red-200);color:var(--red-800);}
+  /* 待办 */
+  .todo{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-top:18px;}
+  .todo h2{font-size:16px;margin-bottom:14px;}
+  .todo-item{display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--line);}
+  .todo-item:last-child{border-bottom:none;}
+  .todo-bar{width:4px;align-self:stretch;border-radius:4px;min-height:38px;}
+  .bar-red{background:var(--red-600);}
+  .bar-amber{background:var(--amber-600);}
+  .bar-blue{background:var(--blue-600);}
+  .todo-text{flex:1;font-size:13px;}
+  .todo-text b{color:var(--ink);}
+  .todo .btn{font-size:12px;padding:6px 12px;border-radius:7px;}
+</style>
+</head>
+<body>
+<div class="page">
+  <!-- 顶栏 -->
+  <div class="topbar">
+    <div>
+      <h1>客户看板</h1>
+      <div class="sub">管理所有境外游客的定制行程与报价</div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-ghost">归档历史</button>
+      <button class="btn btn-primary">+ 新建路线</button>
+    </div>
+  </div>
+
+  <!-- 统计卡 -->
+  <div class="stats">
+    <div class="stat"><div class="label">活跃客户</div><div class="num">38</div></div>
+    <div class="stat amber"><div class="label">待报价</div><div class="num">7</div></div>
+    <div class="stat red"><div class="label">待跟进</div><div class="num">3</div></div>
+    <div class="stat green"><div class="label">本月成单</div><div class="num">12</div></div>
+  </div>
+
+  <!-- 筛选栏 -->
+  <div class="filterbar">
+    <select class="select"><option>全部状态</option><option>待报价</option><option>已确认</option><option>已成单</option></select>
+    <select class="select"><option>全部旅行社</option><option>泰旅 A 社</option><option>泰旅 B 社</option></select>
+    <select class="select"><option>全部目的地</option><option>四川</option><option>新疆</option></select>
+    <div class="search">
+      <input placeholder="搜索客户名 / 目的地…" />
+      <button class="btn">搜索</button>
+    </div>
+  </div>
+
+  <!-- 表格 -->
+  <div class="table">
+    <div class="thead">
+      <div>客户</div><div>旅行社</div><div>目的地</div><div>行程模式</div><div>状态</div>
+    </div>
+    <div class="trow">
+      <div class="cust"><div class="avatar" style="background:#85B7EB">J</div><div><div class="name">John Smith</div><div class="meta">美国 · 6人 · 08-12</div></div></div>
+      <div>泰旅 A 社</div>
+      <div class="dest"><div class="main">四川</div><div class="sub">九寨沟 + 毕棚沟</div></div>
+      <div><span class="pill mode-solo">自行</span></div>
+      <div><span class="pill st-awaiting_quote">待报价</span></div>
+    </div>
+    <div class="trow">
+      <div class="cust"><div class="avatar" style="background:#AFA9EC">S</div><div><div class="name">Somchai K.</div><div class="meta">泰国 · 4人 · 08-20</div></div></div>
+      <div>泰旅 B 社</div>
+      <div class="dest"><div class="main">新疆</div><div class="sub">喀纳斯 + 禾木</div></div>
+      <div><span class="pill mode-collab">协作</span></div>
+      <div><span class="pill st-confirmed">已确认</span></div>
+    </div>
+    <div class="trow">
+      <div class="cust"><div class="avatar" style="background:#FAC775;color:#633806">M</div><div><div class="name">Maya P.</div><div class="meta">印度 · 10人 · 09-02</div></div></div>
+      <div>泰旅 A 社</div>
+      <div class="dest"><div class="main">云南</div><div class="sub">大理 + 丽江</div></div>
+      <div><span class="pill mode-solo">自行</span></div>
+      <div><span class="pill st-booked">已成单</span></div>
+    </div>
+    <div class="trow">
+      <div class="cust"><div class="avatar" style="background:#97C459">W</div><div><div class="name">Wichai T.</div><div class="meta">泰国 · 2人 · 08-15</div></div></div>
+      <div>泰旅 B 社</div>
+      <div class="dest"><div class="main">四川</div><div class="sub">稻城亚丁</div></div>
+      <div><span class="pill mode-collab">协作</span></div>
+      <div><span class="pill st-awaiting_feedback">待反馈</span></div>
+    </div>
+    <div class="trow">
+      <div class="cust"><div class="avatar" style="background:#5DCAA5">A</div><div><div class="name">Anna L.</div><div class="meta">德国 · 8人 · 09-10</div></div></div>
+      <div>泰旅 A 社</div>
+      <div class="dest"><div class="main">西藏</div><div class="sub">林芝 + 拉萨</div></div>
+      <div><span class="pill mode-solo">自行</span></div>
+      <div><span class="pill st-pending_followup">待跟进</span></div>
+    </div>
+    <div class="trow">
+      <div class="cust"><div class="avatar" style="background:#F09595;color:#7A1F1F">B</div><div><div class="name">Boon C.</div><div class="meta">马来西亚 · 5人 · 08-28</div></div></div>
+      <div>泰旅 B 社</div>
+      <div class="dest"><div class="main">广西</div><div class="sub">桂林 + 阳朔</div></div>
+      <div><span class="pill mode-collab">协作</span></div>
+      <div><span class="pill st-awaiting_pk_confirm">待一手确认</span></div>
+    </div>
+  </div>
+
+  <!-- 待办 -->
+  <div class="todo">
+    <h2>待办提醒</h2>
+    <div class="todo-item">
+      <div class="todo-bar bar-red"></div>
+      <div class="todo-text"><b>John Smith</b> 的报价已发出 2 天，旅行社未回复</div>
+      <button class="btn btn-ghost">跟进提醒</button>
+    </div>
+    <div class="todo-item">
+      <div class="todo-bar bar-amber"></div>
+      <div class="todo-text"><b>Wichai T.</b> 的行程已分配给省地接社，等待成本价回填</div>
+      <button class="btn btn-ghost">催办</button>
+    </div>
+    <div class="todo-item">
+      <div class="todo-bar bar-blue"></div>
+      <div class="todo-text"><b>Maya P.</b> 的报价快照将于明天过期</div>
+      <button class="btn btn-ghost">续期</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>
