@@ -175,13 +175,15 @@ model RouteShare {
 
 // 协作 H5 反馈（客户/对方在链接内提交的修改意见）
 model RouteFeedback {
-  id        String   @id @default(uuid())
-  routeId   String
-  versionId String?
-  token     String?  // 关联 RouteShare，便于溯源
+  id         String   @id @default(uuid())
+  routeId    String
+  versionId  String?
+  token      String?  // 关联 RouteShare，便于溯源
   authorName String?
-  content   String
-  createdAt DateTime @default(now())
+  authorRole String?  // 提交方角色：pandaking / agency / provincial（协作时间线着色与隔离用）
+  source     String   @default("h5") // h5=协作H5链接反馈；console=控制台提交（agency/provincial 给一手的建议，或一手回传）
+  content    String
+  createdAt  DateTime @default(now())
 }
 
 // 路线备份历史库（一手删除路线时归档快照，便于审计与恢复溯源）

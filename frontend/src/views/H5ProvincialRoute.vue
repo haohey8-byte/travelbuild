@@ -5,7 +5,7 @@ import { fetchH5Route, submitH5Feedback, fetchH5Feedback, editH5ProvincialRoute 
 import { safeName, safeText } from '@/utils/name'
 import { collabNotifyText, copyText } from '@/utils/share'
 import QuoteTable from '@/components/QuoteTable.vue'
-import type { H5Route, RouteFeedbackItem, QuoteLevel } from '@/types'
+import type { H5Route, RouteFeedbackItem, QuoteLevel, RouteStatusKey } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -90,6 +90,19 @@ const pageTitle = computed(() => {
   const who = subject.value
   return who ? `${who} · ${dest} · 省地接社协作` : `${dest} · 省地接社协作`
 })
+
+const STATUS_LABEL: Record<string, string> = {
+  consulting: '咨询中',
+  awaiting_pk_confirm: '待一手确认',
+  awaiting_agency_revision: '待旅行社修订',
+  awaiting_quote: '待报价',
+  awaiting_feedback: '待反馈',
+  awaiting_confirm: '待确认',
+  confirmed: '已确认',
+  booked: '已成单',
+  pending_followup: '待跟进',
+  lost: '已流失',
+}
 
 function fmtTime(s?: string): string {
   if (!s) return ''
@@ -224,10 +237,13 @@ function goHome() {
 
     <div v-else-if="data" class="h5-card">
       <h1 class="h5-title">{{ pageTitle }}</h1>
-      <div class="h5-meta">
-        <span>客户: {{ safeName(data.customerNameCn, data.customerName) || '—' }}</span>
-        <span>人数: {{ data.groupSize }}</span>
-        <span v-if="data.guestPrice != null">对客总价: ¥{{ Number(data.guestPrice).toLocaleString() }}</span>
+      <div class="h5-tags">
+        <span class="tag chip"><b>客户</b>{{ subject || '—' }}</span>
+        <span class="tag chip"><b>目的地</b>{{ destination || '—' }}</span>
+        <span class="tag chip"><b>人数</b>{{ data.groupSize }} 人</span>
+        <span v-if="data.travelDate" class="tag chip"><b>出行</b>{{ data.travelDate }}</span>
+        <span class="tag chip"><b>状态</b>{{ STATUS_LABEL[data.statusKey] || data.statusKey }}</span>
+        <span v-if="data.guestPrice != null" class="tag chip"><b>对客总价</b>¥{{ Number(data.guestPrice).toLocaleString() }}</span>
       </div>
       <p class="hint">
         您正在以<b>省地接社</b>身份协作本路线。可修改下方的城市/景点/住宿/餐饮等当地安排，
@@ -317,7 +333,10 @@ function goHome() {
 .center { text-align: center; padding: 48px 0; color: var(--muted); }
 .h5-card { background: var(--card); border-radius: 14px; padding: 18px; box-shadow: 0 2px 12px rgba(0,0,0,.06); }
 .h5-title { font-size: 20px; margin: 0 0 10px; }
-.h5-meta { display: flex; flex-wrap: wrap; gap: 12px; color: var(--muted); font-size: 13px; }
+.h5-meta { display: none; }
+.h5-tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+.h5-tags .chip { background: #f4f5f7; border: 1px solid #e6e8eb; border-radius: 999px; padding: 4px 11px; font-size: 12px; color: #1f2329; }
+.h5-tags .chip b { color: #8a9099; font-weight: 500; margin-right: 4px; }
 .hint { color: var(--ink); font-size: 14px; line-height: 1.6; margin: 14px 0; }
 .edit-block { margin: 16px 0; border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
 .edit-block.fb { margin-top: 18px; }

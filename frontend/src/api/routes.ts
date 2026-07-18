@@ -60,9 +60,24 @@ export async function routeAction(
   return data
 }
 
-// 反馈记录（H5 链接反馈 + 一手回传反馈），供协作双方查看
+// 反馈记录（H5 链接反馈 + 一手回传反馈 + 控制台建议），供协作双方查看
 export async function fetchRouteFeedback(routeId: string): Promise<RouteFeedbackItem[]> {
   const { data } = await client.get(`/routes/${routeId}/feedback`)
+  return data
+}
+
+// 控制台协作反馈：境外旅行社 / 省地接社 在详情页把建议提交给一手 PandaKing（不触发状态流转）
+export async function submitConsoleFeedback(
+  routeId: string,
+  content: string,
+  authorName?: string,
+  authorRole?: string,
+): Promise<RouteFeedbackItem> {
+  const { data } = await client.post(`/routes/${routeId}/feedback-console`, {
+    content,
+    authorName,
+    authorRole,
+  })
   return data
 }
 

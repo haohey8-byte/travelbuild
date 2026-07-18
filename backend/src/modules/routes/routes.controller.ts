@@ -7,6 +7,7 @@ import { Role } from './role-visibility'
 
 interface AuthUser {
   id: string
+  name?: string
   role: Role
   agencyId: string | null
   level: 'admin' | 'staff'
@@ -113,6 +114,22 @@ export class RoutesController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.svc.pkFeedback(id, body?.feedback, user)
+  }
+
+  // 控制台协作反馈：境外旅行社 / 省地接社 把建议提交给一手（不触发状态流转）
+  @Post(':id/feedback-console')
+  feedbackConsole(
+    @Param('id') id: string,
+    @Body() body: { content?: string; authorName?: string; authorRole?: string },
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.svc.submitConsoleFeedback(
+      id,
+      body?.content ?? '',
+      body?.authorName ?? user.name,
+      body?.authorRole ?? user.role,
+      user,
+    )
   }
 
   // 旅行社修订重交 → 待一手确认

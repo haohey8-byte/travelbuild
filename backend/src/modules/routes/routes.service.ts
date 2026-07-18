@@ -574,7 +574,8 @@ export class RoutesService {
     })
     const h5 = fb.map((f) => ({
       id: f.id,
-      source: 'h5' as const,
+      source: (f.source as 'h5' | 'console') ?? 'h5',
+      authorRole: f.authorRole ?? null,
       authorName: f.authorName,
       content: f.content,
       createdAt: f.createdAt.toISOString(),
@@ -585,6 +586,7 @@ export class RoutesService {
     const consoleFb: {
       id: string
       source: 'console'
+      authorRole: string
       authorName: string
       content: string
       createdAt: string
@@ -593,6 +595,7 @@ export class RoutesService {
       consoleFb.push({
         id: `pk-${latest!.id}`,
         source: 'console',
+        authorRole: 'pandaking',
         authorName: '一手地接社',
         content: pk,
         createdAt: latest!.createdAt.toISOString(),
@@ -602,13 +605,52 @@ export class RoutesService {
   }
 
   // 公开链路：凭 token 读取反馈（H5 页免登录展示历史反馈，避免 401）
+  // 仅返回 H5 链接反馈；控制台内部反馈（agency/provincial→一手 的建议）不向客户公开，避免泄漏
   async getFeedbackByToken(token: string) {
     const share = await this.prisma.routeShare.findUnique({ where: { token } })
     if (!share) throw new NotFoundException('协作链接无效')
     if (share.expiresAt && share.expiresAt.getTime() < Date.now()) {
       throw new NotFoundException('协作链接已过期')
     }
-    return this.getFeedback(share.routeId)
+    const all = await this.getFeedback(share.routeId)
+    return all.filter((f) => f.source !== 'console')
+  }
+
+  // 控制台协作反馈：境外旅行社 / 省地接社 在路线详情页把报价建议 / 成本说明提交给一手 PandaKing。
+  // 与「一手回传反馈」(pkFeedback) 不同，本接口不触发状态流转，仅落反馈记录（协作时间线可见）。
+  async submitConsoleFeedback(
+    routeId: string,
+    content: string,
+    authorName?: string,
+    authorRole?: string,
+    principal?: RoutePrincipal,
+  ) {
+    if (principal) {
+      if (principal.role === 'pandaking') {
+        throw new ForbiddenException('一手请使用「状态流转 → 回传反馈」提交修改意见')
+      }
+      await this.assertVisible(routeId, principal)
+    }
+    if (!content || !content.trim()) throw new BadRequestException('反馈内容不能为空')
+    const latest = await this.latestVersion(routeId)
+    const fb = await this.prisma.routeFeedback.create({
+      data: {
+        routeId,
+        versionId: latest?.id ?? null,
+        authorName: authorName ?? null,
+        authorRole: authorRole ?? null,
+        source: 'console',
+        content,
+      },
+    })
+    return {
+      id: fb.id,
+      source: fb.source,
+      authorRole: fb.authorRole,
+      authorName: fb.authorName,
+      content: fb.content,
+      createdAt: fb.createdAt.toISOString(),
+    }
   }
 
   // 版本历史
