@@ -377,6 +377,8 @@ function buildQuote() {
 async function onSaveDraft() {
   savingDraft.value = true
   actionErr.value = ''
+  actionOk.value = ''
+  notifyTextConsole.value = ''
   try {
     await saveVersion(id, {
       itinerary: itinerary.value,
@@ -384,6 +386,7 @@ async function onSaveDraft() {
       draft: true,
       notify: false,
     })
+    actionOk.value = '草稿已保存'
     await load()
   } catch (e: any) {
     actionErr.value = e?.response?.data?.message || '保存失败'
@@ -396,6 +399,7 @@ async function onSaveNotify() {
   savingNotify.value = true
   actionErr.value = ''
   actionOk.value = ''
+  notifyTextConsole.value = ''
   try {
     const res = (await saveVersion(id, {
       itinerary: itinerary.value,
@@ -435,6 +439,8 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
   }
   doing.value = a.key
   actionErr.value = ''
+  actionOk.value = ''
+  notifyTextConsole.value = ''
   try {
     const note = feedbackNote.value
     const body = a.needNote ? { feedback: note } : undefined
@@ -502,6 +508,8 @@ async function onSubmitSuggestion(who: 'agency' | 'provincial') {
   savingNotify.value = true
   actionErr.value = ''
   actionOk.value = ''
+  notifyTextConsole.value = ''
+  let savedVersion = false
   try {
     // 1) 保存当前编辑（报价加价 / 行程），notify:false → 不生成面向客户的公开 H5 链接
     await saveVersion(id, {
@@ -510,41 +518,55 @@ async function onSubmitSuggestion(who: 'agency' | 'provincial') {
       draft: false,
       notify: false,
     })
-    // 2) 提交反馈建议给一手（允许为空：仅保存工作也可）
-    const note = consSuggestion.value.trim()
-    if (note) {
+    savedVersion = true
+  } catch (e: any) {
+    actionErr.value = e?.response?.data?.message || '保存失败，请重试'
+    savingNotify.value = false
+    return
+  }
+
+  // 2) 提交反馈建议给一手（允许为空：仅保存工作也可）
+  const note = consSuggestion.value.trim()
+  if (note) {
+    try {
       await submitConsoleFeedback(
         id,
         note,
         user.value?.name || roleLabel(role.value),
         who,
       )
+    } catch (e: any) {
+      actionErr.value = e?.response?.data?.message || '建议已保存，但通知一手失败'
+      savingNotify.value = false
+      return
     }
-    // 3) 生成通知文案（指向一手控制台路线链接）并复制到剪贴板，便于粘贴到微信群同步一手
-    const base = (import.meta.env.VITE_BASE as string) || '/'
-    const link = `${window.location.origin}${base}#/routes/${id}`
-    const text = collabNotifyText({
-      kind: note ? 'feedback' : 'plan',
-      eventLabel: who === 'agency' ? '提交报价建议' : '提交成本建议',
-      subject: safeName(data.value?.customerNameCn, data.value?.customerName),
-      destination: safeText(data.value?.destination),
-      authorName: user.value?.name || roleLabel(role.value),
-      detail: note || undefined,
-      url: link,
-    })
-    notifyTextConsole.value = text
+  }
+
+  // 3) 生成通知文案（指向一手控制台路线链接）并复制到剪贴板，便于粘贴到微信群同步一手
+  const base = (import.meta.env.VITE_BASE as string) || '/'
+  const link = `${window.location.origin}${base}#/routes/${id}`
+  const text = collabNotifyText({
+    kind: note ? 'feedback' : 'plan',
+    eventLabel: who === 'agency' ? '提交报价建议' : '提交成本建议',
+    subject: safeName(data.value?.customerNameCn, data.value?.customerName),
+    destination: safeText(data.value?.destination),
+    authorName: user.value?.name || roleLabel(role.value),
+    detail: note || undefined,
+    url: link,
+  })
+  notifyTextConsole.value = text
+  consSuggestion.value = ''
+  try {
     const ok = await copyText(text)
     actionOk.value = ok
       ? '已保存并通知一手（通知文案已复制，去微信粘贴到协作群即可 ✅）'
-      : '已保存并通知一手，请手动复制下方文案发到协作群'
-    consSuggestion.value = ''
-    await load()
-    await loadFeedback()
-  } catch (e: any) {
-    actionErr.value = e?.response?.data?.message || '提交失败'
-  } finally {
-    savingNotify.value = false
+      : '已保存并通知一手，请手动复制下方文案'
+  } catch {
+    actionOk.value = '已保存并通知一手，请手动复制下方文案'
   }
+  await load()
+  await loadFeedback()
+  savingNotify.value = false
 }
 async function copyConsoleNotify() {
   if (!notifyTextConsole.value) return
@@ -865,6 +887,13 @@ const collabEvents = computed<CollabEvent[]>(() => {
               </button>
             </template>
           </div>
+
+          <!-- 操作结果：紧邻保存栏，让反馈立即可见（不再只放页面顶部） -->
+          <div class="action-feedback">
+            <p v-if="actionErr" class="err msg">{{ actionErr }}</p>
+            <p v-if="actionOk" class="ok msg">{{ actionOk }}</p>
+          </div>
+
           <div v-if="shareLink" class="share-row">
             <a :href="shareLink" target="_blank" class="link">打开协作 H5 ↗</a>
             <button class="d-btn ghost sm" @click="copyShareLink">复制链接</button>
@@ -1198,6 +1227,8 @@ const collabEvents = computed<CollabEvent[]>(() => {
 .link-box input { flex: 1; background: #fff; border: 1px solid var(--k-line); border-radius: 8px; padding: 8px 10px; font-size: 12px; color: var(--k-muted); box-sizing: border-box; }
 .savebar { display: flex; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--k-line); }
 .savebar .d-btn { flex: 1; text-align: center; }
+.action-feedback { padding: 0 18px 8px; }
+.action-feedback .msg { margin: 0 0 6px; }
 .suggest { padding: 14px 18px 0; }
 .suggest label { display: block; font-size: 12px; color: var(--k-muted); font-weight: 600; margin-bottom: 6px; }
 .suggest textarea { width: 100%; background: #fff; border: 1px solid var(--k-line); border-radius: 8px; padding: 8px 10px; font-size: 13px; font-family: inherit; color: var(--k-ink); resize: vertical; min-height: 48px; box-sizing: border-box; }
