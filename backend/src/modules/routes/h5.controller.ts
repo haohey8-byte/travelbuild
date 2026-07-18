@@ -52,7 +52,7 @@ export class H5Controller {
   @Post('route/:token/edit')
   editRoute(
     @Param('token') token: string,
-    @Body() body: { itinerary?: unknown; cost1?: number | null; costItems?: { name?: string; amount?: number }[] },
+    @Body() body: { itinerary?: unknown; items?: { name?: string; cost1?: number; profit1Mode?: string; profit1?: number; type?: string }[] },
   ) {
     return this.svc.provincialEdit(token, body)
   }

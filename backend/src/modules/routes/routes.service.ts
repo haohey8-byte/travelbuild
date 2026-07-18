@@ -9,7 +9,7 @@ import {
   StatusKey,
   validateStateMachine,
 } from './state-machine'
-import { hideCostsForRole, maskQuotePublic, Role } from './role-visibility'
+import { hideCostsForRole, maskQuotePublic, recalcQuote, Role } from './role-visibility'
 import { Prisma } from '@prisma/client'
 
 // 路线操作主体（来自 JWT 守卫注入）：用于机构间物理隔绝
@@ -253,11 +253,14 @@ export class RoutesService {
     //  - 旅行社(agency)：仅可改自身加价 markup，成本①/②取自上一版（旅行社不可见）并重算对客总价
     //  - 省地接社(provincial)：不写价，价格保留上一版（地接成本由成本询价闭环回填）
     const latest = await this.latestVersion(routeId)
-    let quote: any = input.quote ?? null
+    let quote: any = null
     if (role === 'agency') {
       quote = this.mergeAgencyQuote(latest, input.quote)
     } else if (role === 'provincial') {
       quote = (latest?.quote as object) ?? null
+    } else {
+      // 一手 PandaKing：全量写入并据 items 重算 totals
+      quote = recalcQuote(input.quote)
     }
     const version = await this.prisma.routeVersion.create({
       data: {
@@ -345,11 +348,12 @@ export class RoutesService {
     return { token: shareRecord.token, link: `/h5/provincial-route/${shareRecord.token}` }
   }
 
-  // 省地接社凭令牌在 H5 内编辑分配给自己的行程并填写成本①；
-  // 行程与成本可分别或一起提交，成本①支持按项目自定义名称填写并自动合计。
+  // 省地接社凭令牌在协作页编辑行程并填写成本①（利润默认0）；
+  // 提交后成本①直接写回 routeVersion.quote.items（同名仅更新 cost1、保留 PandaKing 已设利润1，异名追加），
+  // 同时记录到 costInquiry（供协作记录区与省地接社视角回显）。三角色共用同一报价页，仅角色隔离。
   async provincialEdit(
     token: string,
-    input: { itinerary?: unknown; cost1?: number | null; costItems?: { name?: string; amount?: number }[] },
+    input: { itinerary?: unknown; items?: { name?: string; cost1?: number; profit1Mode?: string; profit1?: number; type?: string }[] },
   ) {
     const share = await this.prisma.routeShare.findUnique({
       where: { token },
@@ -362,10 +366,37 @@ export class RoutesService {
       throw new NotFoundException('协作链接未关联成本询价')
     }
 
-    const updates: any[] = []
+    const incomingItems = Array.isArray(input.items) ? input.items : []
+    // 省地接社仅提交成本①；利润1 强制 0（地接不填利润）
+    const provincialItems = incomingItems.map((it) => ({
+      name: String((it as any)?.name || '').trim() || '未命名',
+      type: (it as any)?.type || 'other',
+      cost1: Math.max(0, Number((it as any)?.cost1) || 0),
+      profit1Mode: 'amount' as 'amount' | 'percent',
+      profit1: 0,
+    }))
+
+    const latest = await this.latestVersion(share.routeId)
+    const baseQuote = (latest?.quote as { items?: any[]; totals?: any }) || { items: [], totals: {} }
+    const baseItems: any[] = Array.isArray(baseQuote.items)
+      ? JSON.parse(JSON.stringify(baseQuote.items))
+      : []
+
+    // 合并省地接社成本①：同名项仅更新 cost1（保留 PandaKing 已设利润1），异名项追加（利润1=0）
+    const mergedItems = baseItems
+    for (const it of provincialItems) {
+      if (!it.cost1) continue
+      const existing = mergedItems.find((x) => String(x.name || '').trim() === it.name)
+      if (existing) {
+        existing.cost1 = it.cost1
+      } else {
+        mergedItems.push({ ...it })
+      }
+    }
+
     let version: any = null
+    const recalcBase = { items: mergedItems, totals: { ...(baseQuote.totals || {}) } }
     if (input.itinerary != null) {
-      const latest = await this.latestVersion(share.routeId)
       const next = (parseInt(String(latest?.version).replace(/\D/g, '') || '0', 10)) + 1
       version = await this.prisma.routeVersion.create({
         data: {
@@ -373,43 +404,26 @@ export class RoutesService {
           version: `v${next}`,
           draft: false,
           itinerary: input.itinerary as object,
-          quote: (latest?.quote as object) ?? null,
+          quote: recalcQuote(recalcBase) as object,
         },
+      })
+    } else if (provincialItems.length > 0 && latest?.id) {
+      // 仅提交成本：更新最新版本的成本①
+      await this.prisma.routeVersion.update({
+        where: { id: latest.id },
+        data: { quote: recalcQuote(recalcBase) as object },
       })
     }
 
+    // 同步成本询价记录（供协作记录区展示与省地接社视角回显）
     let costInquiryUpdated: any = null
-    const shouldSubmitCost = input.costItems != null || input.cost1 != null
-    if (shouldSubmitCost) {
-      if (share.costInquiry.status === 'submitted') {
-        throw new ConflictException('该询价已提交，不可重复提交')
-      }
-
-      let costItems: { name: string; amount: number }[] = []
-      if (Array.isArray(input.costItems) && input.costItems.length > 0) {
-        costItems = input.costItems.map((it) => ({
-          name: String(it?.name || '').trim() || '未命名',
-          amount: Math.max(0, Number(it?.amount) || 0),
-        }))
-      }
-      let cost1 = Number(input.cost1 ?? 0)
-      if (costItems.length > 0) {
-        cost1 = costItems.reduce((s, it) => s + it.amount, 0)
-      } else if (input.cost1 != null) {
-        if (Number.isNaN(cost1) || cost1 < 0) {
-          throw new BadRequestException('成本①合计必须为非负数字')
-        }
-        costItems = [{ name: '地接成本', amount: cost1 }]
-      }
-      if (Number.isNaN(cost1) || cost1 < 0) {
-        throw new BadRequestException('成本①合计必须为非负数字')
-      }
-
+    if (provincialItems.length > 0) {
+      const cost1 = provincialItems.reduce((s, it) => s + it.cost1, 0)
       costInquiryUpdated = await this.prisma.costInquiry.update({
         where: { id: share.costInquiry.id },
         data: {
           cost1: new Prisma.Decimal(cost1),
-          costItems: costItems as Prisma.InputJsonValue,
+          costItems: provincialItems.map((it) => ({ name: it.name, amount: it.cost1 })) as Prisma.InputJsonValue,
           status: 'submitted',
         },
       })
@@ -422,19 +436,20 @@ export class RoutesService {
             id: costInquiryUpdated.id,
             status: costInquiryUpdated.status,
             cost1: Number(costInquiryUpdated.cost1),
-            costItems: costInquiryUpdated.costItems as { name: string; amount: number }[] | undefined,
+            costItems: costInquiryUpdated.costItems,
           }
         : {
             id: share.costInquiry.id,
             status: share.costInquiry.status,
             cost1: share.costInquiry.cost1 != null ? Number(share.costInquiry.cost1) : null,
-            costItems: share.costInquiry.costItems as { name: string; amount: number }[] | undefined,
+            costItems: share.costInquiry.costItems,
           },
       link: `/h5/provincial-route/${share.token}`,
     }
   }
 
-  // 旅行社仅可调整自身加价(markup)，成本①/②取自上一版（旅行社不可见），并重算对客总价
+  // 旅行社仅可调整自身利润2（元/%），成本①与 PandaKing 利润1 取自上一版（旅行社不可见），
+  // 并以 PandaKing 报价A 作为自身成本基线，重算对客总价 guestPrice。
   private mergeAgencyQuote(prev: { quote?: unknown } | null | undefined, incoming: unknown): unknown {
     if (!incoming) return incoming
     const inQ = incoming as { items?: any[]; totals?: any }
@@ -442,18 +457,21 @@ export class RoutesService {
     const items = (inQ.items ?? []).map((it: any, i: number) => {
       const p = prevItems[i] || {}
       const cost1 = Number(p.cost1) || 0
-      const cost2 = Number(p.cost2) || 0
-      const markup = Number(it.markup) || 0
-      return { ...it, cost1, cost2, markup, guestPrice: cost1 + cost2 + markup }
+      const profit1Mode = (p.profit1Mode as 'amount' | 'percent') ?? 'amount'
+      const profit1 = Number(p.profit1) || 0
+      return { ...it, cost1, profit1Mode, profit1 }
     })
-    const totals = {
-      cost1: items.reduce((s: number, it: any) => s + (Number(it.cost1) || 0), 0),
-      cost2: items.reduce((s: number, it: any) => s + (Number(it.cost2) || 0), 0),
-      markup: items.reduce((s: number, it: any) => s + (Number(it.markup) || 0), 0),
-      guestPrice: 0,
+    const profit2Mode = (inQ.totals?.profit2Mode as 'amount' | 'percent') ?? 'amount'
+    const profit2 = Number(inQ.totals?.profit2) || 0
+    const quote = {
+      items,
+      totals: {
+        ...(inQ.totals || {}),
+        profit2Mode,
+        profit2,
+      },
     }
-    totals.guestPrice = totals.cost1 + totals.cost2 + totals.markup
-    return { ...inQ, items, totals }
+    return recalcQuote(quote)
   }
 
   // 协作 H5 视图（按 token 解析，报价仅暴露对客总价）
@@ -487,9 +505,9 @@ export class RoutesService {
           })
         )[0] ?? null
     }
-    const masked = maskQuotePublic(version?.quote ?? null) as {
-      items?: { type?: string; guestPrice?: number }[]
-      totals?: { guestPrice?: number }
+    const visible = hideCostsForRole(version?.quote ?? null, share.role) as {
+      items?: any[]
+      totals?: any
     }
     const result: any = {
       token,
@@ -504,9 +522,9 @@ export class RoutesService {
       role: share.role,
       // 无版本时给空行程，省地接社可新建第一天（provincialEdit 会自动落 v1）
       itinerary: version?.itinerary ?? { days: [] },
-      // 净化报价：仅含对客报价（guestPrice），不含成本①/②/加价（公开 H5 不泄漏内部成本）
-      quote: masked,
-      guestPrice: masked?.totals?.guestPrice ?? null,
+      // 按角色字段级可见性返回报价：省地接社仅见成本①、旅行社见报价A、一手全见
+      quote: visible,
+      guestPrice: (visible?.totals?.guestPrice as number) ?? null,
     }
     if (share.role === 'provincial' && share.costInquiry) {
       result.costInquiry = {

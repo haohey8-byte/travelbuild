@@ -31,18 +31,38 @@ export interface Route {
   versions?: RouteVersion[]
 }
 
+// 利润表示方式：金额(元) 或 百分比(%)。百分比以「成本」为基准。
+export type ProfitMode = 'amount' | 'percent'
+
+// 报价单行 —— 对齐 v2 原型「项目 | 成本① | 利润(元/%) | 报价A」
+//   cost1   = 省地接社成本①（地接可填，PandaKing 可见）
+//   profit1 = PandaKing 利润（元或%，默认 0；省地接社只填成本、利润留 0）
+//   quoteA  = 行级 PandaKing 报价 = profit1Mode==='percent' ? cost1*(1+profit1/100) : cost1+profit1
 export interface QuoteLevel {
   name?: string // 项目名称可自定义（优先显示）
   type?: 'vehicle' | 'hotel' | 'ticket' | 'meal' | 'other' // 旧数据/快速分类保留
   cost1?: number // 省地接社成本（成本①）
-  cost2?: number // 一手利润（成本②）
-  markup?: number // 旅行社加价
-  guestPrice?: number // = cost1 + cost2 + markup（对客总价）
+  profit1Mode?: ProfitMode // PandaKing 利润表示（金额/百分比），默认 amount
+  profit1?: number // PandaKing 利润值（默认 0）
+  quoteA?: number // 行级 PandaKing 报价（可选冗余存储，便于前端直接显示）
+  // 兼容旧字段（历史数据迁移期保留）：cost2=旧一手利润、markup=旧旅行社加价
+  cost2?: number
+  markup?: number
 }
 
+// 报价合计 —— 两层数据流
+//   PandaKing 层：quoteA = Σ(cost1 + profit1)
+//   境外旅行社层：guestPrice = profit2Mode==='percent' ? quoteA*(1+profit2/100) : quoteA+profit2
 export interface Quote {
   items: QuoteLevel[]
-  totals: { cost1?: number; cost2?: number; markup?: number; guestPrice?: number }
+  totals: {
+    cost1?: number // Σ 成本①
+    profit1?: number // Σ PandaKing 利润合计（折算成金额）
+    quoteA?: number // PandaKing 报价合计 = cost1 + profit1
+    profit2Mode?: ProfitMode // 境外旅行社利润表示（金额/百分比），默认 amount
+    profit2?: number // 境外旅行社利润值（默认 0）
+    guestPrice?: number // 对客价 = quoteA + profit2
+  }
 }
 
 export interface RouteVersion {

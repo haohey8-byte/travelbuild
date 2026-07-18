@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service'
 import { Prisma } from '@prisma/client'
 import type { AuthPrincipal } from '../auth/auth.service'
+import { recalcQuote } from './role-visibility'
 
 // 成本询价（一手 ↔ 省地接社）—— 对应 doc/04-接口契约/H5协作链接.md 与 PRD「成本询价」
 // 流程：一手在路线详情发起询价（指定省地接社机构）→ 生成 H5 链接（复制发微信群）
@@ -149,44 +150,47 @@ export class CostInquiryService {
       costItems.push({ name: '省地接社成本①', amount: Number(ci.cost1) })
     }
 
-    // 合并：同名项目更新 cost1，否则追加新项目
+    // 合并：同名项目更新 cost1（省地接社只回填成本①，利润1 归零），
+    // 否则追加新项目（cost1=amount，profit1=0）。保留原行的 name/type。
     for (const { name, amount } of costItems) {
       if (!amount) continue
       const existing = items.find((it) => String(it.name || '').trim() === name)
       if (existing) {
         existing.cost1 = amount
-        existing.guestPrice = amount + (Number(existing.cost2) || 0) + (Number(existing.markup) || 0)
+        existing.profit1Mode = 'amount'
+        existing.profit1 = 0
       } else {
         items.push({
           name,
           type: 'other',
           cost1: amount,
-          cost2: 0,
-          markup: 0,
-          guestPrice: amount,
+          profit1Mode: 'amount',
+          profit1: 0,
         })
       }
     }
 
-    // 从 items 重新计算 totals，保证 totals 和 items 永远一致
-    const totals = {
-      cost1: items.reduce((sum, it) => sum + (Number(it.cost1) || 0), 0),
-      cost2: items.reduce((sum, it) => sum + (Number(it.cost2) || 0), 0),
-      markup: items.reduce((sum, it) => sum + (Number(it.markup) || 0), 0),
-      guestPrice: items.reduce((sum, it) => sum + (Number(it.guestPrice) || 0), 0),
+    // 从 items 重算 totals（cost1/profit1/quoteA/profit2/guestPrice 永远一致），
+    // 保留上一次旅行社利润2 设置（applyToRoute 只动省地接社成本①）
+    const prevTotals = (q.totals || {}) as Record<string, number | string>
+    const newQuote: { items: any[]; totals: Record<string, unknown> } = {
+      items,
+      totals: { ...prevTotals },
     }
-
-    const newQuote = { ...q, items, totals }
+    const recalced = recalcQuote(newQuote) as {
+      items: any[]
+      totals: { cost1?: number; profit1?: number; quoteA?: number; guestPrice?: number }
+    }
     await this.prisma.routeVersion.update({
       where: { id: latest.id },
-      data: { quote: newQuote as object },
+      data: { quote: recalced as object },
     })
 
     return {
       ok: true,
       routeId: ci.routeId,
       versionId: latest.id,
-      cost1: totals.cost1,
+      cost1: recalced.totals?.cost1 ?? 0,
       costItems,
     }
   }
