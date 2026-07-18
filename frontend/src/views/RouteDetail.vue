@@ -24,7 +24,7 @@ import {
   copyText,
   provincialRouteH5Url,
 } from '@/utils/share'
-import type { Route, RouteStatusKey, QuoteLevel, RouteFeedbackItem, Agency, CostInquiry } from '@/types'
+import type { Route, RouteVersion, RouteStatusKey, QuoteLevel, RouteFeedbackItem, Agency, CostInquiry } from '@/types'
 import { buildPdfModel, type PdfModel } from '@/utils/pdf-model'
 import { calcDerived, calcGuestPrice } from '@/utils/quote'
 import { generatePdf } from '@/utils/pdf-export'
@@ -151,6 +151,32 @@ const itinerary = ref<{ days: Day[] }>({ days: [newDay(1)] })
 function newDay(n: number): Day {
   return { day: n, city: '', spots: [''], hotel: '', meals: [''] }
 }
+
+// 选择「当前有效版本」：优先用含真实行程/报价内容的最新版本，避免空保存把详情页变成空白
+function pickCurrentVersion(versions?: RouteVersion[]) {
+  if (!versions || versions.length === 0) return undefined
+  const meaningful = versions.find((v) => {
+    if (!v) return false
+    const it = v.itinerary
+    if (it && typeof it === 'object') {
+      const days = Array.isArray((it as { days?: Day[] }).days) ? ((it as { days?: Day[] }).days as Day[]) : []
+      if (
+        days.some(
+          (d) =>
+            (d.city && String(d.city).trim()) ||
+            (d.spots && d.spots.some((s) => s && String(s).trim())) ||
+            (d.hotel && String(d.hotel).trim()) ||
+            (d.meals && d.meals.some((m) => m && String(m).trim())),
+        )
+      )
+        return true
+    }
+    const q = v.quote
+    if (q && typeof q === 'object' && Array.isArray((q as { items?: unknown[] }).items) && (q as { items?: unknown[] }).items!.length > 0) return true
+    return false
+  })
+  return meaningful ?? versions[0]
+}
 function addDay() {
   itinerary.value.days.push(newDay(itinerary.value.days.length + 1))
 }
@@ -224,7 +250,7 @@ const feedbackNote = ref('')
 // 回传反馈后自动生成的通知文案（带主题+建议+H5链接），便于粘贴到微信同步一手
 const notifyTextConsole = ref('')
 
-const versionLabel = computed(() => data.value?.versions?.[0]?.version ?? 'v1')
+const versionLabel = computed(() => pickCurrentVersion(data.value?.versions)?.version ?? 'v1')
 
 // —— 省地接社协作（一手） ——
 const costInquiries = ref<CostInquiry[]>([])
@@ -317,7 +343,7 @@ async function load() {
     await loadProvincialAgencies()
     const r = await fetchRoute(id)
     data.value = r
-    const v = r.versions?.[0]
+    const v = pickCurrentVersion(r.versions)
     if (v?.itinerary && typeof v.itinerary === 'object') {
       const it = v.itinerary as { days?: Day[] }
       itinerary.value = { days: it.days?.length ? it.days : [newDay(1)] }
