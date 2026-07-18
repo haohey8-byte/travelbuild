@@ -1,0 +1,7 @@
+# 复制为 .env.local 并填入真实值（.env.local 已被 .gitignore 忽略，绝不入库）
+# 用法： cp deploy/env-local.example deploy/.env.local
+export COS_SECRET_ID="<你的腾讯云 SecretId>"
+export COS_SECRET_KEY="<你的腾讯云 SecretKey>"
+export TCB_ENV_ID="travelbuild-d3gvgvtj70ddd0e43"
+export HTTPS_PROXY="http://127.0.0.1:7897/"
+export HTTP_PROXY="http://127.0.0.1:7897/"
