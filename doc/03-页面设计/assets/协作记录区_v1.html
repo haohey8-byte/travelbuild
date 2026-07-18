@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>协作记录区 高保真原型 v1</title>
+<style>
+  :root{
+    --bg:#F4F5F7; --card:#FFFFFF; --line:#E6E8EB; --ink:#1F2329; --muted:#8A9099;
+    --teal-50:#E6F7F1; --teal-200:#5DCAA5; --teal-600:#0F6E56;
+    --blue-50:#EAF4FC; --blue-200:#85B7EB; --blue-600:#185FA5; --blue-800:#0E3F73;
+    --purple-50:#F1EFFC; --purple-200:#AFA9EC; --purple-600:#534AB7; --purple-800:#3A338A;
+    --amber-50:#FEF6E7; --amber-200:#FAC775; --amber-600:#C8881A; --amber-800:#633806;
+    --green-50:#F1F8E8; --green-200:#97C459; --green-600:#3B6D11; --green-800:#27490B;
+    --red-50:#FCEBEB; --red-200:#F09595; --red-600:#A32D2D; --red-800:#7A1F1F;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);padding:24px;}
+  .page{max-width:1100px;margin:0 auto;}
+  .head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+  .head h1{font-size:20px;font-weight:700;}
+  .head .sub{font-size:12px;color:var(--muted);margin-top:4px;}
+  .pill{display:inline-flex;align-items:center;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid transparent;}
+  .st-done{background:var(--green-50);border-color:var(--green-200);color:var(--green-800);}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px;}
+  .panel h2{font-size:15px;font-weight:700;margin-bottom:14px;}
+  /* 数据流 banner */
+  .flow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap;}
+  .node{flex:1;min-width:150px;border-radius:11px;padding:12px 14px;border:1px solid var(--line);}
+  .node .role{font-size:11px;font-weight:700;margin-bottom:6px;}
+  .node .amt{font-size:17px;font-weight:800;}
+  .node .lbl{font-size:11px;color:var(--muted);margin-top:3px;}
+  .node.prov{background:var(--blue-50);border-color:var(--blue-200);}
+  .node.prov .role{color:var(--blue-800);}
+  .node.prov .amt{color:var(--blue-800);}
+  .node.pk{background:var(--teal-50);border-color:var(--teal-200);}
+  .node.pk .role{color:var(--teal-600);}
+  .node.pk .amt{color:var(--teal-600);}
+  .node.ag{background:var(--purple-50);border-color:var(--purple-200);}
+  .node.ag .role{color:var(--purple-800);}
+  .node.ag .amt{color:var(--purple-800);}
+  .arrow{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 10px;min-width:120px;}
+  .arrow .line{color:var(--muted);font-size:18px;line-height:1;font-weight:700;}
+  .arrow .cap{font-size:10px;color:var(--muted);margin-top:3px;text-align:center;font-weight:600;}
+  /* 时间线 */
+  .tl{position:relative;padding-left:8px;}
+  .ev{display:flex;gap:14px;padding:12px 0;border-bottom:1px solid var(--line);}
+  .ev:last-child{border-bottom:none;}
+  .ev .time{width:128px;flex-shrink:0;}
+  .ev .time .d{font-size:12px;font-weight:700;}
+  .ev .time .t{font-size:11px;color:var(--muted);}
+  .ev .body{flex:1;}
+  .ev .actor{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;margin-bottom:4px;}
+  .dot{width:8px;height:8px;border-radius:50%;}
+  .dot.prov{background:var(--blue-600);}
+  .dot.pk{background:var(--teal-600);}
+  .dot.ag{background:var(--purple-600);}
+  .ev .act{font-size:13px;color:var(--ink);line-height:1.5;}
+  .ev .act b{font-weight:700;}
+  .ev .meta{margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .tag{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:3px 8px;font-size:11px;color:var(--muted);}
+  .tag b{color:var(--ink);font-weight:600;}
+  .cb{font-size:10px;font-weight:700;border-radius:5px;padding:2px 7px;}
+  .cb.prov2pk{background:var(--blue-50);color:var(--blue-800);border:1px solid var(--blue-200);}
+  .cb.pk2ag{background:var(--purple-50);color:var(--purple-800);border:1px solid var(--purple-200);}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="head">
+    <div>
+      <h1>协作记录</h1>
+      <div class="sub">成都 · 九寨沟 7 日定制 · John Smith · 泰旅 A 社</div>
+    </div>
+    <span class="pill st-done">链路完成</span>
+  </div>
+
+  <!-- 数据流：两条回调 -->
+  <div class="panel">
+    <h2>价格回调链路</h2>
+    <div class="flow">
+      <div class="node prov">
+        <div class="role">省地接社 填报</div>
+        <div class="amt">¥21,400</div>
+        <div class="lbl">成本①（按项目）</div>
+      </div>
+      <div class="arrow">
+        <div class="line">──▶</div>
+        <div class="cap">回填</div>
+      </div>
+      <div class="node pk">
+        <div class="role">PandaKing 成本①</div>
+        <div class="amt">¥21,400</div>
+        <div class="lbl">+ 利润 ¥6,500</div>
+      </div>
+      <div class="arrow">
+        <div class="line">──▶</div>
+        <div class="cap">报价 A</div>
+      </div>
+      <div class="node ag">
+        <div class="role">境外旅行社 成本</div>
+        <div class="amt">¥27,900</div>
+        <div class="lbl">+ 利润 → 对客价</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 时间线 -->
+  <div class="panel">
+    <h2>协作时间线</h2>
+    <div class="tl">
+      <div class="ev">
+        <div class="time"><div class="d">2026-07-15</div><div class="t">10:20</div></div>
+        <div class="body">
+          <div class="actor"><span class="dot pk"></span>PandaKing</div>
+          <div class="act">发起协作，邀请 <b>成都地接社</b> 回填成本明细。</div>
+          <div class="meta"><span class="tag">状态 <b>已发送</b></span></div>
+        </div>
+      </div>
+      <div class="ev">
+        <div class="time"><div class="d">2026-07-15</div><div class="t">14:05</div></div>
+        <div class="body">
+          <div class="actor"><span class="dot prov"></span>成都地接社</div>
+          <div class="act">回填成本①：<b>5 项</b>，合计 <b>¥21,400</b>（包车/酒店/门票/餐饮/导游）。</div>
+          <div class="meta"><span class="tag">状态 <b>已提交</b></span><span class="cb prov2pk">回填 PandaKing 成本①</span></div>
+        </div>
+      </div>
+      <div class="ev">
+        <div class="time"><div class="d">2026-07-15</div><div class="t">15:30</div></div>
+        <div class="body">
+          <div class="actor"><span class="dot pk"></span>PandaKing</div>
+          <div class="act">应用成本①，生成 <b>报价 A ¥27,900</b>（利润 ¥6,500，利润率约 30%）。</div>
+          <div class="meta"><span class="tag">状态 <b>已应用</b></span></div>
+        </div>
+      </div>
+      <div class="ev">
+        <div class="time"><div class="d">2026-07-15</div><div class="t">16:00</div></div>
+        <div class="body">
+          <div class="actor"><span class="dot pk"></span>PandaKing</div>
+          <div class="act">发送报价 A → <b>境外旅行社（泰旅 A 社）</b>。</div>
+          <div class="meta"><span class="tag">状态 <b>已发送</b></span><span class="cb pk2ag">回调 境外旅行社 成本</span></div>
+        </div>
+      </div>
+      <div class="ev">
+        <div class="time"><div class="d">2026-07-16</div><div class="t">09:10</div></div>
+        <div class="body">
+          <div class="actor"><span class="dot ag"></span>泰旅 A 社</div>
+          <div class="act">回填利润，生成 <b>对客价 ¥31,185</b>（利润率约 12%）。</div>
+          <div class="meta"><span class="tag">状态 <b>已生成对客价</b></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
