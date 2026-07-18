@@ -733,13 +733,6 @@ const collabEvents = computed<CollabEvent[]>(() => {
       <div ref="pdfWrap" class="pdf-offscreen" aria-hidden="true">
         <RoutePdf v-if="pdfModel" :model="pdfModel" />
       </div>
-      <div v-if="notifyTextConsole" class="fb-notify">
-        <div class="fb-notify-head">
-          <span>📋 通知文案（去微信粘贴到协作群）</span>
-          <button class="d-btn ghost sm" @click="copyConsoleNotify">再复制</button>
-        </div>
-        <pre class="fb-notify-text">{{ notifyTextConsole }}</pre>
-      </div>
 
       <!-- 分段切换 -->
       <div class="seg">
@@ -875,6 +868,15 @@ const collabEvents = computed<CollabEvent[]>(() => {
           <div v-if="shareLink" class="share-row">
             <a :href="shareLink" target="_blank" class="link">打开协作 H5 ↗</a>
             <button class="d-btn ghost sm" @click="copyShareLink">复制链接</button>
+          </div>
+
+          <!-- 操作结果：通知文案，放在报价面板内以保持操作顺序一致（编辑报价 → 保存/提交 → 复制通知文案） -->
+          <div v-if="notifyTextConsole" class="fb-notify">
+            <div class="fb-notify-head">
+              <span>📋 通知文案（去微信粘贴到协作群）</span>
+              <button class="d-btn ghost sm" @click="copyConsoleNotify">再复制</button>
+            </div>
+            <pre class="fb-notify-text">{{ notifyTextConsole }}</pre>
           </div>
 
           <div class="note">
@@ -1134,7 +1136,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
 .muted { color: var(--k-muted); font-size: 13px; }
 .link { color: var(--blue-600); text-decoration: none; font-size: 13px; font-weight: 600; }
 
-.fb-notify { margin: 10px 0; border: 1px solid var(--teal-200); border-radius: 10px; padding: 10px 12px; background: var(--teal-50); }
+.fb-notify { margin: 10px 18px; border: 1px solid var(--teal-200); border-radius: 10px; padding: 10px 12px; background: var(--teal-50); }
 .fb-notify-head { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--teal-600); font-weight: 600; }
 .fb-notify-head .d-btn { margin-left: auto; }
 .fb-notify-text { margin: 8px 0 0; white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.6; color: var(--k-ink); font-family: inherit; }
