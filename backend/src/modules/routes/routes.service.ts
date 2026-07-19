@@ -507,23 +507,32 @@ export class RoutesService {
 
   // 旅行社仅可调整自身利润2（元/%），成本①与 PandaKing 利润1 取自上一版（旅行社不可见），
   // 并以 PandaKing 报价A 作为自身成本基线，重算对客总价 guestPrice。
+  // ⚠️ 关键：旅行社 H5 保存时只回传 profit2（items 为空），必须保留上一版 items，
+  // 否则 recalcQuote 会因 items 为空把 quoteA 重算为 0，破坏「报价A=成本基线」的稳定传递。
   private mergeAgencyQuote(prev: { quote?: unknown } | null | undefined, incoming: unknown): unknown {
     if (!incoming) return incoming
     const inQ = incoming as { items?: any[]; totals?: any }
-    const prevItems = Array.isArray((prev as any)?.quote?.items) ? (prev as any).quote.items : []
-    const items = (inQ.items ?? []).map((it: any, i: number) => {
-      const p = prevItems[i] || {}
-      const cost1 = Number(p.cost1) || 0
-      const profit1Mode = (p.profit1Mode as 'amount' | 'percent') ?? 'amount'
-      const profit1 = Number(p.profit1) || 0
-      return { ...it, cost1, profit1Mode, profit1 }
-    })
-    const profit2Mode = (inQ.totals?.profit2Mode as 'amount' | 'percent') ?? 'amount'
+    const prevQuote = (prev as any)?.quote ?? {}
+    const prevItems: any[] = Array.isArray(prevQuote.items) ? prevQuote.items : []
+    const prevTotals = (prevQuote.totals ?? {}) as { profit2Mode?: 'amount' | 'percent'; profit2?: number }
+    // 旅行社未回传 items（H5 仅发 profit2）→ 沿用上一版 items，确保 quoteA 恒等于 PandaKing 报价A
+    const items = Array.isArray(inQ.items) && inQ.items.length
+      ? inQ.items.map((it: any, i: number) => {
+          const p = prevItems[i] || {}
+          return {
+            ...it,
+            cost1: Number(p.cost1) || 0,
+            profit1Mode: (p.profit1Mode as 'amount' | 'percent') ?? 'amount',
+            profit1: Number(p.profit1) || 0,
+          }
+        })
+      : prevItems
+    const profit2Mode = (inQ.totals?.profit2Mode as 'amount' | 'percent') ?? prevTotals.profit2Mode ?? 'amount'
     const profit2 = Number(inQ.totals?.profit2) || 0
     const quote = {
       items,
       totals: {
-        ...(inQ.totals || {}),
+        ...(prevTotals as object),
         profit2Mode,
         profit2,
       },
@@ -603,12 +612,18 @@ export class RoutesService {
     if (!content || !content.trim()) throw new BadRequestException('反馈内容不能为空')
     const share = await this.prisma.routeShare.findUnique({ where: { token } })
     if (!share) throw new NotFoundException('协作链接无效')
+    // 反馈隔离：H5 链接反馈按 share.role 标记发送方角色（agency/provincial），
+    // 接收方恒为 PandaKing（枢纽）。agency↔provincial 互不通信，读取时据此过滤。
     const fb = await this.prisma.routeFeedback.create({
       data: {
         routeId: share.routeId,
         versionId: share.versionId,
         token,
         authorName: authorName ?? null,
+        // 公开(对客)链接的客户反馈不归入任何内部角色(authorRole=null)，
+        // 避免客户反馈泄漏到 agency/provincial 视图；角色链接(旅行社/省地接社)按 share.role 标记。
+        authorRole: share.public ? null : (share.role ?? null),
+        source: 'h5',
         content,
       },
     })
@@ -621,10 +636,18 @@ export class RoutesService {
   }
 
   // 反馈记录（协作双方可见）：H5 链接提交的反馈 + 一手「回传反馈」(写在最新版本 itinerary.pkFeedback)
+  // 角色隔离：agency 仅见 agency↔PandaKing 反馈；provincial 仅见 provincial↔PandaKing 反馈；
+  // PandaKing 为枢纽，可见全部。所有协作均以 PandaKing 为接收方，故按 authorRole 过滤即可隔离两路叶子角色。
+  private feedbackRoleWhere(role?: Role) {
+    if (!role || role === 'pandaking') return {}
+    if (role === 'agency') return { authorRole: { in: ['agency', 'pandaking'] } }
+    if (role === 'provincial') return { authorRole: { in: ['provincial', 'pandaking'] } }
+    return {}
+  }
   async getFeedback(routeId: string, principal?: RoutePrincipal) {
     if (principal) await this.assertVisible(routeId, principal)
     const fb = await this.prisma.routeFeedback.findMany({
-      where: { routeId },
+      where: { routeId, ...this.feedbackRoleWhere(principal?.role) },
       orderBy: { createdAt: 'asc' },
     })
     const h5 = fb.map((f) => ({
@@ -660,15 +683,32 @@ export class RoutesService {
   }
 
   // 公开链路：凭 token 读取反馈（H5 页免登录展示历史反馈，避免 401）
-  // 仅返回 H5 链接反馈；控制台内部反馈（agency/provincial→一手 的建议）不向客户公开，避免泄漏
+  // 仅返回本链接角色可见的 H5 反馈（不含控制台内部反馈），并按 share.role 隔离，
+  // 杜绝 agency 看到 provincial 的反馈（反之亦然）。
   async getFeedbackByToken(token: string) {
     const share = await this.prisma.routeShare.findUnique({ where: { token } })
     if (!share) throw new NotFoundException('协作链接无效')
     if (share.expiresAt && share.expiresAt.getTime() < Date.now()) {
       throw new NotFoundException('协作链接已过期')
     }
-    const all = await this.getFeedback(share.routeId)
-    return all.filter((f) => f.source !== 'console')
+    // 公开(对客)链接：面向终端客户。客户反馈 authorRole 存为 null（不归入任何内部角色），
+    // 故客户视图仅显示「一手 PandaKing 的回复」+「本链接客户自己提交的反馈(token 匹配)」，
+    // 彻底杜绝客户看到 agency/provincial 内部反馈，也杜绝客户反馈泄漏到 agency/provincial 视图。
+    const fbWhere = share.public
+      ? { OR: [{ authorRole: 'pandaking' }, { token: share.token }] }
+      : this.feedbackRoleWhere(share.role)
+    const fb = await this.prisma.routeFeedback.findMany({
+      where: { routeId: share.routeId, source: 'h5', ...fbWhere },
+      orderBy: { createdAt: 'asc' },
+    })
+    return fb.map((f) => ({
+      id: f.id,
+      source: (f.source as 'h5' | 'console') ?? 'h5',
+      authorRole: f.authorRole ?? null,
+      authorName: f.authorName,
+      content: f.content,
+      createdAt: f.createdAt.toISOString(),
+    }))
   }
 
   // 控制台协作反馈：境外旅行社 / 省地接社 在路线详情页把报价建议 / 成本说明提交给一手 PandaKing。
