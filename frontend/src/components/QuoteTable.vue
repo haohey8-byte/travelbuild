@@ -2,7 +2,7 @@
 // 报价明细表（共用组件）：一手 / 境外旅行社 / 省地接社 共用同一套价格页面。
 // - pandaking：全编辑（成本① + 利润①=报价A + 利润②=对客价）
 // - agency：   只读报价A 作为自身成本，可改利润②生成对客价
-// - provincial：仅填成本①（利润锁 0）；手机/PC 同页
+// - provincial：仅填成本①（利润列隐藏）；手机/PC 同页
 // 与后端 role-visibility.ts 的字段级可见性一一对应。
 import { computed } from 'vue'
 import type { QuoteLevel, ProfitMode } from '@/types'
@@ -32,10 +32,11 @@ const isProv = computed(() => props.role === 'provincial')
 const canEditCost1 = computed(() => (isPk.value || isProv.value) && !props.readOnly)
 const canEditProfit1 = computed(() => isPk.value && !props.readOnly)
 const canEditProfit2 = computed(() => (isPk.value || isAgency.value) && !props.readOnly)
+const canEditName = computed(() => (isPk.value || isProv.value) && !props.readOnly)
 const canAdd = computed(() => (isPk.value || isProv.value) && !props.readOnly)
 
 const costColLabel = computed(() => (isAgency.value ? '报价A（成本）' : '成本①'))
-const profitColLabel = computed(() => (isAgency.value ? '利润②' : '利润①'))
+const profitColLabel = computed(() => '利润')
 const quoteColLabel = computed(() => (isAgency.value ? '对客价' : '报价A'))
 
 const derived = computed(() => calcDerived(items.value))
@@ -60,8 +61,8 @@ function removeItem(i: number) {
           <tr>
             <th>项目</th>
             <th>{{ costColLabel }}</th>
-            <th v-if="!isAgency">利润①</th>
-            <th v-if="!isAgency">{{ quoteColLabel }}</th>
+            <th v-if="isPk || isAgency">{{ profitColLabel }}</th>
+            <th v-if="isPk || isAgency">{{ quoteColLabel }}</th>
             <th></th>
           </tr>
         </thead>
@@ -71,7 +72,7 @@ function removeItem(i: number) {
               <input
                 v-model="it.name"
                 :placeholder="QUOTE_TYPE_LABELS[it.type || 'other'] || '项目名称'"
-                :disabled="!isPk"
+                :disabled="!canEditName"
               />
             </td>
             <td>
@@ -83,7 +84,7 @@ function removeItem(i: number) {
               />
               <span v-else class="ro">¥{{ Math.round(itemQuoteA(it)).toLocaleString() }}</span>
             </td>
-            <td v-if="!isAgency">
+            <td v-if="isPk || isAgency">
               <template v-if="canEditProfit1">
                 <select v-model="it.profit1Mode" class="mode">
                   <option value="amount">元</option>
@@ -93,7 +94,7 @@ function removeItem(i: number) {
               </template>
               <span v-else class="ro">¥0</span>
             </td>
-            <td v-if="!isAgency" class="ro">¥{{ Math.round(itemQuoteA(it)).toLocaleString() }}</td>
+            <td v-if="isPk || isAgency" class="ro">¥{{ Math.round(itemQuoteA(it)).toLocaleString() }}</td>
             <td>
               <button class="btn ghost sm" @click="removeItem(i)" :disabled="!canAdd">×</button>
             </td>
@@ -103,8 +104,8 @@ function removeItem(i: number) {
           <tr>
             <td>合计</td>
             <td class="ro">¥{{ Math.round(isAgency ? derived.quoteA : derived.cost1).toLocaleString() }}</td>
-            <td v-if="!isAgency" class="ro">¥{{ Math.round(derived.profit1).toLocaleString() }}</td>
-            <td v-if="!isAgency" class="ro total">¥{{ Math.round(derived.quoteA).toLocaleString() }}</td>
+            <td v-if="isPk || isAgency" class="ro">¥{{ Math.round(derived.profit1).toLocaleString() }}</td>
+            <td v-if="isPk || isAgency" class="ro total">¥{{ Math.round(derived.quoteA).toLocaleString() }}</td>
             <td></td>
           </tr>
         </tfoot>
@@ -112,14 +113,14 @@ function removeItem(i: number) {
     </div>
     <button class="btn" @click="addItem" :disabled="!canAdd">+ 添加报价项</button>
 
-    <!-- 境外旅行社对客价（利润2）：一手可预填，旅行社正式设定 -->
-    <div class="guest-box" v-if="isPk || isAgency">
+    <!-- 境外旅行社对客价（利润2）：仅旅行社视角显示；PandaKing 不应见利润②与对客价（其内部利润率保密，对客价须由旅行社加完利润② 后才有意义） -->
+    <div class="guest-box" v-if="isAgency">
       <div class="guest-row">
-        <span class="guest-label">{{ isAgency ? '我的成本（报价A）' : '报价A 合计' }}</span>
+        <span class="guest-label">我的成本（报价A）</span>
         <span class="ro">¥{{ Math.round(derived.quoteA).toLocaleString() }}</span>
       </div>
       <div class="guest-row">
-        <span class="guest-label">{{ isAgency ? '利润②' : '境外旅行社利润②（预览）' }}</span>
+        <span class="guest-label">利润</span>
         <select v-model="profit2Mode" :disabled="!canEditProfit2" class="mode">
           <option value="amount">元</option>
           <option value="percent">%</option>
@@ -127,7 +128,7 @@ function removeItem(i: number) {
         <input type="number" v-model.number="profit2" :disabled="!canEditProfit2" />
       </div>
       <div class="guest-row total">
-        <span class="guest-label">{{ isAgency ? '对客价' : '对客价（含利润②）' }}</span>
+        <span class="guest-label">对客价</span>
         <span class="ro total">¥{{ Math.round(guestPrice).toLocaleString() }}</span>
       </div>
     </div>

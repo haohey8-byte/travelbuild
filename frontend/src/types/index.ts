@@ -145,9 +145,15 @@ export interface H5Route {
   itinerary: Record<string, unknown>
   guestPrice: number | null
   // 净化报价：仅含对客报价（guestPrice），不含成本①/②/加价（公开 H5 不泄漏内部成本）
+  // 旅行社视角（role=agency）下 totals 还会返回 quoteA/profit2Mode/profit2，便于 H5 旅行社视图加利润②
   quote?: {
-    items?: { name?: string; type?: string; guestPrice: number | null }[]
-    totals?: { guestPrice: number | null }
+    items?: { name?: string; type?: string; cost1?: number; guestPrice?: number | null }[]
+    totals?: {
+      guestPrice?: number | null
+      quoteA?: number
+      profit2Mode?: 'amount' | 'percent'
+      profit2?: number
+    }
   } | null
   // 仅省地接社协作 H5 返回
   costInquiry?: {

@@ -192,3 +192,90 @@ onSubmitHandoff()
 - 路线已关联省地接社时，一手点「保存并通知」→ 复制到剪贴板的是**可编辑的省地接社协作链接**，省地接社打开即可编辑行程与成本①，不再出现"只读+空白"。
 - 无论先点「发起协作」还是先点「保存并通知」，同一 route+省地接社始终对应**唯一**协作链接与成本询价记录。
 
+---
+
+## 12. 新一轮问题论证（v0.9.13 候选）—— 用户报告 3 个问题
+
+> 用户诉求原文：① 省地接社作为协作方，可自由编辑项目名称（如 7座车、9座车、酒店）；② 省地接社作为协作方，利润项不显示、不用填写（目前默认 0、不可编辑，不如直接不显示更友好），直接填成本价格即可；③ 省地接社打开页面填写回传说明后点保存，提示"保存失败"。
+> 纪律：先论证产品逻辑，确认后再改代码；任何不确定不猜。
+
+### 12.1 问题 1：省地接社无法编辑「项目名称」
+
+- **现象**：省地接社打开协作页，成本①表的「项目」输入框 disabled，无法改名（如 7座车/9座车/酒店）。
+- **根因（100% 锁定）**：`frontend/src/components/QuoteTable.vue` 第 71–75 行
+  `<input v-model="it.name" :disabled="!isPk" />`。省地接社 `isProv=true` → `isPk=false` → `!isPk=true` → 输入框禁用。该 disabled 把「项目名」编辑权仅留一手，违背 PRD「省地接社可自由编辑项目」与本次诉求。
+- **产品逻辑论证**：
+  - 成本①是**省地接社自己报的当地资源价**，项目名称（车型/酒店档位/门票类型）天然由地接定义，一手只关心汇总与利润①，无需抢占命名。
+  - `agency`（境外旅行社）视图以「报价A」为自身成本基线、不改一手项目，**不应**编辑项目名。
+  - 结论：编辑权 = 一手 + 省地接社；agency 仍 disabled。
+- **修复方案（待确认）**：新增 `canEditName = (isPk || isProv) && !readOnly`，`:disabled="!canEditName"`。省地接社 `role="provincial"` 且 `readOnly` 默认 false → 可编辑。
+
+### 12.2 问题 2：省地接社成本表冗余显示「利润① / 报价A」
+
+- **现象**：省地接社页成本①表仍显示「利润①（¥0）」与「报价A」两列，利润锁 0 不可编辑。用户认为不如直接隐藏更友好。
+- **根因（100% 锁定）**：`QuoteTable.vue` 第 63–64 行表头、第 86–96 行单元格、第 106–107 行 tfoot 合计，均用 `v-if="!isAgency"` 控制利润①/报价A 列显隐。对省地接社（`!isAgency=true`）仍显示这两列。这与 `backend/src/modules/routes/role-visibility.ts` 第 112–119 行「provincial 仅见 cost1」隔离规则以及 PRD 隔离矩阵冲突——纯属 UI 冗余，且会误导地接以为要填利润。
+- **产品逻辑论证**：
+  - 省地接社视角只需「项目 + 成本① + 合计」。利润①/报价A 是一手内部价与对客价，对地接无意义且违反隔离。
+  - 隐藏后更聚焦、更不易误填；`agency` 仍显示（报价A=自身成本基线），`pandaking` 全显示。
+  - 结论：利润①/报价A 列显隐条件由 `!isAgency` 改为「仅 pandaking 与 agency 可见」= `isPk || isAgency`（即 **provincial 隐藏**）。
+- **修复方案（待确认）**：所有利润①/报价A 相关 `v-if="!isAgency"`（表头 2 处、单元格 2 处、tfoot 2 处）统一改为 `v-if="isPk || isAgency"`。省地接社列布局变为：`项目 | 成本① | (×)`；合计行：`合计 | 成本①合计 | (×列占位)`。
+
+### 12.3 问题 3：省地接社点「保存并回传一手」提示"保存失败"
+
+- **现象**：省地接社填回传说明后点保存，前端 `saveErr = '保存失败'`（`H5ProvincialRoute.vue` 第 229 行 `e?.response?.data?.message || '保存失败'` 兜底）。
+- **静态分析已排除的路径**：
+  1. **422 守卫 `share.costInquiry==null`**：页面能加载即 `costInquiry` 已关联 → 排除。
+  2. **路由/URL 不匹配 / 代理吞 POST**：前端 `api/client.ts` `baseURL='/api'` → `POST /api/h5/route/:token/edit`；后端 `@Controller('h5') @Post('route/:token/edit')`。**页面加载（同路径 GET）正常** → POST 同样到达后端，路径/代理非根因（已排除 SPA 回源重写吞 POST 的假设）。
+  3. **`recalcQuote` 抛错**：`role-visibility.ts` 中 `recalcQuote` 为纯计算、不抛错 → 排除。
+  4. **版本号冲突**：`latestVersion` 取 `createdAt desc` 最新一条，`next=max数字+1`，正常不冲突 → 排除。
+- **根因（待定，需实测报错）**：失败发生在 `provincialEdit`（`routes.service.ts` 第 411 行）的**写库路径**（GET 不写库故正常）。候选：
+  - `routeVersion.create` / `routeVersion.update` / `costInquiry.update` 触发 Prisma 约束异常（如 P2025 记录不存在、字段缺失、唯一冲突）。
+  - 注意：`onSubmitHandoff` 始终带 `itinerary`（`payload.itinerary = itinerary.value`），故 `input.itinerary != null` 恒真 → 每次保存都 `routeVersion.create`（新建版本 vN）；多轮回传持续新建版本。若某轮 `latest.id` 失效（并发/软删）会 P2025。
+- **待用户提供（不猜测）**：浏览器 DevTools → Network → 点保存后 `edit` 请求的 **Response body**（含 `statusCode` / `message` / `error`），或 CloudBase 后端运行日志中的报错堆栈。拿到后精准修复。
+
+### 12.4 待确认决策（未擅自改动）
+
+| # | 决策点 | 推荐 |
+|---|---|---|
+| 1 | 省地接社可否编辑项目名 | 可（problem 1 修复） |
+| 2 | 省地接社是否隐藏利润①/报价A 列 | 隐藏（problem 2 修复） |
+| 3 | 问题 3「保存失败」修复 | 待用户提供实际报错后再改 |
+
+### 12.5 修复实施（问题 1 + 问题 2，2026-07-19 已改代码，待构建验证）
+
+**决策（用户拍板，2026-07-19）**：问题 1+2 按推荐全修；问题 3 等用户提供实际报错后单独处理。
+
+**改动清单 `frontend/src/components/QuoteTable.vue`**：
+- 新增 `canEditName = (isPk || isProv) && !readOnly`；项目名输入框 `:disabled="!isPk"` → `:disabled="!canEditName"`。**省地接社可编辑项目名**，`agency` 仍禁用。
+- 利润①/报价A 列（表头 2 处、tbody 2 处、tfoot 2 处，共 6 处 `v-if="!isAgency"`）统一改为 `v-if="isPk || isAgency"`。**省地接社隐藏利润①/报价A 列**，仅见「项目 | 成本① | 删除」；`agency` 仍显示报价A（成本基线），`pandaking` 全显示。
+- 成本①列（`<input v-if="!isAgency" v-model.number="it.cost1">`）保持不变：省地接社/一手见可编辑成本输入，agency 见只读 quoteA 基线。
+- 顶部注释 `provincial：仅填成本①（利润锁 0）` → `（利润列隐藏）`。
+
+**改动清单 `frontend/src/views/H5ProvincialRoute.vue`**：
+- 成本①区注释与提示文案去掉「利润默认 0」（列已隐藏，措辞同步准确化）。
+
+**验证**：`npm run build`（含 `vue-tsc` 类型检查）✅ 已跑通（8.44s，零错误；仅 RoutePdf 大 chunk 历史告警，与本改动无关）。
+**部署**：本会话 CloudBase 凭证（TCB_ENV_ID/COS_SECRET_ID）缺失，未能自动推送；需用户在含凭证环境执行 `bash deploy/deploy.sh`（或控制台重传 dist）后，省地接社强刷（Ctrl+F5）实测。
+
+**修复后省地接社视图**：成本①表 = `项目(可编辑) | 成本①(可编辑) | ×(可删除)` + 合计行 `合计 | 成本①合计 | ×列占位`；无利润①/报价A 冗余列。
+
+### 12.6 问题 3「保存失败」根因分析与诊断增强（2026-07-19）
+
+**现象**：省地接社页填写回传说明后点「保存并回传一手」，提示 `保存失败`（前端兜底文案 `e?.response?.data?.message || '保存失败'`）。
+
+**静态排查（已逐条排除，均非根因）**：
+1. ❌ CORS：`backend/src/main.ts` `app.enableCors()` 已开启；前端 `baseURL='/api'` 与 `setGlobalPrefix('api')` 前缀一致 → GET 与 POST 同源可达，POST 不会因预检被拦。
+2. ❌ 路由/前缀：GET `/h5/route/:token`（页面能加载）+ POST `/h5/route/:token/edit` 同属 `H5Controller`，前缀与代理一致。
+3. ❌ 422 守卫（`协作链接未关联成本询价`）：页面能加载即说明 `share.role==='provincial'` 且 `share.costInquiry!=null` 均成立，不会触发。
+4. ❌ Prisma 列类型：`routeVersion.itinerary Json` / `quote Json?` / `costInquiry.cost1 Decimal` 与写入值完全匹配，`new Prisma.Decimal(...)` 正确。
+5. ❌ `recalcQuote` / `hideCostsForRole`：纯计算，不抛错；`serializeVersion` 仅调 `hideCostsForRole`。
+6. ❌ 版本号冲突：`latestVersion` 取 `createdAt desc` 最新一条，`parseInt(version.replace(/\D/g,''))+1` 正常递增，不触发唯一约束冲突。
+
+**关键推断**：`保存失败` 仅当 `e?.response?.data?.message` 为假值时出现 → 即响应**不是 NestJS JSON**（无 `message`）。两种可能：
+- (A) **请求根本无响应**（`e.response==null`）：被 CORS 预检或 `/api` 代理拦截（但 CORS 已开，故更可能是代理路径/方法问题）。
+- (B) **响应是 HTML 字符串**（`typeof data==='string'`）：极可能是 **CloudBase 静态托管 SPA 回源重写 `/* → /index.html` 吞掉了这条更深的 POST**，而 GET 因路径/缓存命中未被吞。
+
+**已落实的修复（诊断增强，非猜根因）**：`H5ProvincialRoute.vue:228` 的 catch 改为自诊断——按 `resp==null` / `typeof data==='string'` / `data.message` 三种情况给出精确中文提示（含「疑似被静态托管回源重写拦截，检查 /api 代理是否覆盖 POST」），并在 console 打印完整 error。用户强刷后再次保存即可看到真实失败原因，无需再抓 Network。
+
+**待用户实测确认（纪律：不猜）**：省地接社链接 Ctrl+F5 强刷 → 点保存 → 页面会直接显示具体原因（HTTP 状态码 / 是否 HTML / 是否无响应）。据此再定修复（若为代理吞 POST，则去 CloudBase 控制台确认 `/api` 代理规则覆盖该 POST 路径；若为具体后端异常再对症改 `provincialEdit`）。
+

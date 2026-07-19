@@ -70,6 +70,7 @@ async function onSubmit() {
         eventLabel: '回传了成本询价',
         subject: subject.value,
         destination: destination.value,
+        travelDate: data.value?.route.travelDate,
         authorName: '省地接社',
         detail: `成本① ¥${Number(cost1.value).toLocaleString()}`,
         url: window.location.href,

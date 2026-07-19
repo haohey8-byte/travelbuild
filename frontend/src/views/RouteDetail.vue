@@ -19,6 +19,7 @@ import { safeName, safeText } from '@/utils/name'
 import {
   shareH5Url,
   shareH5Caption,
+  agencyH5Url,
   collabNotifyText,
   roleLabel,
   copyText,
@@ -31,6 +32,7 @@ import { generatePdf } from '@/utils/pdf-export'
 import { PDF_LANG_OPTIONS, PDF_VERSION_LABEL, type PdfLang, type PdfVersion } from '@/utils/pdf-i18n'
 import RoutePdf from '@/components/RoutePdf.vue'
 import QuoteTable from '@/components/QuoteTable.vue'
+import NotifyDialog from '@/components/NotifyDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -47,9 +49,14 @@ const actionOk = ref('')
 const savingDraft = ref(false)
 const savingNotify = ref(false)
 const doing = ref('')
-const shareLink = ref('')
 // 编辑区「反馈建议」输入框（agency / provincial 提交给一手 PandaKing 的建议，与状态流转 tab 的反馈分开）
 const consSuggestion = ref('')
+
+// —— 协作通知弹窗（发起询价 / 保存并报价 共用 NotifyDialog）——
+const inquireDialog = ref(false) // 发起询价（向省地接社）
+const quoteDialog = ref(false) // 保存并报价（向境外旅行社）
+const dialogText = ref('') // 弹窗展示的结构化文案
+const dialogSubtitle = ref('') // 弹窗副标题（说明）
 
 // —— PDF 多语言导出（PRD 5.8）——
 const pdfPanelOpen = ref(false)
@@ -155,27 +162,16 @@ function newDay(n: number): Day {
 // 选择「当前有效版本」：优先用含真实行程/报价内容的最新版本，避免空保存把详情页变成空白
 function pickCurrentVersion(versions?: RouteVersion[]) {
   if (!versions || versions.length === 0) return undefined
-  const meaningful = versions.find((v) => {
-    if (!v) return false
-    const it = v.itinerary
-    if (it && typeof it === 'object') {
-      const days = Array.isArray((it as { days?: Day[] }).days) ? ((it as { days?: Day[] }).days as Day[]) : []
-      if (
-        days.some(
-          (d) =>
-            (d.city && String(d.city).trim()) ||
-            (d.spots && d.spots.some((s) => s && String(s).trim())) ||
-            (d.hotel && String(d.hotel).trim()) ||
-            (d.meals && d.meals.some((m) => m && String(m).trim())),
-        )
-      )
-        return true
-    }
-    const q = v.quote
-    if (q && typeof q === 'object' && Array.isArray((q as { items?: unknown[] }).items) && (q as { items?: unknown[] }).items!.length > 0) return true
-    return false
+  // 「最新版本」即当前协作上下文（按 createdAt 降序取首条）
+  // —— 之前用「第一个有内容的版本」会导致：用户保存了 v_new（带删除后的数据）后，
+  // 重开页面却加载到最早的 v_old（带已删除项），造成「删除无效」的假 bug。
+  // 与 PRD「最新版本即当前协作上下文」一致。
+  const sorted = [...versions].sort((a, b) => {
+    const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0
+    const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0
+    return tb - ta
   })
-  return meaningful ?? versions[0]
+  return sorted[0]
 }
 function addDay() {
   itinerary.value.days.push(newDay(itinerary.value.days.length + 1))
@@ -247,18 +243,13 @@ const availableActions = computed(() => {
   return list
 })
 const feedbackNote = ref('')
-// 回传反馈后自动生成的通知文案（带主题+建议+H5链接），便于粘贴到微信同步一手
-const notifyTextConsole = ref('')
 
 const versionLabel = computed(() => pickCurrentVersion(data.value?.versions)?.version ?? 'v1')
 
-// —— 省地接社协作（一手） ——
+// —— 省地接社协作（一手：用于「发起询价」弹窗的机构选择 + 「状态与协作」tab 的成本询价列表）——
 const costInquiries = ref<CostInquiry[]>([])
 const loadingInquiries = ref(false)
-const collabProvId = ref('')
-const collabLink = ref('')
-const collabErr = ref('')
-const copiedCollab = ref(false)
+const collabProvId = ref('') // 「发起询价」弹窗内选定的省地接社机构 ID
 const applyingId = ref('')
 
 // 省地接社机构下拉选项（一手分配/询价用）
@@ -286,48 +277,131 @@ async function loadInquiries() {
     loadingInquiries.value = false
   }
 }
-async function onStartCollab() {
-  collabErr.value = ''
-  copiedCollab.value = false
-  if (!collabProvId.value.trim()) {
-    collabErr.value = '请选择要协作的省地接社机构'
-    return
-  }
-  try {
-    const res = await ensureProvincialShare(id, collabProvId.value.trim())
-    // 在协作链接后附加行程关键信息（目的地/客户名），便于微信沟通中一眼区分
-    const base = provincialRouteH5Url(res.token)
-    const params = new URLSearchParams()
-    if (data.value?.destination) params.set('d', data.value.destination)
-    const who = safeName(data.value?.customerNameCn, data.value?.customerName)
-    if (who) params.set('c', who)
-    const qs = params.toString()
-    collabLink.value = qs ? `${base}?${qs}` : base
-    actionOk.value = `已向 ${collabProvId.value.trim()} 发起省地接社协作，链接可复制后发微信群`
-    await load()
-    await loadInquiries()
-  } catch (e: any) {
-    collabErr.value = e?.response?.data?.message || '发起协作失败'
-  }
-}
-async function copyCollabLink() {
-  if (!collabLink.value) return
-  const ok = await copyText(collabLink.value)
-  copiedCollab.value = ok
-  setTimeout(() => (copiedCollab.value = false), 2000)
-}
+// 「状态与协作」tab：手动应用省地接社成本①（用于未走「发起询价」自动流程的情况）
 async function onApplyInquiry(inqId: string) {
   applyingId.value = inqId
-  collabErr.value = ''
+  actionErr.value = ''
   try {
     await applyCostInquiry(inqId)
     actionOk.value = '已将省地接社成本①写入路线报价（成本①）'
     await load()
     await loadInquiries()
   } catch (e: any) {
-    collabErr.value = e?.response?.data?.message || '应用失败'
+    actionErr.value = e?.response?.data?.message || '应用失败'
   } finally {
     applyingId.value = ''
+  }
+}
+
+// 「发起询价」弹窗副标题：解释这个动作是什么
+const inquireSubtitle = computed(() =>
+  '向省地接社发起本次行程的成本询价：自动保存当前行程与报价，生成统一协作链接（含主题+URL），结构化文案已自动复制，去微信粘贴发给省地接社即可。',
+)
+// 「保存并报价」弹窗副标题：解释这个动作是什么
+const quoteSubtitle = computed(() =>
+  '向境外旅行社发报价：自动保存当前报价（含省地接社成本①与您的利润①），生成对旅行社的 H5 链接（含报价A），结构化文案已自动复制，去微信粘贴发给境外旅行社。',
+)
+
+// 一手「🤝 发起询价」—— 已关联省地接社则直接生成（与「保存并报价」体验一致，自动保存+弹窗预览+已复制）；未关联才弹窗选机构
+async function openInquireDialog() {
+  const linkedProv = data.value?.provincialId
+  if (linkedProv) {
+    collabProvId.value = linkedProv
+    await doInquire()
+    return
+  }
+  // 未关联省地接社 → 打开弹窗让用户选机构后点「生成询价链接」
+  dialogText.value = ''
+  dialogSubtitle.value = inquireSubtitle.value
+  inquireDialog.value = true
+}
+
+// 一手「💼 保存并报价」—— 自动保存 → 生成结构化文案 + URL → 自动复制 → 弹 NotifyDialog
+async function openQuoteDialog() {
+  if (!data.value) return
+  savingNotify.value = true
+  actionErr.value = ''
+  actionOk.value = ''
+  try {
+    // 1) 自动保存（写入当前行程 + 报价 + 利润①）
+    const res = (await saveVersion(id, {
+      itinerary: itinerary.value,
+      quote: buildQuote(),
+      draft: false,
+      notify: false, // 不在此处触发 share（链接由 shareRoute 单独生成）
+    })) as { shareToken?: string; shareLink?: string; version?: any }
+
+    // 2) 生成 agency 分享（role='agency', public=false，让旅行社看到 quoteA + 可加利润②）
+    const share = await shareRoute(id, 'agency', false)
+    const link = agencyH5Url(share.token)
+
+    // 3) 构造结构化文案（仅主题 + 报价A + URL，**不暴露**「成本① / 利润①」等内部信息）
+    const caption = shareH5Caption(data.value)
+    const profitLabel = profit2Mode.value === 'percent' ? `${profit2.value || 0}%` : `¥${(Number(profit2.value) || 0).toLocaleString()}`
+    const d = calcDerived(quoteItems.value)
+    const qa = Math.round(d.quoteA)
+    const text = `${caption}\n报价A ¥${qa.toLocaleString()}（您的成本基线）\n\n👉 查看并加价回复：${link}`
+    dialogText.value = text
+    dialogSubtitle.value = quoteSubtitle.value
+
+    // 4) 自动复制到剪贴板
+    const ok = await copyText(text)
+    actionOk.value = ok ? '报价链接已生成并复制，去微信粘贴发给境外旅行社 ✅' : '已生成，请手动复制下方文案'
+
+    // 5) 弹 NotifyDialog
+    quoteDialog.value = true
+    await load()
+  } catch (e: any) {
+    actionErr.value = e?.response?.data?.message || '生成报价链接失败'
+  } finally {
+    savingNotify.value = false
+  }
+}
+
+// 「发起询价」弹窗内用户点确定（先选好机构后）—— 由弹窗内按钮触发
+async function doInquire() {
+  if (!collabProvId.value.trim()) {
+    actionErr.value = '请先选择省地接社机构'
+    return
+  }
+  savingNotify.value = true
+  actionErr.value = ''
+  try {
+    // 1) 自动保存当前状态（含 PandaKing 的行程 + 利润①，但成本① 暂未填）
+    await saveVersion(id, {
+      itinerary: itinerary.value,
+      quote: buildQuote(),
+      draft: false,
+      notify: false,
+    })
+
+    // 2) 生成 provincial 协作链接（幂等）
+    const ps = await ensureProvincialShare(id, collabProvId.value.trim())
+    const base = provincialRouteH5Url(ps.token)
+    const params = new URLSearchParams()
+    if (data.value?.destination) params.set('d', data.value.destination)
+    const who = safeName(data.value?.customerNameCn, data.value?.customerName)
+    if (who) params.set('c', who)
+    const qs = params.toString()
+    const link = qs ? `${base}?${qs}` : base
+
+    // 3) 构造结构化文案
+    const caption = shareH5Caption(data.value ?? undefined)
+    const text = `${caption}\n\n一手 PandaKing 已生成行程方案，邀请你填写成本①并回传：\n\n👉 查看并回复：${link}`
+    dialogText.value = text
+
+    // 4) 自动复制
+    const ok = await copyText(text)
+    actionOk.value = ok ? '询价链接已生成并复制，去微信粘贴发给省地接社 ✅' : '已生成，请手动复制下方文案'
+
+    // 5) 弹出文案预览弹窗（已关联省地接社时弹窗尚未打开需在此打开；未关联场景弹窗已开）
+    inquireDialog.value = true
+    await load()
+    await loadInquiries()
+  } catch (e: any) {
+    actionErr.value = e?.response?.data?.message || '生成询价链接失败'
+  } finally {
+    savingNotify.value = false
   }
 }
 
@@ -404,7 +478,6 @@ async function onSaveDraft() {
   savingDraft.value = true
   actionErr.value = ''
   actionOk.value = ''
-  notifyTextConsole.value = ''
   try {
     await saveVersion(id, {
       itinerary: itinerary.value,
@@ -421,58 +494,6 @@ async function onSaveDraft() {
   }
 }
 
-async function onSaveNotify() {
-  savingNotify.value = true
-  actionErr.value = ''
-  actionOk.value = ''
-  notifyTextConsole.value = ''
-  try {
-    // 已关联省地接社时，本轮「通知」的对象是省地接社（而非终端客户），
-    // 故不再生成面向客户的公开只读 H5，改为生成省地接社可编辑协作链接（幂等，复用已有令牌）。
-    const collabProv = data.value?.provincialId || ''
-    const res = (await saveVersion(id, {
-      itinerary: itinerary.value,
-      quote: buildQuote(),
-      draft: false,
-      notify: !collabProv,
-    })) as { shareToken?: string; shareLink?: string; version?: any }
-
-    let link = ''
-    if (collabProv) {
-      // 省地接社协作链接：幂等，同 route+省地接社复用已有令牌，避免省地接社收到多个链接
-      const ps = await ensureProvincialShare(id, collabProv)
-      link = provincialRouteH5Url(ps.token)
-    } else {
-      // 后端返回 /share/route/TOKEN 或 shareToken；分享页由后端 SSR 注入 OG
-      const token = res.shareToken || res.shareLink?.split('/').pop() || ''
-      link = token ? shareH5Url(token) : ''
-    }
-    shareLink.value = link
-    if (link && data.value) {
-      const caption = shareH5Caption(data.value)
-      const text = `${caption}\n${link}`
-      try {
-        await navigator.clipboard.writeText(text)
-        actionOk.value = collabProv
-          ? '省地接社协作链接已生成并复制到剪贴板，可粘贴到微信群'
-          : '协作 H5 链接已生成并复制到剪贴板，可粘贴到微信'
-      } catch {
-        actionOk.value = collabProv
-          ? '省地接社协作链接已生成，请手动复制下方链接'
-          : '协作 H5 链接已生成，请手动复制下方链接'
-      }
-    } else {
-      actionOk.value = '已保存新版本，但未生成分享链接'
-    }
-    await load()
-    await loadFeedback()
-  } catch (e: any) {
-    actionErr.value = e?.response?.data?.message || '保存并通知失败'
-  } finally {
-    savingNotify.value = false
-  }
-}
-
 async function onAction(a: { key: string; label: string; needNote?: boolean }) {
   if (a.needNote && !feedbackNote.value.trim()) {
     actionErr.value = '请填写反馈内容'
@@ -481,7 +502,6 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
   doing.value = a.key
   actionErr.value = ''
   actionOk.value = ''
-  notifyTextConsole.value = ''
   try {
     const note = feedbackNote.value
     const body = a.needNote ? { feedback: note } : undefined
@@ -490,15 +510,12 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
     // 除「拒绝/流失」外，所有状态流转（规划提交类动作）与反馈意见，
     // 都生成「主题 + 事件 + H5 链接」通知文案并复制到剪贴板，便于粘贴到微信群同步协作方。
     if (a.key !== 'reject' && data.value) {
-      let link = shareLink.value
-      if (!link) {
-        try {
-          const s = await shareRoute(id)
-          link = s.token ? shareH5Url(s.token) : s.link || ''
-          shareLink.value = link
-        } catch {
-          link = ''
-        }
+      let link = ''
+      try {
+        const s = await shareRoute(id)
+        link = s.token ? shareH5Url(s.token) : s.link || ''
+      } catch {
+        link = ''
       }
       if (link) {
         const isFeedback = !!a.needNote
@@ -507,15 +524,15 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
           eventLabel: a.label,
           subject: safeName(data.value.customerNameCn, data.value.customerName),
           destination: safeText(data.value.destination),
+          travelDate: data.value.travelDate,
           authorName: user.value?.name || roleLabel(role.value),
           detail: isFeedback ? note : undefined,
           url: link,
         })
-        notifyTextConsole.value = text
         const ok = await copyText(text)
         actionOk.value = ok
           ? '通知文案已复制到剪贴板，去微信粘贴到协作群即可同步 ✅'
-          : '通知文案已生成，请手动复制下方文案发到协作群'
+          : '通知文案已生成，请手动复制下方文案'
       } else {
         actionOk.value = `${a.label}成功`
       }
@@ -530,12 +547,6 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
     doing.value = ''
   }
 }
-async function copyShareLink() {
-  if (!shareLink.value || !data.value) return
-  const text = `${shareH5Caption(data.value)}\n${shareLink.value}`
-  const ok = await copyText(text)
-  actionOk.value = ok ? '协作 H5 链接已复制，去微信群粘贴即可 ✅' : '复制失败，请手动复制下方链接'
-}
 
 /* ============================================================
    编辑区保存栏：按三角色统一「保存 / 通知」逻辑
@@ -549,7 +560,6 @@ async function onSubmitSuggestion(who: 'agency' | 'provincial') {
   savingNotify.value = true
   actionErr.value = ''
   actionOk.value = ''
-  notifyTextConsole.value = ''
   let savedVersion = false
   try {
     // 1) 保存当前编辑（报价加价 / 行程），notify:false → 不生成面向客户的公开 H5 链接
@@ -603,11 +613,11 @@ async function onSubmitSuggestion(who: 'agency' | 'provincial') {
     eventLabel: who === 'agency' ? '提交报价建议' : '提交成本建议',
     subject: safeName(data.value?.customerNameCn, data.value?.customerName),
     destination: safeText(data.value?.destination),
+    travelDate: data.value?.travelDate,
     authorName: user.value?.name || roleLabel(role.value),
     detail: note || undefined,
     url: link,
   })
-  notifyTextConsole.value = text
   consSuggestion.value = ''
   try {
     const ok = await copyText(text)
@@ -620,11 +630,6 @@ async function onSubmitSuggestion(who: 'agency' | 'provincial') {
   await load()
   await loadFeedback()
   savingNotify.value = false
-}
-async function copyConsoleNotify() {
-  if (!notifyTextConsole.value) return
-  const ok = await copyText(notifyTextConsole.value)
-  actionOk.value = ok ? '已再次复制，去微信粘贴到协作群 ✅' : '复制失败，请手动选择上方文字复制'
 }
 
 /* ============================================================
@@ -898,35 +903,25 @@ const collabEvents = computed<CollabEvent[]>(() => {
               省地接社只需填写<b>成本①</b>（利润默认 0）；成本①保存后即时回填一手 PandaKing。左侧行程规划可直接编辑。
             </p>
             <p v-else-if="isAgency" class="hint">
-              您看到的「报价A」是一手 PandaKing 的报价（即您的成本），在此加上<b>利润②</b>即生成对客价。填好后点击下方「提交建议并通知一手」，即可把报价与修改建议一并发送给一手。
+              您看到的「报价A」是一手 PandaKing 的报价（即您的成本），在此加上<b>利润</b>即生成对客价。填好后点击下方「提交建议并通知一手」，即可把报价与修改建议一并发送给一手。
             </p>
             <QuoteTable v-model:items="quoteItems" v-model:profit2Mode="profit2Mode" v-model:profit2="profit2" :role="role" />
             <p v-if="isPk" class="tip">
-              境外旅行社打开同一页面（角色=旅行社）时，报价A 即为其成本，加利润②生成对客价。agency 与 provincial 价格彼此不可见。
+              境外旅行社打开同一页面（角色=旅行社）时，报价A 即为其成本，加利润生成对客价。agency 与 provincial 价格彼此不可见。
             </p>
           </div>
 
-          <!-- 省地接社协作卡（仅一手） -->
-          <div v-if="isPk" class="collab">
-            <div class="ttl">🔗 省地接社协作 <span class="pill st-neutral xs">{{ collabStatusLabel }}</span></div>
-            <div class="body">
-              选择省地接社发起协作并生成统一链接；对方回填成本①后，在「状态与协作」中点「应用成本①」自动并入上表「成本①」列。
-            </div>
-            <div class="collab-form">
-              <select v-model="collabProvId" :disabled="loadingProvincialAgencies">
-                <option value="" disabled>{{ loadingProvincialAgencies ? '加载中…' : '请选择省地接社机构' }}</option>
-                <option v-for="a in provincialAgencies" :key="a.id" :value="a.id">{{ a.name }}（{{ a.id }}）</option>
-              </select>
-              <button class="d-btn primary sm" :disabled="!collabProvId" @click="onStartCollab">发起协作</button>
-            </div>
-            <p v-if="collabErr" class="err">{{ collabErr }}</p>
-            <p v-if="!loadingProvincialAgencies && provincialAgencies.length === 0" class="err">
-              暂无省地接社机构，请先在「账号」页新建一个「省地接社」机构。
-            </p>
-            <div v-if="collabLink" class="link-box">
-              <input :value="collabLink" readonly />
-              <button class="d-btn ghost sm" @click="copyCollabLink">{{ copiedCollab ? '已复制 ✓' : '复制链接' }}</button>
-            </div>
+          <!-- 一手：发起询价 + 保存并报价（双主操作，弹 NotifyDialog 统一弹结构化文案+URL） -->
+          <div v-if="isPk" class="pk-actions">
+            <button class="d-btn primary block" :disabled="savingDraft || savingNotify" @click="openInquireDialog">
+              🤝 发起询价（向省地接社咨询）
+            </button>
+            <button class="d-btn primary block" :disabled="savingDraft || savingNotify" @click="openQuoteDialog">
+              💼 保存并报价（向境外旅行社报价）
+            </button>
+            <button class="d-btn ghost block" :disabled="savingDraft || savingNotify" @click="onSaveDraft">
+              {{ savingDraft ? '保存中…' : '💾 仅保存（不通知任何人）' }}
+            </button>
           </div>
 
           <!-- 非一手：反馈建议输入框（提交给一手 PandaKing） -->
@@ -935,44 +930,20 @@ const collabEvents = computed<CollabEvent[]>(() => {
             <textarea v-model="consSuggestion" rows="2" :placeholder="isAgency ? '填写对报价 / 行程的修改建议，将随报价一并通知一手' : '填写成本说明或协作备注，将通知一手'"></textarea>
           </div>
 
-          <!-- 保存栏：按三角色统一「保存 / 通知」逻辑 -->
-          <div class="savebar">
-            <template v-if="isPk">
-              <button class="d-btn ghost" :disabled="savingDraft || savingNotify" @click="onSaveDraft">
-                {{ savingDraft ? '保存中…' : '保存草稿' }}
-              </button>
-              <button class="d-btn primary" :disabled="savingDraft || savingNotify" @click="onSaveNotify">
-                {{ savingNotify ? '生成中…' : '保存并通知' }}
-              </button>
-            </template>
-            <template v-else>
-              <button class="d-btn ghost" :disabled="savingDraft || savingNotify" @click="onSaveDraft">
-                {{ savingDraft ? '保存中…' : '保存草稿' }}
-              </button>
-              <button class="d-btn primary" :disabled="savingDraft || savingNotify" @click="onSubmitSuggestion(isAgency ? 'agency' : 'provincial')">
-                {{ savingNotify ? '提交中…' : (isAgency ? '提交建议并通知一手' : '保存成本并通知一手') }}
-              </button>
-            </template>
+          <!-- 非一手：保存栏（与一手对称：仅保存 + 提交建议并通知） -->
+          <div v-if="!isPk" class="savebar">
+            <button class="d-btn ghost" :disabled="savingDraft || savingNotify" @click="onSaveDraft">
+              {{ savingDraft ? '保存中…' : '仅保存' }}
+            </button>
+            <button class="d-btn primary" :disabled="savingDraft || savingNotify" @click="onSubmitSuggestion(isAgency ? 'agency' : 'provincial')">
+              {{ savingNotify ? '提交中…' : (isAgency ? '提交建议并通知一手' : '保存成本并通知一手') }}
+            </button>
           </div>
 
-          <!-- 操作结果：紧邻保存栏，让反馈立即可见（不再只放页面顶部） -->
+          <!-- 操作结果：紧邻保存栏，让反馈立即可见 -->
           <div class="action-feedback">
             <p v-if="actionErr" class="err msg">{{ actionErr }}</p>
-            <p v-if="actionOk" class="ok msg">{{ actionOk }}</p>
-          </div>
-
-          <div v-if="shareLink" class="share-row">
-            <a :href="shareLink" target="_blank" class="link">打开协作 H5 ↗</a>
-            <button class="d-btn ghost sm" @click="copyShareLink">复制链接</button>
-          </div>
-
-          <!-- 操作结果：通知文案，放在报价面板内以保持操作顺序一致（编辑报价 → 保存/提交 → 复制通知文案） -->
-          <div v-if="notifyTextConsole" class="fb-notify">
-            <div class="fb-notify-head">
-              <span>📋 通知文案（去微信粘贴到协作群）</span>
-              <button class="d-btn ghost sm" @click="copyConsoleNotify">再复制</button>
-            </div>
-            <pre class="fb-notify-text">{{ notifyTextConsole }}</pre>
+            <p v-if="actionOk && !inquireDialog && !quoteDialog" class="ok msg">{{ actionOk }}</p>
           </div>
 
           <div class="note">
@@ -1167,6 +1138,36 @@ const collabEvents = computed<CollabEvent[]>(() => {
           </div>
         </template>
       </div>
+
+      <!-- ============ 协作通知弹窗（一手复用）============ -->
+      <NotifyDialog
+        v-model:open="inquireDialog"
+        :title="'🤝 发起询价（向省地接社咨询）'"
+        :subtitle="inquireSubtitle"
+        :text="dialogText"
+        generate-label="📋 生成询价链接"
+        @generate="doInquire"
+      >
+        <div v-if="!dialogText">
+          <div v-if="provincialAgencies.length === 0" class="nd-empty">
+            暂无省地接社机构，请先在「账号」页新建一个「省地接社」机构。
+          </div>
+          <div v-else class="nd-agency-pick">
+            <label>选择省地接社机构：</label>
+            <select v-model="collabProvId" :disabled="loadingProvincialAgencies">
+              <option value="" disabled>{{ loadingProvincialAgencies ? '加载中…' : '请选择' }}</option>
+              <option v-for="a in provincialAgencies" :key="a.id" :value="a.id">{{ a.name }}（{{ a.id }}）</option>
+            </select>
+          </div>
+        </div>
+      </NotifyDialog>
+
+      <NotifyDialog
+        v-model:open="quoteDialog"
+        :title="'💼 保存并报价（向境外旅行社报价）'"
+        :subtitle="quoteSubtitle"
+        :text="dialogText"
+      />
     </template>
   </div>
 </template>
@@ -1295,6 +1296,12 @@ const collabEvents = computed<CollabEvent[]>(() => {
 .link-box input { flex: 1; background: #fff; border: 1px solid var(--k-line); border-radius: 8px; padding: 8px 10px; font-size: 12px; color: var(--k-muted); box-sizing: border-box; }
 .savebar { display: flex; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--k-line); }
 .savebar .d-btn { flex: 1; text-align: center; }
+.pk-actions { display: flex; flex-direction: column; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--k-line); }
+.pk-actions .d-btn { width: 100%; text-align: center; }
+.nd-agency-pick { margin: 8px 0 4px; }
+.nd-agency-pick label { display: block; font-size: 12px; color: var(--k-muted); margin-bottom: 6px; }
+.nd-agency-pick select { width: 100%; padding: 10px 12px; border: 1px solid var(--k-line); border-radius: 10px; font-size: 14px; font-family: inherit; background: #fff; }
+.nd-empty { padding: 12px 14px; border: 1px dashed var(--k-line); border-radius: 8px; color: var(--k-muted); font-size: 13px; }
 .action-feedback { padding: 0 18px 8px; }
 .action-feedback .msg { margin: 0 0 6px; }
 .suggest { padding: 14px 18px 0; }

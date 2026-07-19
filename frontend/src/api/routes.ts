@@ -41,11 +41,17 @@ export async function saveVersion(routeId: string, payload: unknown): Promise<Ro
 }
 
 // 生成协作 H5 共享链接
+// - role: 'agency' | 'pandaking' | 'provincial' —— 一手分享给旅行社时传 'agency'
+// - isPublic: true = 公开(对客)只读 SSR 页（仅暴露对客价 guestPrice）；false = 内部交互页（按 role 可见性）
 export async function shareRoute(
   routeId: string,
   role?: string,
+  isPublic?: boolean,
 ): Promise<{ token: string; link: string }> {
-  const { data } = await client.post(`/routes/${routeId}/share`, role ? { role } : {})
+  const body: Record<string, unknown> = {}
+  if (role) body.role = role
+  if (isPublic !== undefined) body.public = isPublic
+  const { data } = await client.post(`/routes/${routeId}/share`, body)
   return data
 }
 

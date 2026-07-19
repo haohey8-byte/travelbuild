@@ -120,6 +120,7 @@ export interface CollabNotifyOpts {
   eventLabel: string // 事件名：生成协作H5 / 回传反馈 / 修订重交 / 发报价 v1 / 游客确认 / 付款成单 …
   subject?: string | null // 主题（客户名）
   destination?: string | null // 目的地
+  travelDate?: string | null // 出行日期（拼进标题，便于一眼看清出发时间）
   authorName?: string | null // 操作人/提交方
   detail?: string | null // 反馈建议/备注（可选，保留兼容）
   changes?: ProvincialChanges // 本轮关键变更摘要（省地接社多轮回传时填充）
@@ -191,7 +192,7 @@ function buildNotify(tag: string, head: string, bodyLines: string[], url: string
 }
 
 export function collabNotifyText(opts: CollabNotifyOpts): string {
-  const head = [safeText(opts.subject), safeText(opts.destination)].filter(Boolean).join(' · ')
+  const head = [safeText(opts.subject), safeText(opts.destination), formatTravelDate(opts.travelDate)].filter(Boolean).join(' · ')
   const actor = opts.authorName ? opts.authorName + ' ' : ''
   const lines = [`${actor}${opts.eventLabel}`]
   if (opts.detail) lines.push(`「${opts.detail}」`)
@@ -234,12 +235,13 @@ export interface FeedbackNotifyOpts {
   label: string // '新反馈' | '旅行社回复'
   subject?: string | null // 主题（客户名）
   destination?: string | null // 目的地
+  travelDate?: string | null // 出行日期（拼进标题）
   authorName?: string | null // 提交方名称
   suggestion: string // 反馈建议内容
   url: string // 协作 H5 链接
 }
 export function feedbackNotifyText(opts: FeedbackNotifyOpts): string {
-  const head = [safeText(opts.subject), safeText(opts.destination)].filter(Boolean).join(' · ')
+  const head = [safeText(opts.subject), safeText(opts.destination), formatTravelDate(opts.travelDate)].filter(Boolean).join(' · ')
   const who = opts.authorName ? `${opts.authorName} 提交了修改意见：` : '修改意见：'
   return buildNotify(opts.label, head, [who, `「${opts.suggestion}」`], opts.url)
 }

@@ -293,6 +293,7 @@ async function onSend() {
         eventLabel: '提交了修改意见',
         subject: safeName(data.value.customerNameCn, data.value.customerName),
         destination: data.value.destination,
+        travelDate: data.value.travelDate,
         authorName: authorName.value.trim() || undefined,
         detail: content,
         url: shareH5Url(token),
