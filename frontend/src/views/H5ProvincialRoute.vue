@@ -58,10 +58,9 @@ function removeMeal(d: Day, i: number) {
   d.meals.splice(i, 1)
 }
 
-// —— 行程规划反馈（与一手同步）——
+// —— 回传说明（随「保存并回传一手」一并提交给一手）——
 const feedbackList = ref<RouteFeedbackItem[]>([])
 const fbText = ref('')
-const fbSending = ref(false)
 const fbErr = ref('')
 
 // —— 成本①（省地接社按项目填写；与一手/旅行社共用同一报价表组件，利润默认 0）——
@@ -164,20 +163,36 @@ onMounted(async () => {
   }
 })
 
-async function onSave() {
+async function onSubmitHandoff() {
   saving.value = true
   saveErr.value = ''
+  fbErr.value = ''
   saveOk.value = ''
   notifyText.value = ''
   try {
-    const payload: { itinerary: unknown; items?: { name: string; cost1: number }[] } = { itinerary: itinerary.value }
     const items = normalizeCostItems()
+    const payload: { itinerary: unknown; items?: { name: string; cost1: number }[] } = { itinerary: itinerary.value }
     if (!alreadySubmitted.value && items.length > 0) {
       payload.items = items.map((it) => ({ name: it.name, cost1: it.cost1 }))
     }
     await editH5ProvincialRoute(token, payload)
-    saveOk.value = '行程与成本①已保存并同步给一手 ✅'
     if (payload.items) alreadySubmitted.value = true
+
+    // 回传说明（可选）：随本次回传一并提交给一手；失败仅提示，不阻断成本保存
+    const note = fbText.value.trim()
+    if (note) {
+      try {
+        await submitH5Feedback(token, note, '省地接社')
+        fbText.value = ''
+      } catch (fe: any) {
+        fbErr.value = fe?.response?.data?.message || '说明提交失败（行程与成本已保存）'
+      }
+    }
+    await loadFeedback()
+
+    saveOk.value = note
+      ? '行程、成本①与回传说明已保存并同步给一手 ✅'
+      : '行程与成本①已保存并同步给一手 ✅'
     if (data.value) {
       const detail = items.length ? `成本①合计 ¥${totalCost.value.toLocaleString()}` : undefined
       const text = collabNotifyText({
@@ -199,24 +214,6 @@ async function onSave() {
     saveErr.value = e?.response?.data?.message || '保存失败'
   } finally {
     saving.value = false
-  }
-}
-
-async function onSubmitFeedback() {
-  if (!fbText.value.trim()) {
-    fbErr.value = '请填写行程规划修改建议'
-    return
-  }
-  fbSending.value = true
-  fbErr.value = ''
-  try {
-    await submitH5Feedback(token, fbText.value.trim(), '省地接社')
-    fbText.value = ''
-    await loadFeedback()
-  } catch (e: any) {
-    fbErr.value = e?.response?.data?.message || '提交失败'
-  } finally {
-    fbSending.value = false
   }
 }
 
@@ -247,7 +244,7 @@ function goHome() {
       </div>
       <p class="hint">
         您正在以<b>省地接社</b>身份协作本路线。可修改下方的城市/景点/住宿/餐饮等当地安排，
-        并填写成本①；提交后一手即可同步收到行程与地接成本。
+        填写成本①，并（可选）写下回传说明；点「保存并回传一手」后，一手即可一次性同步收到行程、地接成本与说明。
       </p>
 
       <!-- 行程编辑 -->
@@ -289,8 +286,16 @@ function goHome() {
         <p v-if="alreadySubmitted" class="submitted-tip">✅ 您已回传过成本询价，修改后再次保存即可更新。</p>
       </section>
 
-      <button class="btn btn-primary" :disabled="saving" @click="onSave">
-        {{ saving ? '保存中…' : '保存并通知（同步一手）' }}
+      <!-- 回传说明（可选，随本次回传一并发给一手） -->
+      <section class="edit-block note">
+        <h3>回传说明（可选）</h3>
+        <p class="hint">可填写对行程规划 / 成本的补充说明，将随本次「保存并回传一手」一并同步给一手。</p>
+        <textarea v-model="fbText" rows="3" placeholder="如：D3 景点太满，建议拆分到两天；或车辆需升级为9座"></textarea>
+        <p v-if="fbErr" class="err">{{ fbErr }}</p>
+      </section>
+
+      <button class="btn btn-primary" :disabled="saving" @click="onSubmitHandoff">
+        {{ saving ? '保存中…' : '保存并回传一手' }}
       </button>
       <p v-if="saveErr" class="err">{{ saveErr }}</p>
       <p v-if="saveOk" class="ok">{{ saveOk }}</p>
@@ -303,16 +308,9 @@ function goHome() {
         <pre class="notify-text">{{ notifyText }}</pre>
       </div>
 
-      <!-- 行程规划反馈 -->
-      <section class="edit-block fb">
-        <h3>行程规划修改建议</h3>
-        <p class="hint">提交后自动同步一手地接社（如「D3 景点太满，建议拆分到两天」）。</p>
-        <textarea v-model="fbText" rows="3" placeholder="填写对行程规划的修改建议"></textarea>
-        <button class="btn" :disabled="fbSending" @click="onSubmitFeedback">
-          {{ fbSending ? '提交中…' : '提交建议' }}
-        </button>
-        <p v-if="fbErr" class="err">{{ fbErr }}</p>
-
+      <!-- 已回传的说明 / 建议历史 -->
+      <section class="edit-block fb-history">
+        <h3>已回传的说明 / 建议</h3>
         <ul v-if="feedbackList.length" class="fb-list">
           <li v-for="fb in feedbackList" :key="fb.id" class="fb-item">
             <div class="fb-meta">
@@ -322,7 +320,7 @@ function goHome() {
             <p class="fb-content">{{ fb.content }}</p>
           </li>
         </ul>
-        <p v-else class="muted">暂无反馈意见。</p>
+        <p v-else class="muted">暂无回传说明。</p>
       </section>
     </div>
   </div>
