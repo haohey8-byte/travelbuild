@@ -1,6 +1,6 @@
 # Code Spec：省地接社协作 H5 页面（成本询价闭环）
 
-> 权威来源：`PRD_入境游定制协作工作台_v0.9.11.md`（v0.9 新增省地接社 H5 协作；v0.9.1 行程升级为可编辑；v0.9.2 术语统一为"可编辑"）+ `WORKBUDDY.md`。
+> 权威来源：`PRD_入境游定制协作工作台_v0.9.12.md`（v0.9 新增省地接社 H5 协作；v0.9.1 行程升级为可编辑；v0.9.2 术语统一为"可编辑"）+ `WORKBUDDY.md`。
 > 配套 PRD 术语：**成本询价 H5 链接**（一手→省地接社）、**行程报价协作 H5 链接**（一手/旅行社，对客只读）。
 > 关联代码：`frontend/src/views/H5ProvincialRoute.vue`、`frontend/src/utils/share.ts`、`frontend/src/api/h5.ts`、`backend/src/modules/routes/h5.controller.ts`、`backend/src/modules/routes/routes.service.ts`。
 
