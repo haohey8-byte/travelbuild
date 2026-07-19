@@ -56,4 +56,14 @@ export class H5Controller {
   ) {
     return this.svc.provincialEdit(token, body)
   }
+
+  // 旅行社协作 H5：凭 token 保存加价（利润②），免登录鉴权（与省地接社 edit 一致）。
+  // 不再走控制台 /routes/:id/versions（会误报「路线不存在」）。
+  @Post('route/:token/quote')
+  agencyQuote(
+    @Param('token') token: string,
+    @Body() body: { profit2Mode?: 'amount' | 'percent'; profit2?: number },
+  ) {
+    return this.svc.agencyQuote(token, body)
+  }
 }

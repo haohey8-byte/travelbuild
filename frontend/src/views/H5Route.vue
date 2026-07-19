@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { fetchH5Route, submitH5Feedback, fetchH5Feedback } from '@/api/h5'
+import { fetchH5Route, submitH5Feedback, fetchH5Feedback, submitH5AgencyQuote } from '@/api/h5'
 import { safeText, safeName } from '@/utils/name'
 import { shareH5Url, shareH5Caption, collabNotifyText, copyText } from '@/utils/share'
 import type { H5Route, RouteFeedbackItem } from '@/types'
 import { buildPdfModel, type PdfModel } from '@/utils/pdf-model'
 import { generatePdf } from '@/utils/pdf-export'
-import { PDF_LANG_OPTIONS, type PdfLang } from '@/utils/pdf-i18n'
+import { PDF_LANG_OPTIONS, t, type PdfLang } from '@/utils/pdf-i18n'
+import { translateText, translateEnabled } from '@/utils/pdf-translate'
 import RoutePdf from '@/components/RoutePdf.vue'
 
 const route = useRoute()
@@ -36,6 +37,29 @@ const pdfBusy = ref(false)
 const pdfErr = ref('')
 const pdfModel = ref<PdfModel | null>(null)
 const pdfWrap = ref<HTMLElement | null>(null)
+
+// —— 旅行社视角：加利润② + AI 翻译泰语版 ——
+const isAgencyView = computed(() => data.value?.role === 'agency')
+const agProfit2Mode = ref<'amount' | 'percent'>('amount')
+const agProfit2 = ref(0)
+// 旅行社拿到的「成本基线」= PandaKing 报价A（后端在 role=agency 时 totals.quoteA 即为报价A）
+const agQuoteA = computed(() => Number(data.value?.quote?.totals?.quoteA) || 0)
+const agGuestPrice = computed(() => {
+  const qa = agQuoteA.value
+  const p = Number(agProfit2.value) || 0
+  if (agProfit2Mode.value === 'percent') return Math.round(qa * (1 + p / 100))
+  return qa + p
+})
+const agSaving = ref(false)
+const agSaveOk = ref('')
+const agSaveErr = ref('')
+
+// —— 旅行社 AI 翻译：行程+对客总价 → 泰语版文字（供旅行社复制粘贴发客户） ——
+const agThBusy = ref(false)
+const agThText = ref('')
+const agThErr = ref('')
+// 翻译服务是否可用（VITE_TMT_ENDPOINT 配置）—— 仅展示提示，不阻断
+const hasTranslate = translateEnabled()
 
 async function onExportTouristPdf() {
   if (!data.value) return
@@ -85,6 +109,86 @@ async function copyShareLink() {
   const caption = shareH5Caption(data.value)
   const ok = await copyText(`${caption}\n${shareH5Url(token)}`)
   shareTip.value = ok ? '协作链接已复制，去微信粘贴到群里即可 ✅' : '复制失败，请长按上方链接手动复制'
+}
+
+// 旅行社保存利润②：凭协作 token 调用 POST /h5/route/:token/quote（免登录鉴权），
+// 后端 mergeAgencyQuote 保留 PandaKing 的 items 并重算对客总价。
+// ⚠️ 不再走控制台 saveVersion（会因 route.agencyId 与登录机构不一致误报「路线不存在」）。
+async function onAgSave() {
+  agSaving.value = true
+  agSaveErr.value = ''
+  agSaveOk.value = ''
+  agThText.value = ''
+  agThErr.value = ''
+  try {
+    if (!data.value) throw new Error('数据未加载')
+    const res = await submitH5AgencyQuote(token, {
+      profit2Mode: agProfit2Mode.value,
+      profit2: Number(agProfit2.value) || 0,
+    })
+    // 用后端权威报价回显：更新 quoteA / 对客总价，保证与重算一致
+    if (data.value.quote && res.quote?.totals) {
+      ;(data.value.quote as any).totals = {
+        ...(data.value.quote?.totals || {}),
+        ...res.quote.totals,
+      }
+      if (res.quote.items) (data.value.quote as any).items = res.quote.items
+    }
+    const gp = res.guestPrice ?? agGuestPrice.value
+    agSaveOk.value = `已保存报价（${agProfit2Mode.value === 'percent' ? `${agProfit2.value}%` : `¥${Number(agProfit2.value).toLocaleString()}`}），对客总价 ¥${Number(gp).toLocaleString()}`
+  } catch (e: any) {
+    agSaveErr.value = e?.response?.data?.message || e.message || '保存失败'
+  } finally {
+    agSaving.value = false
+  }
+}
+
+// 旅行社 AI 翻译为泰语版（行程+对客总价）：调用翻译服务生成结构化泰语报价单，供旅行社复制粘贴发客户
+async function onAgTranslate() {
+  if (!data.value) return
+  agThBusy.value = true
+  agThErr.value = ''
+  agThText.value = ''
+  try {
+    const d = data.value
+    const it = (d.itinerary as { days?: any[] }) ?? {}
+    const rawDays = it.days ?? []
+    const lines: string[] = []
+    lines.push(`【${t('th', 'itineraryTitle')}】`)
+    lines.push('')
+
+    // 逐天翻译：城市/酒店/景点/餐饮 → 泰语
+    for (let i = 0; i < rawDays.length; i++) {
+      const day = rawDays[i] || {}
+      const dayNum = Number(day.day) || i + 1
+      const [cityTr, hotelTr] = await Promise.all([
+        translateText(String(day.city || ''), 'th'),
+        translateText(String(day.hotel || ''), 'th'),
+      ])
+      const spotsTr = await Promise.all(
+        ((day.spots ?? []) as string[]).map((s) => translateText(String(s || ''), 'th')),
+      )
+      const mealsTr = await Promise.all(
+        ((day.meals ?? []) as string[]).map((m) => translateText(String(m || ''), 'th')),
+      )
+
+      lines.push(`${t('th', 'day')} ${dayNum} · ${cityTr || '—'}`)
+      const spots = spotsTr.filter(Boolean)
+      const meals = mealsTr.filter(Boolean)
+      if (spots.length) lines.push(`  ${t('th', 'spots')}: ${spots.join('、')}`)
+      if (hotelTr) lines.push(`  ${t('th', 'hotel')}: ${hotelTr}`)
+      if (meals.length) lines.push(`  ${t('th', 'meals')}: ${meals.join('、')}`)
+      lines.push('')
+    }
+
+    lines.push('────────────────────')
+    lines.push(`${t('th', 'col_guestPrice')}: ¥${agGuestPrice.value.toLocaleString()}`)
+    agThText.value = lines.join('\n')
+  } catch (e: any) {
+    agThErr.value = e?.message || '翻译失败'
+  } finally {
+    agThBusy.value = false
+  }
 }
 async function copyAgain() {
   if (!notifyText.value) return
@@ -143,13 +247,24 @@ function updateOgMeta(key: string, content: string) {
 onMounted(async () => {
   try {
     data.value = await fetchH5Route(token)
+    // 旅行社视角：若已有上一次的利润②（如重新打开链接），回填到输入框
+    if (data.value?.role === 'agency') {
+      const t = (data.value.quote as any)?.totals
+      if (t) {
+        agProfit2Mode.value = t.profit2Mode === 'percent' ? 'percent' : 'amount'
+        agProfit2.value = Number(t.profit2) || 0
+      }
+    }
     // 设置浏览器标签标题，打开分享链接时显示对客标题
     const title = `${safeText(data.value.destination) || '定制行程'} · 定制行程方案`
     document.title = title
     updateOgMeta('og:title', title)
       updateOgMeta(
       'og:description',
-      `PandaKing9 为您定制的${safeText(data.value.destination) || '行程'}方案${data.value.guestPrice != null ? `，对客总价 ¥${data.value.guestPrice.toLocaleString()}` : ''}`,
+      // 旅行社视角：突出「报价A」（他们的成本基线）；其他视角：对客总价
+      data.value.role === 'agency'
+        ? `PandaKing9 为您定制的${safeText(data.value.destination) || '行程'}方案，报价A ¥${(Number(data.value.quote?.totals?.quoteA) || 0).toLocaleString()}（您的成本基线）`
+        : `PandaKing9 为您定制的${safeText(data.value.destination) || '行程'}方案${data.value.guestPrice != null ? `，对客总价 ¥${data.value.guestPrice.toLocaleString()}` : ''}`,
       )
       await loadFeedback()
   } catch {
@@ -217,25 +332,99 @@ function goHome() {
         <span>状态: {{ statusLabel(data.statusKey) }}</span>
         <span>人数: {{ data.groupSize }}</span>
       </div>
-      <div v-if="data.guestPrice != null" class="h5-price">
-        对客总价: <b>¥{{ data.guestPrice.toLocaleString() }}</b>
-      </div>
 
-      <button class="btn ghost share-btn" @click="copyShareLink">📋 复制协作链接发到微信群</button>
-      <p v-if="shareTip" class="share-tip">{{ shareTip }}</p>
+      <!-- 旅行社视角：报价A（成本基线）+ 利润② + 对客总价 -->
+      <template v-if="isAgencyView">
+        <div class="h5-quotea-card">
+          <div class="h5-quotea-lab">报价A（您的成本基线）</div>
+          <div class="h5-quotea-val">¥{{ agQuoteA.toLocaleString() }}</div>
+        </div>
 
-      <button class="btn ghost share-btn" @click="pdfPanelOpen = !pdfPanelOpen">📄 导出游客版PDF</button>
-      <div v-if="pdfPanelOpen" class="pdf-tourist-panel">
-        <span class="pdf-panel-label">语言</span>
-        <label v-for="o in PDF_LANG_OPTIONS" :key="o.value" class="pdf-opt">
-          <input type="radio" :value="o.value" v-model="pdfLang" /> {{ o.label }}
-        </label>
-        <button class="btn btn-primary" :disabled="pdfBusy" @click="onExportTouristPdf">
-          {{ pdfBusy ? '生成中…' : '生成并下载' }}
-        </button>
-        <button class="btn ghost" @click="pdfPanelOpen = false">取消</button>
-        <p v-if="pdfErr" class="err">{{ pdfErr }}</p>
-      </div>
+        <div class="h5-ag-section">
+          <h3>💹 加价（利润）</h3>
+          <div class="h5-ag-mode">
+            <label class="h5-ag-radio">
+              <input type="radio" v-model="agProfit2Mode" value="amount" /><span>固定金额 ¥</span>
+            </label>
+            <label class="h5-ag-radio">
+              <input type="radio" v-model="agProfit2Mode" value="percent" /><span>百分比 %</span>
+            </label>
+          </div>
+          <input
+            v-model.number="agProfit2"
+            type="number"
+            min="0"
+            class="h5-input h5-ag-input"
+            :placeholder="agProfit2Mode === 'percent' ? '如 15' : '如 500'"
+          />
+          <div class="h5-ag-preview">
+            <div class="h5-ag-row">
+              <span>报价A（成本）</span>
+              <span>¥{{ agQuoteA.toLocaleString() }}</span>
+            </div>
+            <div class="h5-ag-row">
+              <span>+ 利润</span>
+              <span>
+                {{ agProfit2Mode === 'percent'
+                  ? `${agProfit2 || 0}% = ¥${Math.round(agQuoteA * (Number(agProfit2) || 0) / 100).toLocaleString()}`
+                  : `¥${(Number(agProfit2) || 0).toLocaleString()}` }}
+              </span>
+            </div>
+            <div class="h5-ag-divider"></div>
+            <div class="h5-ag-row h5-ag-total">
+              <span>对客总价</span>
+              <span class="h5-ag-guest">¥{{ agGuestPrice.toLocaleString() }}</span>
+            </div>
+          </div>
+
+          <button class="btn btn-primary" :disabled="agSaving" @click="onAgSave">
+            {{ agSaving ? '保存中…' : '💾 保存报价' }}
+          </button>
+          <p v-if="agSaveErr" class="err">{{ agSaveErr }}</p>
+          <p v-if="agSaveOk" class="ok">{{ agSaveOk }} ✅</p>
+
+          <!-- AI 翻译为泰语版（行程+对客总价）—— 旅行社复制粘贴发客户 -->
+          <div class="h5-ag-translate">
+            <button class="btn btn-primary" :disabled="agThBusy" @click="onAgTranslate">
+              {{ agThBusy ? '翻译中…' : '🌐 翻译为泰语版（行程+报价）' }}
+            </button>
+            <p v-if="!hasTranslate" class="muted" style="font-size: 12px;">
+              ⚠️ 未配置翻译服务，将以原文显示（如需配置请联系管理员设置 VITE_TMT_ENDPOINT）
+            </p>
+            <p v-if="agThErr" class="err">{{ agThErr }}</p>
+            <div v-if="agThText" class="notify-box">
+              <div class="notify-head">
+                <span>🇹🇭 泰语报价单（复制粘贴发客户）</span>
+                <button class="btn ghost sm" @click="copyText(agThText)">📋 复制</button>
+              </div>
+              <pre class="notify-text">{{ agThText }}</pre>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- 非旅行社视角：原有对客价 + 协作链接 + 反馈 -->
+      <template v-else>
+        <div v-if="data.guestPrice != null" class="h5-price">
+          对客总价: <b>¥{{ data.guestPrice.toLocaleString() }}</b>
+        </div>
+
+        <button class="btn ghost share-btn" @click="copyShareLink">📋 复制协作链接发到微信群</button>
+        <p v-if="shareTip" class="share-tip">{{ shareTip }}</p>
+
+        <button class="btn ghost share-btn" @click="pdfPanelOpen = !pdfPanelOpen">📄 导出游客版PDF</button>
+        <div v-if="pdfPanelOpen" class="pdf-tourist-panel">
+          <span class="pdf-panel-label">语言</span>
+          <label v-for="o in PDF_LANG_OPTIONS" :key="o.value" class="pdf-opt">
+            <input type="radio" :value="o.value" v-model="pdfLang" /> {{ o.label }}
+          </label>
+          <button class="btn btn-primary" :disabled="pdfBusy" @click="onExportTouristPdf">
+            {{ pdfBusy ? '生成中…' : '生成并下载' }}
+          </button>
+          <button class="btn ghost" @click="pdfPanelOpen = false">取消</button>
+          <p v-if="pdfErr" class="err">{{ pdfErr }}</p>
+        </div>
+      </template>
 
       <h3>行程安排</h3>
       <div v-if="days.length">
@@ -307,7 +496,7 @@ function goHome() {
 .notify-box { margin-top: 12px; border: 1px solid var(--brand); border-radius: 10px; padding: 10px 12px; background: rgba(59,130,246,.06); }
 .notify-head { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--brand); }
 .notify-head .btn { margin-left: auto; }
-.notify-text { margin: 8px 0 0; white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.6; color: var(--ink); font-family: inherit; }
+.notify-text { margin: 8px 0 0; white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.6; color: var(--ink); font-family: inherit; -webkit-user-select: text; user-select: text; }
 h3 { font-size: 15px; margin: 14px 0 0; }
 .h5-fb-history { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
 .h5-fb-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
@@ -319,6 +508,24 @@ h3 { font-size: 15px; margin: 14px 0 0; }
 .pdf-tourist-panel { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 12px; padding: 10px 12px; border: 1px solid var(--brand, #3b82f6); border-radius: 10px; background: rgba(59,130,246,.05); }
 .pdf-panel-label { font-weight: 600; color: var(--muted); min-width: 36px; }
 .pdf-opt { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer; }
+
+/* —— 旅行社视角：报价A + 利润② + 对客总价 —— */
+.h5-quotea-card { margin: 14px 0; padding: 14px 16px; background: #fdeef0; border-radius: 12px; display: flex; align-items: baseline; justify-content: space-between; border: 1px solid var(--brand); }
+.h5-quotea-lab { color: var(--brand-600, #a60d26); font-size: 13px; font-weight: 600; }
+.h5-quotea-val { color: var(--brand); font-size: 24px; font-weight: 800; }
+.h5-ag-section { margin-top: 16px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.h5-ag-section h3 { margin-top: 0; color: var(--brand-600, #a60d26); }
+.h5-ag-mode { display: flex; gap: 18px; margin: 8px 0 10px; }
+.h5-ag-radio { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; font-size: 14px; color: var(--ink); }
+.h5-ag-input { font-size: 16px; font-weight: 600; color: var(--brand); margin-top: 0; }
+.h5-ag-preview { margin: 10px 0; padding: 10px 12px; background: #fbfcfe; border-radius: 8px; }
+.h5-ag-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 14px; color: var(--ink); }
+.h5-ag-divider { border-top: 1px dashed var(--line); margin: 6px 0; }
+.h5-ag-total { font-weight: 700; font-size: 15px; }
+.h5-ag-guest { color: var(--brand); font-size: 18px; }
+.h5-ag-customer { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.ok { color: var(--ok, #10b981); margin-top: 8px; font-size: 13px; }
+
 /* 离屏渲染容器：保留布局尺寸供 html2canvas 截图，并移出可视区 */
 .pdf-offscreen { position: fixed; left: -10000px; top: 0; width: 794px; background: #fff; z-index: -1; }
 </style>

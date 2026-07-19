@@ -505,6 +505,45 @@ export class RoutesService {
     }
   }
 
+  // 旅行社 H5 保存加价（利润②）：凭协作 token 鉴权（免登录），与省地接社 provincialEdit 一致。
+  // ⚠️ 不再走控制台 saveVersion：后者会经 assertVisible 校验 route.agencyId === 登录机构，
+  // 一旦旅行社登录态机构与路线归属机构不一致（或路线 agencyId 为空）即误报「路线不存在」。
+  // 本方法仅更新「getH5 读取的当前协作版本」报价，保留 PandaKing 的 items（cost①/利润①），
+  // 以 mergeAgencyQuote 重算对客总价；不新增版本噪音，重开链接仍见最新利润②。
+  async agencyQuote(
+    token: string,
+    input: { profit2Mode?: 'amount' | 'percent'; profit2?: number },
+  ) {
+    const share = await this.prisma.routeShare.findUnique({ where: { token } })
+    if (!share || share.role !== 'agency' || share.public) {
+      throw new NotFoundException('协作链接无效')
+    }
+    // 优先更新 share 指向的协作版本（getH5 即读此版本），否则取最新版本
+    const targetVersionId = share.versionId
+    const target = targetVersionId
+      ? await this.prisma.routeVersion.findUnique({ where: { id: targetVersionId } })
+      : null
+    const base = target ?? (await this.latestVersion(share.routeId))
+    if (!base) throw new NotFoundException('路线暂无版本')
+    const profit2Mode = (input.profit2Mode as 'amount' | 'percent') ?? 'amount'
+    const profit2 = Number(input.profit2) || 0
+    const quote = this.mergeAgencyQuote(base, {
+      items: [],
+      totals: { profit2Mode, profit2 },
+    }) as { items?: any[]; totals?: any }
+    const updated = await this.prisma.routeVersion.update({
+      where: { id: base.id },
+      data: { quote: quote as object },
+    })
+    const visible = hideCostsForRole(updated.quote, 'agency') as { items?: any[]; totals?: any }
+    return {
+      version: this.serializeVersion(updated, 'agency'),
+      quote: visible,
+      quoteA: visible?.totals?.quoteA ?? null,
+      guestPrice: visible?.totals?.guestPrice ?? null,
+    }
+  }
+
   // 旅行社仅可调整自身利润2（元/%），成本①与 PandaKing 利润1 取自上一版（旅行社不可见），
   // 并以 PandaKing 报价A 作为自身成本基线，重算对客总价 guestPrice。
   // ⚠️ 关键：旅行社 H5 保存时只回传 profit2（items 为空），必须保留上一版 items，

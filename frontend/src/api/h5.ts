@@ -44,3 +44,12 @@ export async function editH5ProvincialRoute(
   const { data } = await client.post(`/h5/route/${token}/edit`, payload)
   return data
 }
+
+// 旅行社协作 H5：凭 token 保存加价（利润②），免登录鉴权（对应后端 POST /h5/route/:token/quote）
+export async function submitH5AgencyQuote(
+  token: string,
+  payload: { profit2Mode: 'amount' | 'percent'; profit2: number },
+): Promise<{ quoteA: number | null; guestPrice: number | null; quote: { items?: any[]; totals?: any } }> {
+  const { data } = await client.post(`/h5/route/${token}/quote`, payload)
+  return data
+}

@@ -37,6 +37,15 @@ export function inviteH5Url(token: string): string {
   return `${base}#/h5/invite/${token}`
 }
 
+// 旅行社 H5 链接：指向前端 SPA 的协作页（hash 路由），与 shareH5Url（SSR 静态页）区分。
+// 一手「生成对旅行社链接」使用此 URL：旅行社在微信里打开 SPA，可看行程 + 加利润② → 生成对客链接。
+// 区别：shareH5Url 指向 SSR 页（仅对客总价、不可编辑，用于微信分享卡片 OG 预览）；
+//      agencyH5Url 指向 SPA 页（可加利润②，旅行社交互入口）。
+export function agencyH5Url(token: string): string {
+  const base = window.location.origin + (import.meta.env.VITE_BASE || '/')
+  return `${base}#/h5/route/${token}`
+}
+
 // 成本询价 H5 链接：指向前端 SPA 的询价填写页（hash 路由），一手复制后发微信群给省地接社。
 export function costInquiryH5Url(token: string): string {
   const base = window.location.origin + (import.meta.env.VITE_BASE || '/')
@@ -50,17 +59,30 @@ export function provincialRouteH5Url(token: string): string {
 }
 
 // 复制分享链接时附带的「客户/路线说明标注」（微信粘贴即带说明 + 链接）
+// 三段式标题：{客户} · {目的地} · {时间}，让 PandaKing 在微信群中一眼看清是谁、什么行程、什么时候出发
 export function shareH5Caption(route?: {
   customerNameCn?: string | null
   customerName?: string | null
   destination?: string | null
+  travelDate?: string | null
 }): string {
   const who = safeName(route?.customerNameCn, route?.customerName)
   const dest = safeText(route?.destination)
-  if (who && dest) return `${who} · ${dest} 定制行程报价`
-  if (who) return `${who} 定制行程报价`
-  if (dest) return `${dest} 定制行程报价`
+  const date = formatTravelDate(route?.travelDate)
+  const head = [who, dest, date].filter(Boolean).join(' · ')
+  if (head) return `${head} 定制行程报价`
   return '定制行程报价方案'
+}
+
+// 出行日期格式化为「7月25日」等简短中文形式（兼容 ISO 与纯日期字符串）
+function formatTravelDate(d?: string | null): string {
+  if (!d) return ''
+  const s = String(d).trim()
+  if (!s) return ''
+  const datePart = s.split('T')[0]
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return datePart
+  const [, m, day] = datePart.split('-')
+  return `${parseInt(m, 10)}月${parseInt(day, 10)}日`
 }
 
 // 统一协作通知文案构造：覆盖「规划提交（方案更新）」与「反馈意见」两类事件。
@@ -222,8 +244,10 @@ export function feedbackNotifyText(opts: FeedbackNotifyOpts): string {
   return buildNotify(opts.label, head, [who, `「${opts.suggestion}」`], opts.url)
 }
 
-// 复制文本到剪贴板：优先 Clipboard API，非安全上下文退化到 execCommand
+// 复制文本到剪贴板：优先 Clipboard API，非安全上下文（微信/iOS 内嵌浏览器等）退化到 execCommand。
+// 两路都失败时返回 false，由调用方提示用户「长按上方文字手动复制」。
 export async function copyText(text: string): Promise<boolean> {
+  // 第一路：标准 Clipboard API（需安全上下文 + 用户手势；部分微信 webview 无此对象或静默失败）
   try {
     if (navigator.clipboard && window.isSecureContext) {
       await navigator.clipboard.writeText(text)
@@ -232,19 +256,41 @@ export async function copyText(text: string): Promise<boolean> {
   } catch {
     /* 落到退化方案 */
   }
+  // 第二路：临时 textarea + execCommand（兼容 iOS/微信）。
+  // iOS Safari/微信需显式 setSelectionRange + Range，否则 ta.select() 不生效。
   try {
     const ta = document.createElement('textarea')
     ta.value = text
     ta.setAttribute('readonly', '')
     ta.style.position = 'fixed'
-    ta.style.top = '-9999px'
+    ta.style.top = '0'
+    ta.style.left = '0'
+    ta.style.width = '1px'
+    ta.style.height = '1px'
+    ta.style.padding = '0'
+    ta.style.border = 'none'
     ta.style.opacity = '0'
+    ta.style.zIndex = '-1'
     document.body.appendChild(ta)
+    ta.focus()
     ta.select()
+    try {
+      ta.setSelectionRange(0, text.length)
+    } catch {
+      /* 非受控，忽略 */
+    }
+    const sel = window.getSelection()
+    if (sel) {
+      const range = document.createRange()
+      range.selectNodeContents(ta)
+      sel.removeAllRanges()
+      sel.addRange(range)
+    }
     const ok = document.execCommand('copy')
     document.body.removeChild(ta)
-    return ok
+    if (ok) return true
   } catch {
-    return false
+    /* 忽略，继续返回 false */
   }
+  return false
 }
