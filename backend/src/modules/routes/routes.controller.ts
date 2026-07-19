@@ -175,6 +175,16 @@ export class RoutesController {
     return this.svc.createProvincialShare(id, body?.provincialId, user as any)
   }
 
+  // 幂等获取「省地接社协作 H5」令牌：同一 route + 省地接社 复用已有令牌，不重复创建。
+  @Post(':id/provincial-share/ensure')
+  ensureProvincialShare(
+    @Param('id') id: string,
+    @Body() body: { provincialId?: string },
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.svc.ensureProvincialShare(id, body?.provincialId, user as any)
+  }
+
   // 旅行社加价 → 待确认
   @Post(':id/markup')
   markup(@Param('id') id: string, @CurrentUser() user: AuthUser) {

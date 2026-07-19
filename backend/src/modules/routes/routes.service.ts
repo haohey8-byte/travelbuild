@@ -350,6 +350,61 @@ export class RoutesService {
     return { token: shareRecord.token, link: `/h5/provincial-route/${shareRecord.token}` }
   }
 
+  // 幂等获取「省地接社协作 H5」令牌：同一 route + 省地接社 复用已存在的令牌/成本询价，
+  // 不重复创建（避免一手多次点「保存并通知/发起协作」后省地接社收到多个链接与多条询价记录）。
+  // 仅在尚不存在时新建（逻辑等同 createProvincialShare）。
+  async ensureProvincialShare(routeId: string, provincialId?: string, principal?: RoutePrincipal) {
+    if (principal && principal.role !== 'pandaking') {
+      throw new ForbiddenException('仅一手 PandaKing 可发起省地接社协作')
+    }
+    const route = await this.prisma.route.findUniqueOrThrow({ where: { id: routeId } }).catch(() => {
+      throw new NotFoundException('路线不存在')
+    })
+
+    // 若调用方指定了省地接社，必须存在且角色正确；未指定则使用 route 上已分配的省地接社
+    const effectiveProvincialId = provincialId?.trim() || route.provincialId
+    if (!effectiveProvincialId) {
+      throw new BadRequestException('请指定要协作的省地接社机构')
+    }
+    const target = await this.prisma.agency.findUnique({ where: { id: effectiveProvincialId } })
+    if (!target || target.role !== 'provincial') {
+      throw new BadRequestException('省地接社机构不存在或角色不是省地接社')
+    }
+
+    // 复用：查找该 route 下已存在的省地接社协作 share（且关联同一省地接社的成本询价）
+    const existing = await this.prisma.routeShare.findFirst({
+      where: {
+        routeId,
+        role: 'provincial',
+        costInquiry: { provincialId: effectiveProvincialId },
+      },
+    })
+    if (existing) {
+      return { token: existing.token, link: `/h5/provincial-route/${existing.token}` }
+    }
+
+    // 不存在则新建（与原 createProvincialShare 逻辑一致）
+    const token = Math.random().toString(36).slice(2) + Date.now().toString(36)
+    const [, inquiry] = await this.prisma.$transaction([
+      this.prisma.route.update({
+        where: { id: routeId },
+        data: { provincialId: effectiveProvincialId },
+      }),
+      this.prisma.costInquiry.create({
+        data: {
+          routeId,
+          provincialId: effectiveProvincialId,
+          token: Math.random().toString(36).slice(2) + Date.now().toString(36),
+          status: 'pending',
+        },
+      }),
+    ])
+    const shareRecord = await this.prisma.routeShare.create({
+      data: { token, routeId, role: 'provincial', costInquiryId: inquiry.id },
+    })
+    return { token: shareRecord.token, link: `/h5/provincial-route/${shareRecord.token}` }
+  }
+
   // 省地接社凭令牌在协作页编辑行程并填写成本①（利润默认0）；
   // 提交后成本①直接写回 routeVersion.quote.items（同名仅更新 cost1、保留 PandaKing 已设利润1，异名追加），
   // 同时记录到 costInquiry（供协作记录区与省地接社视角回显）。三角色共用同一报价页，仅角色隔离。

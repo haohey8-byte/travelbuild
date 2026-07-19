@@ -11,7 +11,7 @@ import {
   submitConsoleFeedback,
   listCostInquiries,
   applyCostInquiry,
-  createProvincialShare,
+  ensureProvincialShare,
 } from '@/api/routes'
 import { fetchAgencies } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
@@ -294,7 +294,7 @@ async function onStartCollab() {
     return
   }
   try {
-    const res = await createProvincialShare(id, collabProvId.value.trim())
+    const res = await ensureProvincialShare(id, collabProvId.value.trim())
     // 在协作链接后附加行程关键信息（目的地/客户名），便于微信沟通中一眼区分
     const base = provincialRouteH5Url(res.token)
     const params = new URLSearchParams()
@@ -427,24 +427,39 @@ async function onSaveNotify() {
   actionOk.value = ''
   notifyTextConsole.value = ''
   try {
+    // 已关联省地接社时，本轮「通知」的对象是省地接社（而非终端客户），
+    // 故不再生成面向客户的公开只读 H5，改为生成省地接社可编辑协作链接（幂等，复用已有令牌）。
+    const collabProv = data.value?.provincialId || ''
     const res = (await saveVersion(id, {
       itinerary: itinerary.value,
       quote: buildQuote(),
       draft: false,
-      notify: true,
+      notify: !collabProv,
     })) as { shareToken?: string; shareLink?: string; version?: any }
-    // 后端返回 /share/route/TOKEN 或 shareToken；分享页由后端 SSR 注入 OG
-    const token = res.shareToken || res.shareLink?.split('/').pop() || ''
-    const link = token ? shareH5Url(token) : ''
+
+    let link = ''
+    if (collabProv) {
+      // 省地接社协作链接：幂等，同 route+省地接社复用已有令牌，避免省地接社收到多个链接
+      const ps = await ensureProvincialShare(id, collabProv)
+      link = provincialRouteH5Url(ps.token)
+    } else {
+      // 后端返回 /share/route/TOKEN 或 shareToken；分享页由后端 SSR 注入 OG
+      const token = res.shareToken || res.shareLink?.split('/').pop() || ''
+      link = token ? shareH5Url(token) : ''
+    }
     shareLink.value = link
     if (link && data.value) {
       const caption = shareH5Caption(data.value)
       const text = `${caption}\n${link}`
       try {
         await navigator.clipboard.writeText(text)
-        actionOk.value = '协作 H5 链接已生成并复制到剪贴板，可粘贴到微信'
+        actionOk.value = collabProv
+          ? '省地接社协作链接已生成并复制到剪贴板，可粘贴到微信群'
+          : '协作 H5 链接已生成并复制到剪贴板，可粘贴到微信'
       } catch {
-        actionOk.value = '协作 H5 链接已生成，请手动复制下方链接'
+        actionOk.value = collabProv
+          ? '省地接社协作链接已生成，请手动复制下方链接'
+          : '协作 H5 链接已生成，请手动复制下方链接'
       }
     } else {
       actionOk.value = '已保存新版本，但未生成分享链接'

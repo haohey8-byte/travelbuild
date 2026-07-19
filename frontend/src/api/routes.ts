@@ -116,3 +116,12 @@ export async function createProvincialShare(
   const { data } = await client.post(`/routes/${routeId}/provincial-share`, provincialId ? { provincialId } : {})
   return data
 }
+
+// 幂等获取「省地接社协作 H5」令牌：同 route + 省地接社 复用已有令牌，不重复创建
+export async function ensureProvincialShare(
+  routeId: string,
+  provincialId?: string,
+): Promise<ProvincialShare> {
+  const { data } = await client.post(`/routes/${routeId}/provincial-share/ensure`, provincialId ? { provincialId } : {})
+  return data
+}
