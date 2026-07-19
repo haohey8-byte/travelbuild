@@ -67,14 +67,101 @@ export function shareH5Caption(route?: {
 // 两种事件都生成可直接粘贴到微信群的「主题 + 结构化信息 + H5 链接」文案。
 export type CollabKind = 'plan' | 'feedback'
 
+// —— 省地接社↔一手多轮协作：回传时生成「关键变更摘要」——
+// 现状：省地接社与一手就行程编辑与成本价格存在多轮反复沟通（非一次性回传），
+// 因此每次回传的通知文案需自动汇总「修改了哪些价格 / 行程有哪些关键变更」，
+// 让一手在微信里一眼看清本轮改动，无需逐页比对。
+export interface ProvincialCostChange {
+  name: string
+  before: number
+  after: number
+  isNew: boolean // 本轮新增的成本项
+}
+export interface ProvincialItineraryChange {
+  dayCountBefore: number
+  dayCountAfter: number
+  dayDelta: number // 天数增减
+  cityChanges: string[] // 人类可读的城市变更，如 "D3 大阪→京都" / "D5 东京(新增)"
+}
+export interface ProvincialChanges {
+  versionLabel?: string // 基于的版本号，如 "v2"
+  cost?: {
+    totalBefore: number
+    totalAfter: number
+    items: ProvincialCostChange[]
+  }
+  itinerary?: ProvincialItineraryChange
+}
+
 export interface CollabNotifyOpts {
   kind: CollabKind
   eventLabel: string // 事件名：生成协作H5 / 回传反馈 / 修订重交 / 发报价 v1 / 游客确认 / 付款成单 …
   subject?: string | null // 主题（客户名）
   destination?: string | null // 目的地
   authorName?: string | null // 操作人/提交方
-  detail?: string | null // 反馈建议/备注（可选）
+  detail?: string | null // 反馈建议/备注（可选，保留兼容）
+  changes?: ProvincialChanges // 本轮关键变更摘要（省地接社多轮回传时填充）
   url: string // 协作 H5 链接
+}
+
+// 计算省地接社本轮回传的变更摘要：成本①（价格差异）+ 行程（天数/城市变更）
+export function diffProvincialChanges(opts: {
+  beforeItems: { name: string; cost1: number }[]
+  afterItems: { name: string; cost1: number }[]
+  beforeItinerary?: { days: { day: number; city: string }[] }
+  afterItinerary?: { days: { day: number; city: string }[] }
+  versionLabel?: string
+}): ProvincialChanges {
+  const changes: ProvincialChanges = {}
+  if (opts.versionLabel) changes.versionLabel = opts.versionLabel
+
+  // 成本①差异：按名称对齐，before/after 不同即视为变更
+  const beforeMap = new Map(opts.beforeItems.map((i) => [String(i.name).trim(), Number(i.cost1) || 0]))
+  const afterMap = new Map(opts.afterItems.map((i) => [String(i.name).trim(), Number(i.cost1) || 0]))
+  const allNames = Array.from(new Set([...beforeMap.keys(), ...afterMap.keys()]))
+  const costItems: ProvincialCostChange[] = []
+  for (const name of allNames) {
+    const before = beforeMap.get(name) ?? 0
+    const after = afterMap.get(name) ?? 0
+    if (before === after) continue
+    costItems.push({ name, before, after, isNew: before === 0 })
+  }
+  if (costItems.length > 0 || opts.afterItems.length > 0) {
+    changes.cost = {
+      totalBefore: opts.beforeItems.reduce((s, i) => s + (Number(i.cost1) || 0), 0),
+      totalAfter: opts.afterItems.reduce((s, i) => s + (Number(i.cost1) || 0), 0),
+      items: costItems,
+    }
+  }
+
+  // 行程差异：逐天比对城市，输出 Dn 的新增/移除/变更
+  if (opts.beforeItinerary && opts.afterItinerary) {
+    const bDays = opts.beforeItinerary.days || []
+    const aDays = opts.afterItinerary.days || []
+    const cityChanges: string[] = []
+    const maxLen = Math.max(bDays.length, aDays.length)
+    for (let i = 0; i < maxLen; i++) {
+      const d = i + 1
+      const b = bDays[i]
+      const a = aDays[i]
+      const bCity = (b?.city || '').trim()
+      const aCity = (a?.city || '').trim()
+      if (!b && a) cityChanges.push(`D${d} ${aCity || '（空白）'}(新增)`)
+      else if (b && !a) cityChanges.push(`D${d} ${bCity}(移除)`)
+      else if (bCity !== aCity) {
+        if (!bCity) cityChanges.push(`D${d} ${aCity}(新增城市)`)
+        else if (!aCity) cityChanges.push(`D${d} ${bCity}(清空城市)`)
+        else cityChanges.push(`D${d} ${bCity}→${aCity}`)
+      }
+    }
+    changes.itinerary = {
+      dayCountBefore: bDays.length,
+      dayCountAfter: aDays.length,
+      dayDelta: aDays.length - bDays.length,
+      cityChanges,
+    }
+  }
+  return changes
 }
 
 function buildNotify(tag: string, head: string, bodyLines: string[], url: string): string {
@@ -86,7 +173,30 @@ export function collabNotifyText(opts: CollabNotifyOpts): string {
   const actor = opts.authorName ? opts.authorName + ' ' : ''
   const lines = [`${actor}${opts.eventLabel}`]
   if (opts.detail) lines.push(`「${opts.detail}」`)
-  return buildNotify(opts.kind === 'feedback' ? '反馈意见' : '方案更新', head, lines, opts.url)
+
+  // 关键变更摘要块：仅在确有变更时展示，避免无变化时出现空标题
+  const blocks: string[] = []
+  const ch = opts.changes
+  if (ch) {
+    const sub: string[] = []
+    if (ch.versionLabel) sub.push(`基于 ${ch.versionLabel}`)
+    if (ch.cost && ch.cost.items.length > 0) {
+      sub.push(`成本① 合计 ¥${ch.cost.totalBefore.toLocaleString()} → ¥${ch.cost.totalAfter.toLocaleString()}（${ch.cost.items.length}项变更）`)
+      for (const it of ch.cost.items.slice(0, 8)) {
+        if (it.isNew) sub.push(`• ${it.name}(新增)：¥${it.after.toLocaleString()}`)
+        else sub.push(`• ${it.name}：¥${it.before.toLocaleString()} → ¥${it.after.toLocaleString()}`)
+      }
+    }
+    if (ch.itinerary && ch.itinerary.cityChanges.length > 0) {
+      sub.push(`行程：${ch.itinerary.dayCountBefore} → ${ch.itinerary.dayCountAfter} 天`)
+      for (const c of ch.itinerary.cityChanges.slice(0, 8)) sub.push(`• ${c}`)
+    }
+    // 仅当除版本标签外还有实质变更时才展示块
+    if (sub.length > (ch.versionLabel ? 1 : 0)) blocks.push(...sub)
+  }
+
+  const bodyLines = blocks.length ? [...lines, '', '【本轮关键变更】', ...blocks] : lines
+  return buildNotify(opts.kind === 'feedback' ? '反馈意见' : '方案更新', head, bodyLines, opts.url)
 }
 
 // 角色中文标签（用于通知文案中标注操作方）

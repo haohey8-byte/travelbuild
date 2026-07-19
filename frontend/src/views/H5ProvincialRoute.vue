@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { fetchH5Route, submitH5Feedback, fetchH5Feedback, editH5ProvincialRoute } from '@/api/h5'
 import { safeName, safeText } from '@/utils/name'
-import { collabNotifyText, copyText } from '@/utils/share'
+import { collabNotifyText, copyText, diffProvincialChanges } from '@/utils/share'
 import QuoteTable from '@/components/QuoteTable.vue'
 import type { H5Route, RouteFeedbackItem, QuoteLevel, RouteStatusKey } from '@/types'
 
@@ -68,6 +68,9 @@ const quoteItems = ref<QuoteLevel[]>([])
 const alreadySubmitted = ref(false)
 const costInquiryId = ref<string | null>(null)
 const totalCost = computed(() => quoteItems.value.reduce((s, it) => s + (Number(it.cost1) || 0), 0))
+// 回传前的基线快照：用于多轮回传时计算「关键变更摘要」（与一手逐轮核对）
+const initialCostItems = ref<{ name: string; cost1: number }[]>([])
+const initialItinerary = ref<{ days: { day: number; city: string }[] }>({ days: [] })
 function normalizeCostItems(): { name: string; cost1: number }[] {
   return quoteItems.value
     .filter((it) => String(it.name).trim() || Number(it.cost1) > 0)
@@ -153,6 +156,9 @@ onMounted(async () => {
         ]
       }
     }
+    // 记录回传前基线（多轮协作：用于生成本轮关键变更摘要）
+    initialCostItems.value = quoteItems.value.map((i) => ({ name: String(i.name || ''), cost1: Number(i.cost1) || 0 }))
+    initialItinerary.value = { days: itinerary.value.days.map((d) => ({ day: d.day, city: d.city })) }
     document.title = pageTitle.value
     await loadFeedback()
   } catch {
@@ -172,7 +178,8 @@ async function onSubmitHandoff() {
   try {
     const items = normalizeCostItems()
     const payload: { itinerary: unknown; items?: { name: string; cost1: number }[] } = { itinerary: itinerary.value }
-    if (!alreadySubmitted.value && items.length > 0) {
+    // 多轮协作：每轮都回传成本①（含变更），让一手逐轮核对价格变化，而非仅首次
+    if (items.length > 0) {
       payload.items = items.map((it) => ({ name: it.name, cost1: it.cost1 }))
     }
     await editH5ProvincialRoute(token, payload)
@@ -194,14 +201,22 @@ async function onSubmitHandoff() {
       ? '行程、成本①与回传说明已保存并同步给一手 ✅'
       : '行程与成本①已保存并同步给一手 ✅'
     if (data.value) {
-      const detail = items.length ? `成本①合计 ¥${totalCost.value.toLocaleString()}` : undefined
+      // 多轮协作：计算本轮关键变更摘要，让一手一眼看清改了哪些价格/行程
+      const afterItinerary = { days: itinerary.value.days.map((d) => ({ day: d.day, city: d.city })) }
+      const changes = diffProvincialChanges({
+        beforeItems: initialCostItems.value,
+        afterItems: items,
+        beforeItinerary: initialItinerary.value,
+        afterItinerary,
+        versionLabel: data.value.version ?? undefined,
+      })
       const text = collabNotifyText({
         kind: 'plan',
         eventLabel: '更新了行程规划并回传成本',
         subject: subject.value,
         destination: destination.value,
         authorName: '省地接社',
-        detail,
+        changes,
         url: window.location.href,
       })
       notifyText.value = text
@@ -243,8 +258,9 @@ function goHome() {
         <span v-if="data.guestPrice != null" class="tag chip"><b>对客总价</b>¥{{ Number(data.guestPrice).toLocaleString() }}</span>
       </div>
       <p class="hint">
-        您正在以<b>省地接社</b>身份协作本路线。可修改下方的城市/景点/住宿/餐饮等当地安排，
-        填写成本①，并（可选）写下回传说明；点「保存并回传一手」后，一手即可一次性同步收到行程、地接成本与说明。
+        您正在以<b>省地接社</b>身份与一手 PandaKing 协作本路线（支持<b>多轮反复沟通</b>）。
+        可修改下方的城市/景点/住宿/餐饮等当地安排，填写成本①，并（可选）写下回传说明；
+        每轮点「保存并回传一手」，一手都会收到带<b>关键变更摘要</b>的通知，便于快速核对改了哪些价格与行程。
       </p>
 
       <!-- 行程编辑 -->
