@@ -66,4 +66,24 @@ export class H5Controller {
   ) {
     return this.svc.agencyQuote(token, body)
   }
+
+  // 一手 PandaKing 协作 H5：凭 pandaking 令牌全量编辑行程 + 价格（成本① + 利润① + 利润②），
+  // 免登录鉴权，提交后生成新版本并同步对端(agency)令牌指向新版，支撑 PandaKing↔旅行社 反复往返。
+  @Post('route/:token/pandaking-edit')
+  pandakingEdit(
+    @Param('token') token: string,
+    @Body() body: { itinerary?: unknown; quote?: unknown },
+  ) {
+    return this.svc.pandakingEdit(token, body)
+  }
+
+  // 境外旅行社协作 H5：凭 agency 令牌编辑行程 + 利润②（成本①不可见/不可改），
+  // 免登录鉴权，提交后生成新版本并同步对端(pandaking)令牌指向新版。
+  @Post('route/:token/agency-edit')
+  agencyEdit(
+    @Param('token') token: string,
+    @Body() body: { itinerary?: unknown; profit2Mode?: 'amount' | 'percent'; profit2?: number },
+  ) {
+    return this.svc.agencyEdit(token, body)
+  }
 }

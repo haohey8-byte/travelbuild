@@ -1,14 +1,29 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { fetchH5Route, submitH5Feedback, fetchH5Feedback, submitH5AgencyQuote } from '@/api/h5'
+import {
+  fetchH5Route,
+  submitH5Feedback,
+  fetchH5Feedback,
+  submitH5PandakingEdit,
+  submitH5AgencyEdit,
+} from '@/api/h5'
 import { safeText, safeName } from '@/utils/name'
-import { shareH5Url, shareH5Caption, collabNotifyText, copyText } from '@/utils/share'
-import type { H5Route, RouteFeedbackItem } from '@/types'
+import {
+  shareH5Url,
+  shareH5Caption,
+  collabNotifyText,
+  copyText,
+  pandakingH5Url,
+  agencyH5Url,
+} from '@/utils/share'
+import type { H5Route, RouteFeedbackItem, QuoteLevel } from '@/types'
 import { buildPdfModel, type PdfModel } from '@/utils/pdf-model'
 import { generatePdf } from '@/utils/pdf-export'
 import { PDF_LANG_OPTIONS, t, type PdfLang } from '@/utils/pdf-i18n'
 import { translateText, translateEnabled } from '@/utils/pdf-translate'
+import { calcDerived, calcGuestPrice } from '@/utils/quote'
+import QuoteTable from '@/components/QuoteTable.vue'
 import RoutePdf from '@/components/RoutePdf.vue'
 
 const route = useRoute()
@@ -30,19 +45,92 @@ const notifyTip = ref('')
 // 查看方随时把协作方案链接转发到微信群（复制「说明 + 链接」）
 const shareTip = ref('')
 
-// —— 导出游客版 PDF（PRD 5.8：旅行社在 H5 内导出游客版）——
-const pdfPanelOpen = ref(false)
-const pdfLang = ref<PdfLang>('zh')
-const pdfBusy = ref(false)
-const pdfErr = ref('')
-const pdfModel = ref<PdfModel | null>(null)
-const pdfWrap = ref<HTMLElement | null>(null)
+// —— 角色分支 ——
+// public=true → 对客只读链接（客户看板）；否则按 role 区分 PandaKing(全编辑) / agency(行程+利润②)
+const isPkView = computed(() => data.value?.role === 'pandaking' && !data.value?.public)
+const isAgencyView = computed(() => data.value?.role === 'agency' && !data.value?.public)
+const isPublicView = computed(() => !!data.value?.public)
+const canEditItinerary = computed(() => isPkView.value || isAgencyView.value)
+const roleBadgeClass = computed(() => (isPkView.value ? 'rb-pk' : isAgencyView.value ? 'rb-ag' : 'rb-pub'))
+const roleBadgeText = computed(() => {
+  if (isPkView.value) return '👑 一手 PandaKing · 可编辑行程与价格'
+  if (isAgencyView.value) return '🧳 境外旅行社 · 可编辑行程与加价'
+  return '👀 客户预览 · 只读'
+})
 
-// —— 旅行社视角：加利润② + AI 翻译泰语版 ——
-const isAgencyView = computed(() => data.value?.role === 'agency')
+// —— 行程（按天，可编辑：PandaKing / agency；只读：public）——
+interface Day {
+  day: number
+  city: string
+  spots: string[]
+  hotel: string
+  meals: string[]
+}
+const itinerary = ref<{ days: Day[] }>({ days: [] })
+const openDays = ref(new Set<number>())
+function toggleDay(di: number) {
+  const s = new Set(openDays.value)
+  if (s.has(di)) s.delete(di)
+  else s.add(di)
+  openDays.value = s
+}
+function countNonEmpty(arr: string[]): number {
+  return arr.filter((x) => String(x).trim()).length
+}
+function newDay(n: number): Day {
+  return { day: n, city: '', spots: [''], hotel: '', meals: [''] }
+}
+function parseItinerary(it: unknown) {
+  const days = (it as { days?: Day[] })?.days
+  if (Array.isArray(days) && days.length) {
+    itinerary.value = { days: days.map((d, i) => ({ ...d, day: i + 1 })) }
+  } else {
+    itinerary.value = { days: [newDay(1)] }
+  }
+}
+function addDay() {
+  const di = itinerary.value.days.length
+  itinerary.value.days.push(newDay(di + 1))
+  const s = new Set(openDays.value)
+  s.add(di)
+  openDays.value = s
+}
+function removeDay(i: number) {
+  itinerary.value.days.splice(i, 1)
+  itinerary.value.days.forEach((d, idx) => (d.day = idx + 1))
+  const s = new Set(openDays.value)
+  s.delete(i)
+  const adjusted = new Set<number>()
+  for (const idx of s) adjusted.add(idx > i ? idx - 1 : idx)
+  openDays.value = adjusted
+}
+function addSpot(d: Day) {
+  d.spots.push('')
+}
+function removeSpot(d: Day, i: number) {
+  d.spots.splice(i, 1)
+}
+function addMeal(d: Day) {
+  d.meals.push('')
+}
+function removeMeal(d: Day, i: number) {
+  d.meals.splice(i, 1)
+}
+
+// —— PandaKing 视角：全量价格编辑（成本① + 利润① + 利润②）——
+const quoteItems = ref<QuoteLevel[]>([])
+const pkProfit2Mode = ref<'amount' | 'percent'>('amount')
+const pkProfit2 = ref(0)
+const pkDerived = computed(() => calcDerived(quoteItems.value))
+const pkGuestPrice = computed(() => calcGuestPrice(pkDerived.value.quoteA, pkProfit2Mode.value, pkProfit2.value))
+const pkSaving = ref(false)
+const pkSaveOk = ref('')
+const pkSaveErr = ref('')
+const pkPeerTip = ref('')
+
+// —— 旅行社视角：利润②（成本①不可见，仅见报价A 作为成本基线）——
 const agProfit2Mode = ref<'amount' | 'percent'>('amount')
 const agProfit2 = ref(0)
-// 旅行社拿到的「成本基线」= PandaKing 报价A（后端在 role=agency 时 totals.quoteA 即为报价A）
 const agQuoteA = computed(() => Number(data.value?.quote?.totals?.quoteA) || 0)
 const agGuestPrice = computed(() => {
   const qa = agQuoteA.value
@@ -53,13 +141,124 @@ const agGuestPrice = computed(() => {
 const agSaving = ref(false)
 const agSaveOk = ref('')
 const agSaveErr = ref('')
+const agPeerTip = ref('')
 
 // —— 旅行社 AI 翻译：行程+对客总价 → 泰语版文字（供旅行社复制粘贴发客户） ——
 const agThBusy = ref(false)
 const agThText = ref('')
 const agThErr = ref('')
-// 翻译服务是否可用（VITE_TMT_ENDPOINT 配置）—— 仅展示提示，不阻断
 const hasTranslate = translateEnabled()
+
+// —— 导出游客版 PDF（PRD 5.8：旅行社/PandaKing 在 H5 内导出游客版）——
+const pdfPanelOpen = ref(false)
+const pdfLang = ref<PdfLang>('zh')
+const pdfBusy = ref(false)
+const pdfErr = ref('')
+const pdfModel = ref<PdfModel | null>(null)
+const pdfWrap = ref<HTMLElement | null>(null)
+
+// —— 角色切换后把当前协作链接转发给对端（复制「说明 + 可编辑链接」）——
+async function copyPeerLink() {
+  if (!data.value) return
+  const caption = shareH5Caption(data.value)
+  let link = ''
+  if (isPkView.value) {
+    link = data.value.agencyToken ? agencyH5Url(data.value.agencyToken) : ''
+    if (!link) {
+      pkPeerTip.value = '暂无可发送的对旅行社链接'
+      return
+    }
+    const ok = await copyText(`${caption}\n\n👉 查看并编辑行程报价（对旅行社）：${link}`)
+    pkPeerTip.value = ok ? '对旅行社链接已复制，去微信粘贴 ✅' : '复制失败，请长按上方文案手动复制'
+  } else if (isAgencyView.value) {
+    link = data.value.pandakingToken ? pandakingH5Url(data.value.pandakingToken) : ''
+    if (!link) {
+      agPeerTip.value = '暂无可发送的一手链接'
+      return
+    }
+    const ok = await copyText(`${caption}\n\n👉 查看并编辑行程报价（一手 PandaKing）：${link}`)
+    agPeerTip.value = ok ? '对一手链接已复制，去微信粘贴 ✅' : '复制失败，请长按上方文案手动复制'
+  }
+}
+
+async function copyShareLink() {
+  if (!data.value) return
+  const caption = shareH5Caption(data.value)
+  const ok = await copyText(`${caption}\n${shareH5Url(token)}`)
+  shareTip.value = ok ? '协作链接已复制，去微信粘贴到群里即可 ✅' : '复制失败，请长按上方链接手动复制'
+}
+
+// PandaKing 全量保存：行程 + 价格 → 生成新版本 → 同步对端令牌
+async function onPkSave() {
+  pkSaving.value = true
+  pkSaveOk.value = ''
+  pkSaveErr.value = ''
+  pkPeerTip.value = ''
+  try {
+    if (!data.value) throw new Error('数据未加载')
+    const payload = {
+      itinerary: itinerary.value,
+      quote: {
+        items: quoteItems.value.map((it) => ({
+          name: String(it.name || '').trim() || '未命名',
+          type: it.type || 'other',
+          cost1: Math.max(0, Number(it.cost1) || 0),
+          profit1Mode: (it.profit1Mode as 'amount' | 'percent') || 'amount',
+          profit1: Number(it.profit1) || 0,
+        })),
+        totals: { profit2Mode: pkProfit2Mode.value, profit2: Number(pkProfit2.value) || 0 },
+      },
+    }
+    const res = await submitH5PandakingEdit(token, payload)
+    // 用后端权威数据回显
+    if (data.value && res.version) {
+      data.value.version = (res.version as { version: string }).version ?? data.value.version
+      if ((res.version as { itinerary?: unknown }).itinerary) data.value.itinerary = (res.version as { itinerary: Record<string, unknown> }).itinerary
+      parseItinerary(data.value.itinerary)
+    }
+    if (res.quote) data.value.quote = res.quote as H5Route['quote']
+    if (res.quote?.totals?.guestPrice != null) data.value.guestPrice = res.quote.totals.guestPrice
+    if (res.agencyToken) data.value.agencyToken = res.agencyToken
+    const gp = res.quote?.totals?.guestPrice ?? pkGuestPrice.value
+    pkSaveOk.value = `已保存行程与报价（对客总价 ¥${Number(gp).toLocaleString()}）✅ 可把下方链接发给旅行社继续协作`
+  } catch (e: any) {
+    pkSaveErr.value = e?.response?.data?.message || e.message || '保存失败'
+  } finally {
+    pkSaving.value = false
+  }
+}
+
+// 旅行社保存：行程 + 利润② → 生成新版本 → 同步对端令牌
+async function onAgSave() {
+  agSaving.value = true
+  agSaveOk.value = ''
+  agSaveErr.value = ''
+  agPeerTip.value = ''
+  agThText.value = ''
+  agThErr.value = ''
+  try {
+    if (!data.value) throw new Error('数据未加载')
+    const res = await submitH5AgencyEdit(token, {
+      itinerary: itinerary.value,
+      profit2Mode: agProfit2Mode.value,
+      profit2: Number(agProfit2.value) || 0,
+    })
+    if (data.value && res.version) {
+      data.value.version = (res.version as { version: string }).version ?? data.value.version
+      if ((res.version as { itinerary?: unknown }).itinerary) data.value.itinerary = (res.version as { itinerary: Record<string, unknown> }).itinerary
+      parseItinerary(data.value.itinerary)
+    }
+    if (res.quote) data.value.quote = res.quote as H5Route['quote']
+    if (res.pandakingToken) data.value.pandakingToken = res.pandakingToken
+    if (res.guestPrice != null) data.value.guestPrice = res.guestPrice
+    const gp = res.guestPrice ?? agGuestPrice.value
+    agSaveOk.value = `已保存行程与报价（对客总价 ¥${Number(gp).toLocaleString()}）✅ 可把下方链接发回一手继续协作`
+  } catch (e: any) {
+    agSaveErr.value = e?.response?.data?.message || e.message || '保存失败'
+  } finally {
+    agSaving.value = false
+  }
+}
 
 async function onExportTouristPdf() {
   if (!data.value) return
@@ -104,46 +303,8 @@ async function onExportTouristPdf() {
     pdfBusy.value = false
   }
 }
-async function copyShareLink() {
-  if (!data.value) return
-  const caption = shareH5Caption(data.value)
-  const ok = await copyText(`${caption}\n${shareH5Url(token)}`)
-  shareTip.value = ok ? '协作链接已复制，去微信粘贴到群里即可 ✅' : '复制失败，请长按上方链接手动复制'
-}
 
-// 旅行社保存利润②：凭协作 token 调用 POST /h5/route/:token/quote（免登录鉴权），
-// 后端 mergeAgencyQuote 保留 PandaKing 的 items 并重算对客总价。
-// ⚠️ 不再走控制台 saveVersion（会因 route.agencyId 与登录机构不一致误报「路线不存在」）。
-async function onAgSave() {
-  agSaving.value = true
-  agSaveErr.value = ''
-  agSaveOk.value = ''
-  agThText.value = ''
-  agThErr.value = ''
-  try {
-    if (!data.value) throw new Error('数据未加载')
-    const res = await submitH5AgencyQuote(token, {
-      profit2Mode: agProfit2Mode.value,
-      profit2: Number(agProfit2.value) || 0,
-    })
-    // 用后端权威报价回显：更新 quoteA / 对客总价，保证与重算一致
-    if (data.value.quote && res.quote?.totals) {
-      ;(data.value.quote as any).totals = {
-        ...(data.value.quote?.totals || {}),
-        ...res.quote.totals,
-      }
-      if (res.quote.items) (data.value.quote as any).items = res.quote.items
-    }
-    const gp = res.guestPrice ?? agGuestPrice.value
-    agSaveOk.value = `已保存报价（${agProfit2Mode.value === 'percent' ? `${agProfit2.value}%` : `¥${Number(agProfit2.value).toLocaleString()}`}），对客总价 ¥${Number(gp).toLocaleString()}`
-  } catch (e: any) {
-    agSaveErr.value = e?.response?.data?.message || e.message || '保存失败'
-  } finally {
-    agSaving.value = false
-  }
-}
-
-// 旅行社 AI 翻译为泰语版（行程+对客总价）：调用翻译服务生成结构化泰语报价单，供旅行社复制粘贴发客户
+// 旅行社 AI 翻译为泰语版（行程+对客总价）
 async function onAgTranslate() {
   if (!data.value) return
   agThBusy.value = true
@@ -156,8 +317,6 @@ async function onAgTranslate() {
     const lines: string[] = []
     lines.push(`【${t('th', 'itineraryTitle')}】`)
     lines.push('')
-
-    // 逐天翻译：城市/酒店/景点/餐饮 → 泰语
     for (let i = 0; i < rawDays.length; i++) {
       const day = rawDays[i] || {}
       const dayNum = Number(day.day) || i + 1
@@ -171,7 +330,6 @@ async function onAgTranslate() {
       const mealsTr = await Promise.all(
         ((day.meals ?? []) as string[]).map((m) => translateText(String(m || ''), 'th')),
       )
-
       lines.push(`${t('th', 'day')} ${dayNum} · ${cityTr || '—'}`)
       const spots = spotsTr.filter(Boolean)
       const meals = mealsTr.filter(Boolean)
@@ -180,7 +338,6 @@ async function onAgTranslate() {
       if (meals.length) lines.push(`  ${t('th', 'meals')}: ${meals.join('、')}`)
       lines.push('')
     }
-
     lines.push('────────────────────')
     lines.push(`${t('th', 'col_guestPrice')}: ¥${agGuestPrice.value.toLocaleString()}`)
     agThText.value = lines.join('\n')
@@ -210,11 +367,6 @@ function fmtTime(s?: string): string {
     return s
   }
 }
-
-const days = computed(() => {
-  const it = data.value?.itinerary as { days?: any[] } | null
-  return it?.days ?? []
-})
 
 // 状态中文标签（避免 H5 暴露原始机器键）
 const STATUS_LABEL: Record<string, string> = {
@@ -246,27 +398,48 @@ function updateOgMeta(key: string, content: string) {
 
 onMounted(async () => {
   try {
-    data.value = await fetchH5Route(token)
-    // 旅行社视角：若已有上一次的利润②（如重新打开链接），回填到输入框
-    if (data.value?.role === 'agency') {
-      const t = (data.value.quote as any)?.totals
-      if (t) {
-        agProfit2Mode.value = t.profit2Mode === 'percent' ? 'percent' : 'amount'
-        agProfit2.value = Number(t.profit2) || 0
-      }
+    const d = await fetchH5Route(token)
+    data.value = d
+    parseItinerary(d.itinerary)
+    // PandaKing：回填价格编辑区（成本①+利润① 来自 items，利润② 来自 totals）
+    if (d.role === 'pandaking' && !d.public && d.quote?.items) {
+      quoteItems.value = (d.quote.items as any[]).map((it) => ({
+        name: it.name ?? '',
+        type: it.type || 'other',
+        cost1: Number(it.cost1) || 0,
+        profit1Mode: (it.profit1Mode as 'amount' | 'percent') ?? 'amount',
+        profit1: Number(it.profit1) || 0,
+      }))
+      const tot = d.quote.totals
+      pkProfit2Mode.value = (tot?.profit2Mode as 'amount' | 'percent') ?? 'amount'
+      pkProfit2.value = Number(tot?.profit2) || 0
     }
-    // 设置浏览器标签标题，打开分享链接时显示对客标题
-    const title = `${safeText(data.value.destination) || '定制行程'} · 定制行程方案`
+    // 旅行社：回填利润②
+    if (d.role === 'agency' && !d.public && d.quote?.totals) {
+      const tot = d.quote.totals
+      agProfit2Mode.value = (tot.profit2Mode as 'amount' | 'percent') ?? 'amount'
+      agProfit2.value = Number(tot.profit2) || 0
+    }
+    const title = `${safeText(d.destination) || '定制行程'} · 定制行程方案`
     document.title = title
     updateOgMeta('og:title', title)
+    if (isPublicView.value) {
       updateOgMeta(
-      'og:description',
-      // 旅行社视角：突出「报价A」（他们的成本基线）；其他视角：对客总价
-      data.value.role === 'agency'
-        ? `PandaKing9 为您定制的${safeText(data.value.destination) || '行程'}方案，报价A ¥${(Number(data.value.quote?.totals?.quoteA) || 0).toLocaleString()}（您的成本基线）`
-        : `PandaKing9 为您定制的${safeText(data.value.destination) || '行程'}方案${data.value.guestPrice != null ? `，对客总价 ¥${data.value.guestPrice.toLocaleString()}` : ''}`,
+        'og:description',
+        `PandaKing9 为您定制的${safeText(d.destination) || '行程'}方案${d.guestPrice != null ? `，对客总价 ¥${d.guestPrice.toLocaleString()}` : ''}`,
       )
-      await loadFeedback()
+    } else if (d.role === 'agency') {
+      updateOgMeta(
+        'og:description',
+        `PandaKing9 为您定制的${safeText(d.destination) || '行程'}方案，报价A ¥${agQuoteA.value.toLocaleString()}（您的成本基线）`,
+      )
+    } else {
+      updateOgMeta(
+        'og:description',
+        `PandaKing9 协作编辑页：${safeText(d.destination) || '行程'}，报价A ¥${pkDerived.value.quoteA.toLocaleString()}`,
+      )
+    }
+    await loadFeedback()
   } catch {
     notFound.value = true
     document.title = '协作链接无效 · PandaKing9'
@@ -275,6 +448,7 @@ onMounted(async () => {
   }
 })
 
+// 反馈提交：生成带「对端可编辑链接」的通知文案（形成 PandaKing↔旅行社反复往返闭环）
 async function onSend() {
   const content = feedback.value.trim()
   if (!content) {
@@ -286,22 +460,34 @@ async function onSend() {
   try {
     await submitH5Feedback(token, content, authorName.value.trim() || undefined)
     thanks.value = true
-    // 生成「主题+反馈建议+H5链接」通知文案并复制，提示去微信粘贴同步对端
     if (data.value) {
+      // 反馈接收方恒为对端：PandaKing 视图 → 发 agency 可编辑链接；agency/公开视图 → 发 pandaking 可编辑链接
+      let url = ''
+      let eventLabel = '提交了修改意见'
+      let author = authorName.value.trim() || undefined
+      if (isPkView.value) {
+        url = data.value.agencyToken ? agencyH5Url(data.value.agencyToken) : shareH5Url(token)
+        eventLabel = '回复了修改意见'
+        author = author || '一手 PandaKing'
+      } else if (isAgencyView.value) {
+        url = data.value.pandakingToken ? pandakingH5Url(data.value.pandakingToken) : shareH5Url(token)
+      } else {
+        url = data.value.pandakingToken ? pandakingH5Url(data.value.pandakingToken) : shareH5Url(token)
+      }
       const text = collabNotifyText({
         kind: 'feedback',
-        eventLabel: '提交了修改意见',
+        eventLabel,
         subject: safeName(data.value.customerNameCn, data.value.customerName),
         destination: data.value.destination,
         travelDate: data.value.travelDate,
-        authorName: authorName.value.trim() || undefined,
+        authorName: author,
         detail: content,
-        url: shareH5Url(token),
+        url,
       })
       notifyText.value = text
       const ok = await copyText(text)
       notifyTip.value = ok
-        ? '通知文案已复制，去微信粘贴发给对方即可同步 ✅'
+        ? '通知文案已复制，去微信粘贴发给对端即可同步 ✅'
         : '通知文案已生成，请长按上方文字手动复制后发到微信'
     }
     feedback.value = ''
@@ -333,16 +519,51 @@ function goHome() {
         <span>状态: {{ statusLabel(data.statusKey) }}</span>
         <span>人数: {{ data.groupSize }}</span>
       </div>
+      <div class="role-badge" :class="roleBadgeClass">{{ roleBadgeText }}</div>
 
-      <!-- 旅行社视角：报价A（成本基线）+ 利润② + 对客总价 -->
-      <template v-if="isAgencyView">
+      <!-- ============ PandaKing 视角：全量编辑行程 + 价格 ============ -->
+      <template v-if="isPkView">
+        <section class="h5-edit-section">
+          <h3>💰 报价编辑（成本① + 利润① + 利润②）</h3>
+          <p class="hint">您可全量调整成本与利润，设置对客价附加利润②（旅行社可在此基础再调）。修改后生成新版本并同步给旅行社。</p>
+          <QuoteTable v-model:items="quoteItems" role="pandaking" />
+          <!-- 利润②（对客价附加）：PandaKing 预置，旅行社可再调 -->
+          <div class="guest-box">
+            <div class="guest-row">
+              <span class="guest-label">报价A</span>
+              <span class="ro">¥{{ Math.round(pkDerived.quoteA).toLocaleString() }}</span>
+            </div>
+            <div class="guest-row">
+              <span class="guest-label">利润②（对客附加）</span>
+              <select v-model="pkProfit2Mode" class="mode">
+                <option value="amount">元</option>
+                <option value="percent">%</option>
+              </select>
+              <input type="number" v-model.number="pkProfit2" />
+            </div>
+            <div class="guest-row total">
+              <span class="guest-label">对客总价</span>
+              <span class="ro total">¥{{ Math.round(pkGuestPrice).toLocaleString() }}</span>
+            </div>
+          </div>
+          <button class="btn btn-primary" :disabled="pkSaving" @click="onPkSave">
+            {{ pkSaving ? '保存中…' : '💾 保存行程与报价' }}
+          </button>
+          <p v-if="pkSaveErr" class="err">{{ pkSaveErr }}</p>
+          <p v-if="pkSaveOk" class="ok">{{ pkSaveOk }} ✅</p>
+          <button class="btn ghost share-btn" @click="copyPeerLink">📋 复制对旅行社链接发微信</button>
+          <p v-if="pkPeerTip" class="share-tip">{{ pkPeerTip }}</p>
+        </section>
+      </template>
+
+      <!-- ============ 旅行社视角：行程 + 利润② ============ -->
+      <template v-else-if="isAgencyView">
         <div class="h5-quotea-card">
           <div class="h5-quotea-lab">报价A（您的成本基线）</div>
           <div class="h5-quotea-val">¥{{ agQuoteA.toLocaleString() }}</div>
         </div>
-
-        <div class="h5-ag-section">
-          <h3>💹 加价（利润）</h3>
+        <section class="h5-ag-section">
+          <h3>💹 加价（利润②）</h3>
           <div class="h5-ag-mode">
             <label class="h5-ag-radio">
               <input type="radio" v-model="agProfit2Mode" value="amount" /><span>固定金额 ¥</span>
@@ -377,12 +598,14 @@ function goHome() {
               <span class="h5-ag-guest">¥{{ agGuestPrice.toLocaleString() }}</span>
             </div>
           </div>
-
           <button class="btn btn-primary" :disabled="agSaving" @click="onAgSave">
-            {{ agSaving ? '保存中…' : '💾 保存报价' }}
+            {{ agSaving ? '保存中…' : '💾 保存行程与报价' }}
           </button>
           <p v-if="agSaveErr" class="err">{{ agSaveErr }}</p>
           <p v-if="agSaveOk" class="ok">{{ agSaveOk }} ✅</p>
+
+          <button class="btn ghost share-btn" @click="copyPeerLink">📋 复制对一手链接发微信</button>
+          <p v-if="agPeerTip" class="share-tip">{{ agPeerTip }}</p>
 
           <!-- AI 翻译为泰语版（行程+对客总价）—— 旅行社复制粘贴发客户 -->
           <div class="h5-ag-translate">
@@ -401,18 +624,16 @@ function goHome() {
               <pre class="notify-text">{{ agThText }}</pre>
             </div>
           </div>
-        </div>
+        </section>
       </template>
 
-      <!-- 非旅行社视角：原有对客价 + 协作链接 + 反馈 -->
+      <!-- ============ 公开(对客)只读视图 ============ -->
       <template v-else>
         <div v-if="data.guestPrice != null" class="h5-price">
           对客总价: <b>¥{{ data.guestPrice.toLocaleString() }}</b>
         </div>
-
         <button class="btn ghost share-btn" @click="copyShareLink">📋 复制协作链接发到微信群</button>
         <p v-if="shareTip" class="share-tip">{{ shareTip }}</p>
-
         <button class="btn ghost share-btn" @click="pdfPanelOpen = !pdfPanelOpen">📄 导出游客版PDF</button>
         <div v-if="pdfPanelOpen" class="pdf-tourist-panel">
           <span class="pdf-panel-label">语言</span>
@@ -427,14 +648,66 @@ function goHome() {
         </div>
       </template>
 
+      <!-- ============ 行程安排（PandaKing/旅行社 可编辑；公开只读） ============ -->
       <h3>行程安排</h3>
-      <div v-if="days.length">
-        <div v-for="(d, i) in days" :key="i" class="day">
-          <b>第 {{ d.day ?? i + 1 }} 天 · {{ d.city }}</b>
-          <div v-if="d.spots?.length" class="line">景点：{{ d.spots.filter(Boolean).join('、') || '—' }}</div>
-          <div v-if="d.hotel" class="line">住宿：{{ d.hotel }}</div>
-          <div v-if="d.meals?.length" class="line">餐饮：{{ d.meals.filter(Boolean).join('、') || '—' }}</div>
+      <div v-if="itinerary.days.length">
+        <div v-for="(d, di) in itinerary.days" :key="di" class="day-card">
+          <div v-if="canEditItinerary" class="day-row" @click="toggleDay(di)" role="button" tabindex="0" @keydown.enter="toggleDay(di)">
+            <div class="day-badge">D{{ d.day }}</div>
+            <div class="day-summary">
+              <span class="day-city">{{ d.city || `第 ${d.day} 天` }}</span>
+              <span class="day-meta">
+                <span v-if="d.hotel" class="day-tag">{{ d.hotel }}</span>
+                <span class="day-tag">{{ countNonEmpty(d.spots) }} 处景点</span>
+                <span class="day-tag">{{ countNonEmpty(d.meals) }} 项用餐</span>
+              </span>
+            </div>
+            <div class="day-chev" :class="{ open: openDays.has(di) }">▾</div>
+          </div>
+          <div v-else class="day-row static">
+            <div class="day-badge">D{{ d.day }}</div>
+            <div class="day-summary">
+              <span class="day-city">{{ d.city || `第 ${d.day} 天` }}</span>
+              <span class="day-meta">
+                <span v-if="d.hotel" class="day-tag">{{ d.hotel }}</span>
+                <span class="day-tag">{{ countNonEmpty(d.spots) }} 处景点</span>
+                <span class="day-tag">{{ countNonEmpty(d.meals) }} 项用餐</span>
+              </span>
+            </div>
+          </div>
+
+          <div v-if="canEditItinerary && openDays.has(di)" class="day-edit">
+            <div class="day-field-row">
+              <div class="day-field"><label>城市 / 区域</label><input v-model="d.city" placeholder="如 成都" /></div>
+              <div class="day-field"><label>住宿酒店</label><input v-model="d.hotel" placeholder="酒店" /></div>
+            </div>
+            <div class="day-field full">
+              <label>景点 / 活动</label>
+              <div v-for="(s, si) in d.spots" :key="si" class="day-inline-row">
+                <input v-model="d.spots[si]" placeholder="景点名称" />
+                <button class="btn ghost xs" @click="removeSpot(d, si)">×</button>
+              </div>
+              <button class="btn ghost sm" @click="addSpot(d)">+ 添加景点</button>
+            </div>
+            <div class="day-field full">
+              <label>餐饮安排</label>
+              <div v-for="(m, mi) in d.meals" :key="mi" class="day-inline-row">
+                <input v-model="d.meals[mi]" placeholder="餐饮安排" />
+                <button class="btn ghost xs" @click="removeMeal(d, mi)">×</button>
+              </div>
+              <button class="btn ghost sm" @click="addMeal(d)">+ 添加餐饮</button>
+            </div>
+            <div class="day-actions">
+              <button class="btn ghost sm" @click="removeDay(di)">删除当天</button>
+            </div>
+          </div>
+          <div v-else class="day-readonly">
+            <div v-if="d.spots?.length" class="line">景点：{{ d.spots.filter(Boolean).join('、') || '—' }}</div>
+            <div v-if="d.hotel" class="line">住宿：{{ d.hotel }}</div>
+            <div v-if="d.meals?.length" class="line">餐饮：{{ d.meals.filter(Boolean).join('、') || '—' }}</div>
+          </div>
         </div>
+        <button v-if="canEditItinerary" class="btn dash" @click="addDay">+ 添加一天</button>
       </div>
       <p v-else class="muted">暂无行程详情</p>
 
@@ -449,7 +722,7 @@ function goHome() {
         <p v-if="thanks" class="thanks">感谢反馈，已提交！</p>
         <div v-if="notifyText" class="notify-box">
           <div class="notify-head">
-            <span>📋 {{ notifyTip || '通知文案（去微信粘贴发给对方）' }}</span>
+            <span>📋 {{ notifyTip || '通知文案（去微信粘贴发给对端）' }}</span>
             <button class="btn ghost sm" @click="copyAgain">再复制</button>
           </div>
           <pre class="notify-text">{{ notifyText }}</pre>
@@ -483,6 +756,13 @@ function goHome() {
 .h5-card { background: var(--card); border-radius: 14px; padding: 18px; box-shadow: 0 2px 12px rgba(0,0,0,.06); }
 .h5-title { font-size: 22px; margin: 0 0 10px; }
 .h5-meta { display: flex; flex-wrap: wrap; gap: 12px; color: var(--muted); font-size: 13px; }
+
+/* 角色标识条 */
+.role-badge { margin: 10px 0 4px; display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.rb-pk { background: var(--brand-50, #fdeef0); color: var(--brand); border: 1px solid var(--brand); }
+.rb-ag { background: #e9f1fe; color: #1e40af; border: 1px solid #c2dafe; }
+.rb-pub { background: #f4f6fa; color: #3c4655; border: 1px solid #e6e8eb; }
+
 .h5-price { margin: 12px 0; font-size: 16px; }
 .h5-price b { color: var(--brand); }
 .share-btn { width: 100%; margin-top: 14px; }
@@ -509,11 +789,11 @@ h3 { font-size: 15px; margin: 14px 0 0; }
 .pdf-tourist-panel { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 12px; padding: 10px 12px; border: 1px solid var(--brand, #3b82f6); border-radius: 10px; background: rgba(59,130,246,.05); }
 .pdf-panel-label { font-weight: 600; color: var(--muted); min-width: 36px; }
 .pdf-opt { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer; }
+.hint { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 0 0 10px; }
 
-/* —— 旅行社视角：报价A + 利润② + 对客总价 —— */
-.h5-quotea-card { margin: 14px 0; padding: 14px 16px; background: #fdeef0; border-radius: 12px; display: flex; align-items: baseline; justify-content: space-between; border: 1px solid var(--brand); }
-.h5-quotea-lab { color: var(--brand-600, #a60d26); font-size: 13px; font-weight: 600; }
-.h5-quotea-val { color: var(--brand); font-size: 24px; font-weight: 800; }
+/* —— PandaKing / agency 编辑区 —— */
+.h5-edit-section { margin-top: 14px; padding: 14px; border: 1px solid var(--brand); border-radius: 12px; background: #fff; }
+.h5-edit-section h3 { margin-top: 0; color: var(--brand-600, #a60d26); }
 .h5-ag-section { margin-top: 16px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
 .h5-ag-section h3 { margin-top: 0; color: var(--brand-600, #a60d26); }
 .h5-ag-mode { display: flex; gap: 18px; margin: 8px 0 10px; }
@@ -526,6 +806,55 @@ h3 { font-size: 15px; margin: 14px 0 0; }
 .h5-ag-guest { color: var(--brand); font-size: 18px; }
 .h5-ag-customer { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 .ok { color: var(--ok, #10b981); margin-top: 8px; font-size: 13px; }
+
+/* —— 行程日卡片（可编辑/只读共用） —— */
+.day-card { border: 1px solid var(--line); border-radius: 10px; margin: 8px 0; overflow: hidden; background: #fff; }
+.day-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
+.day-row[role="button"] { cursor: pointer; user-select: none; }
+.day-row[role="button"]:hover { background: var(--surface-2, #fbfcfe); }
+.day-row.static { cursor: default; }
+.day-badge { width: 32px; height: 32px; border-radius: 8px; background: var(--brand-50, #fdeef0); color: var(--brand); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; flex-shrink: 0; }
+.day-summary { flex: 1; min-width: 0; }
+.day-city { display: block; font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: 2px; }
+.day-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.day-tag { background: var(--bg, #f4f6fa); border-radius: 4px; padding: 1px 6px; font-size: 11px; color: var(--muted); }
+.day-chev { font-size: 14px; color: var(--muted); transition: transform .2s; flex-shrink: 0; }
+.day-chev.open { transform: rotate(180deg); color: var(--brand); }
+.day-edit { border-top: 1px solid var(--line); padding: 12px; background: var(--surface-2, #fbfcfe); }
+.day-field-row { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.day-field { display: flex; flex-direction: column; gap: 4px; }
+.day-field label { font-size: 12px; color: var(--muted); font-weight: 500; }
+.day-field input { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; font-family: inherit; }
+.day-field.full { margin-bottom: 8px; }
+.day-inline-row { display: flex; gap: 6px; margin-bottom: 6px; }
+.day-inline-row input { flex: 1; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; font-family: inherit; }
+.day-actions { margin-top: 8px; display: flex; justify-content: flex-end; }
+.day-readonly { padding: 10px 12px; background: var(--surface-2, #fbfcfe); }
+.btn { width: 100%; margin-top: 8px; padding: 10px; border: 1px solid var(--line-strong); background: var(--surface); border-radius: 10px; cursor: pointer; font-size: 14px; font-family: inherit; }
+.btn-primary { background: var(--brand); color: #fff; border: none; padding: 12px; font-weight: 700; }
+.btn-primary:disabled { opacity: 0.6; }
+.btn.ghost { background: transparent; border: none; margin-top: 0; }
+.btn.ghost.xs { padding: 2px 6px; font-size: 12px; width: auto; }
+.btn.ghost.sm { padding: 4px 10px; font-size: 12px; width: auto; }
+.btn.dash { background: var(--teal-50, #e6f7f0); color: var(--teal-600, #0f9d6f); border: 1px dashed var(--teal-200, #b8ead8); width: 100%; }
+
+/* 报价表内嵌间距微调 */
+.h5-edit-section :deep(.quote) { margin-top: 8px; }
+
+/* —— 利润②（对客价附加）块 —— */
+.guest-box { margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--surface); }
+.guest-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+.guest-label { color: var(--muted); font-size: 13px; min-width: 130px; }
+.guest-row.total { border-top: 1px dashed var(--line); padding-top: 8px; margin-top: 8px; }
+.guest-row.total .guest-label { color: var(--ink); font-weight: 600; }
+.guest-box .mode { width: auto; min-width: 56px; }
+.guest-box input[type=number] { width: 140px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 14px; box-sizing: border-box; }
+.h5-quotea-card { margin: 14px 0; padding: 14px 16px; background: #fdeef0; border-radius: 12px; display: flex; align-items: baseline; justify-content: space-between; border: 1px solid var(--brand); }
+.h5-quotea-lab { color: var(--brand-600, #a60d26); font-size: 13px; font-weight: 600; }
+.h5-quotea-val { color: var(--brand); font-size: 24px; font-weight: 800; }
+.ro { font-weight: 600; }
+.ro.total { color: var(--brand); font-size: 18px; }
+.h5-ag-translate { margin-top: 12px; }
 
 /* 离屏渲染容器：保留布局尺寸供 html2canvas 截图，并移出可视区 */
 .pdf-offscreen { position: fixed; left: -10000px; top: 0; width: 794px; background: #fff; z-index: -1; }

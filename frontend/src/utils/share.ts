@@ -46,6 +46,13 @@ export function agencyH5Url(token: string): string {
   return `${base}#/h5/route/${token}`
 }
 
+// 一手 PandaKing 协作 H5 链接：指向 SPA 协作页（hash 路由），与 agencyH5Url 同一组件（按 role 渲染不同权限）。
+// PandaKing 凭此链接在微信/H5 内全量编辑行程与价格，与旅行社反复往返协作。
+export function pandakingH5Url(token: string): string {
+  const base = window.location.origin + (import.meta.env.VITE_BASE || '/')
+  return `${base}#/h5/route/${token}`
+}
+
 // 成本询价 H5 链接：指向前端 SPA 的询价填写页（hash 路由），一手复制后发微信群给省地接社。
 export function costInquiryH5Url(token: string): string {
   const base = window.location.origin + (import.meta.env.VITE_BASE || '/')

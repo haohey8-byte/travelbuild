@@ -130,9 +130,10 @@ export interface CaseItem {
   publishedAt?: string | null
 }
 
-// —— 协作 H5（公开只读视图） ——
+// —— 协作 H5（公开只读视图 / PandaKing↔旅行社双向编辑视图） ——
 export interface H5Route {
   token: string
+  public?: boolean // 是否为对客公开(只读)链接；false 表示协作方可编辑链接
   routeId: string
   customerName?: string | null
   customerNameCn?: string | null
@@ -144,12 +145,26 @@ export interface H5Route {
   role: Role
   itinerary: Record<string, unknown>
   guestPrice: number | null
+  // 双向协作回路：对端可编辑令牌（PandaKing 视图返回 agencyToken，旅行社/公开视图返回 pandakingToken）
+  pandakingToken?: string | null
+  agencyToken?: string | null
   // 净化报价：仅含对客报价（guestPrice），不含成本①/②/加价（公开 H5 不泄漏内部成本）
-  // 旅行社视角（role=agency）下 totals 还会返回 quoteA/profit2Mode/profit2，便于 H5 旅行社视图加利润②
+  // 旅行社视角（role=agency, public=false）下 totals 还会返回 quoteA/profit2Mode/profit2，便于 H5 旅行社视图加利润②
+  // 一手视角（role=pandaking, public=false）下返回全量：items 含 cost1/profit1Mode/profit1/quoteA，totals 含 quoteA/profit2
   quote?: {
-    items?: { name?: string; type?: string; cost1?: number; guestPrice?: number | null }[]
+    items?: {
+      name?: string
+      type?: string
+      cost1?: number
+      profit1Mode?: 'amount' | 'percent'
+      profit1?: number
+      quoteA?: number
+      guestPrice?: number | null
+    }[]
     totals?: {
       guestPrice?: number | null
+      cost1?: number
+      profit1?: number
       quoteA?: number
       profit2Mode?: 'amount' | 'percent'
       profit2?: number

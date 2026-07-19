@@ -579,6 +579,102 @@ export class RoutesService {
     return recalcQuote(quote)
   }
 
+  // —— PandaKing↔境外旅行社 双向编辑闭环辅助 ——
+  // 解析「对端」协作令牌：同 route + 对端角色 + 非公开 + 无成本询价（与省地接社 costInquiry 隔离）。
+  // 复用已存在的令牌（不重复创建），不存在则新建并指向当前版本。
+  // 用于 PandaKing 视图返回 agency 令牌、agency 视图返回 pandaking 令牌，形成可反复往返的协作回路。
+  private async resolvePeerToken(routeId: string, peerRole: Role, versionId: string | null | undefined): Promise<string> {
+    const existing = await this.prisma.routeShare.findFirst({
+      where: { routeId, role: peerRole, public: false, costInquiryId: null },
+      orderBy: { createdAt: 'desc' },
+    })
+    if (existing) return existing.token
+    const share = await this.createShare(routeId, peerRole, versionId ?? undefined, false)
+    return share.token
+  }
+
+  // 编辑后让对端共享令牌指向最新版本，确保对端打开即见本轮改动
+  private async syncPeerVersion(routeId: string, peerRole: Role, versionId: string) {
+    await this.prisma.routeShare.updateMany({
+      where: { routeId, role: peerRole, public: false, costInquiryId: null },
+      data: { versionId },
+    })
+  }
+
+  // 一手 PandaKing 凭协作令牌在 H5 内全量编辑行程与价格（成本① + 利润① + 利润②），
+  // 提交后生成新版本快照（与省地接社 provincialEdit 一致），并同步本端/对端令牌指向新版。
+  async pandakingEdit(
+    token: string,
+    input: { itinerary?: unknown; quote?: unknown },
+  ) {
+    const share = await this.prisma.routeShare.findUnique({ where: { token } })
+    if (!share || share.role !== 'pandaking' || share.public) {
+      throw new NotFoundException('协作链接无效')
+    }
+    const base = await this.latestVersion(share.routeId)
+    if (!base) throw new NotFoundException('路线暂无版本')
+    // 全量写价：依据 items（成本① + 利润①）重算 totals，并保留传入的 profit2（对客价利润）
+    const quote = recalcQuote(input.quote) as object
+    const next = (parseInt(String(base.version).replace(/\D/g, '') || '0', 10)) + 1
+    const version = await this.prisma.routeVersion.create({
+      data: {
+        routeId: share.routeId,
+        version: `v${next}`,
+        draft: false,
+        itinerary: (input.itinerary != null ? input.itinerary : base.itinerary) as object,
+        quote,
+      },
+    })
+    // 同步本端 + 对端令牌指向新版（对端打开即见本轮改动）
+    await this.prisma.routeShare.update({ where: { token }, data: { versionId: version.id } })
+    await this.syncPeerVersion(share.routeId, 'agency', version.id)
+    const visible = hideCostsForRole(version.quote, 'pandaking') as { items?: any[]; totals?: any }
+    return {
+      version: this.serializeVersion(version, 'pandaking'),
+      quote: visible,
+      agencyToken: await this.resolvePeerToken(share.routeId, 'agency', version.id),
+      guestPrice: visible?.totals?.guestPrice ?? null,
+    }
+  }
+
+  // 境外旅行社凭协作令牌在 H5 内编辑行程 + 利润②（看不到成本①），提交后生成新版本快照。
+  // 行程可增删改；价格仅可调整利润②（成本①与 PandaKing 利润① 取自上一版，旅行社不可见/不可改）。
+  async agencyEdit(
+    token: string,
+    input: { itinerary?: unknown; profit2Mode?: 'amount' | 'percent'; profit2?: number },
+  ) {
+    const share = await this.prisma.routeShare.findUnique({ where: { token } })
+    if (!share || share.role !== 'agency' || share.public) {
+      throw new NotFoundException('协作链接无效')
+    }
+    const base = await this.latestVersion(share.routeId)
+    if (!base) throw new NotFoundException('路线暂无版本')
+    // 旅行社：保留 PandaKing 的 items（成本① + 利润①），仅改利润② + 行程
+    const quote = this.mergeAgencyQuote(base, {
+      items: [],
+      totals: { profit2Mode: input.profit2Mode ?? 'amount', profit2: Number(input.profit2) || 0 },
+    }) as { items?: any[]; totals?: any }
+    const next = (parseInt(String(base.version).replace(/\D/g, '') || '0', 10)) + 1
+    const version = await this.prisma.routeVersion.create({
+      data: {
+        routeId: share.routeId,
+        version: `v${next}`,
+        draft: false,
+        itinerary: (input.itinerary != null ? input.itinerary : base.itinerary) as object,
+        quote,
+      },
+    })
+    await this.prisma.routeShare.update({ where: { token }, data: { versionId: version.id } })
+    await this.syncPeerVersion(share.routeId, 'pandaking', version.id)
+    const visible = hideCostsForRole(version.quote, 'agency') as { items?: any[]; totals?: any }
+    return {
+      version: this.serializeVersion(version, 'agency'),
+      quote: visible,
+      pandakingToken: await this.resolvePeerToken(share.routeId, 'pandaking', version.id),
+      guestPrice: visible?.totals?.guestPrice ?? null,
+    }
+  }
+
   // 协作 H5 视图（按 token 解析，报价仅暴露对客总价）
   // 对于省地接社协作 share，额外返回 costInquiry 状态/成本①，便于统一协作页编辑。
   async getH5(token: string) {
@@ -620,6 +716,7 @@ export class RoutesService {
     }
     const result: any = {
       token,
+      public: share.public,
       routeId: route.id,
       destination: route.destination,
       customerNameCn: route.customerNameCn,
@@ -642,6 +739,16 @@ export class RoutesService {
         cost1: share.costInquiry.cost1 != null ? Number(share.costInquiry.cost1) : null,
         costItems: (share.costInquiry.costItems as { name: string; amount: number }[] | undefined) ?? [],
       }
+    }
+    // 协作回路：返回「对端」可编辑令牌，便于双方直接在 H5 内互相发送可编辑链接。
+    // - agency（非公开）视图 → 返回 pandaking 令牌（PandaKing 全编辑入口）
+    // - pandaking（非公开）视图 → 返回 agency 令牌（旅行社行程+利润②入口）
+    // - 公开(对客)链接 → 反馈接收方恒为 PandaKing，故也返回 pandaking 令牌供通知跳转
+    if (share.role === 'agency' || share.public) {
+      result.pandakingToken = await this.resolvePeerToken(route.id, 'pandaking', version?.id)
+    }
+    if (share.role === 'pandaking' && !share.public) {
+      result.agencyToken = await this.resolvePeerToken(route.id, 'agency', version?.id)
     }
     return result
   }

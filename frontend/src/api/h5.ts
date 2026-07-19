@@ -53,3 +53,33 @@ export async function submitH5AgencyQuote(
   const { data } = await client.post(`/h5/route/${token}/quote`, payload)
   return data
 }
+
+// 一手 PandaKing 协作 H5：凭 pandaking 令牌全量编辑行程 + 价格（成本①+利润①+利润②），
+// 免登录鉴权（对应后端 POST /h5/route/:token/pandaking-edit），提交后生成新版本并同步对端令牌。
+export async function submitH5PandakingEdit(
+  token: string,
+  payload: { itinerary?: unknown; quote?: unknown },
+): Promise<{
+  version: { version: string; itinerary?: unknown; quote?: unknown } | null
+  quote: { items?: any[]; totals?: any } | null
+  agencyToken?: string | null
+  guestPrice?: number | null
+}> {
+  const { data } = await client.post(`/h5/route/${token}/pandaking-edit`, payload)
+  return data
+}
+
+// 境外旅行社协作 H5：凭 agency 令牌编辑行程 + 利润②（成本①不可见/不可改），
+// 免登录鉴权（对应后端 POST /h5/route/:token/agency-edit），提交后生成新版本并同步对端令牌。
+export async function submitH5AgencyEdit(
+  token: string,
+  payload: { itinerary?: unknown; profit2Mode: 'amount' | 'percent'; profit2: number },
+): Promise<{
+  version: { version: string; itinerary?: unknown; quote?: unknown } | null
+  quote: { items?: any[]; totals?: any } | null
+  pandakingToken?: string | null
+  guestPrice?: number | null
+}> {
+  const { data } = await client.post(`/h5/route/${token}/agency-edit`, payload)
+  return data
+}
