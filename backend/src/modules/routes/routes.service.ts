@@ -833,6 +833,11 @@ export class RoutesService {
     if (share.role === 'pandaking' && !share.public) {
       result.agencyToken = await this.resolvePeerToken(route.id, 'agency', version?.id)
     }
+    // 省地接社协作视图：PandaKing 用 pandaking 令牌做全量编辑（成本①+利润①），故也返回 pandaking 令牌。
+    // 完整报价仅经 pandaking 令牌返回；省地接社经自身 provincial 令牌仍只见成本①（权限隔离不变）。
+    if (share.role === 'provincial') {
+      result.pandakingToken = await this.resolvePeerToken(route.id, 'pandaking', version?.id)
+    }
     return result
   }
 

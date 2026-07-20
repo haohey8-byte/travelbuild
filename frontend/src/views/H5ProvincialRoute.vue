@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { fetchH5Route, submitH5Feedback, fetchH5Feedback, editH5ProvincialRoute } from '@/api/h5'
+import { fetchH5Route, submitH5Feedback, fetchH5Feedback, editH5ProvincialRoute, submitH5PandakingEdit } from '@/api/h5'
 import { shareRoute, applyCostInquiry } from '@/api/routes'
 import { safeName, safeText } from '@/utils/name'
 import { shareH5Url, agencyH5Url, provincialRouteH5Url, shareH5Caption, collabNotifyText, copyText, diffProvincialChanges } from '@/utils/share'
+import { calcDerived } from '@/utils/quote'
 import { genUid } from '@/utils/uid'
 import { useAuthStore } from '@/stores/auth'
 import QuoteTable from '@/components/QuoteTable.vue'
@@ -33,14 +34,9 @@ const pkPending = computed(() => isPk.value && data.value?.costInquiry?.status !
 // —— PandaKing 加价 & 生成对旅行社链接 ——
 const pkProfit1Mode = ref<'amount' | 'percent'>('amount')
 const pkProfit1 = ref(0)
-const pkQuoteA = computed(() => {
-  const totalCost1 = (data.value?.costInquiry?.costItems ?? []).reduce((s, it) => s + (Number(it.amount) || 0), 0)
-    || Number(data.value?.costInquiry?.cost1) || 0
-  const profit = pkProfit1Mode.value === 'percent'
-    ? Math.round(totalCost1 * (Number(pkProfit1.value) || 0) / 100)
-    : (Number(pkProfit1.value) || 0)
-  return totalCost1 + profit
-})
+// 报价A（对旅行社）：从「当前可编辑报价项」实时计算（成本①+利润①），与控制台一致；
+// 取代只读快照 costInquiry.costItems，确保 PandaKing 在此页调整后生成的对旅行社链接文案同步最新。
+const pkQuoteA = computed(() => calcDerived(quoteItems.value).quoteA)
 const pkGenLoading = ref(false)
 const pkGeneratedText = ref('')
 const pkGeneratedTip = ref('')
@@ -239,16 +235,63 @@ onMounted(async () => {
         alreadySubmitted.value = true
       }
     }
-    // 省地接社可编辑报价项：以「当前 routeVersion 的报价项（provincial 角色过滤后仅含 name/type/cost1）」为准。
-    // 不再用 costInquiry.costItems 旧快照——那样多轮往返时一手新增/调整的报价项会在省地接社侧被漏掉。
-    // costInquiry 仅承载协作记录与提交状态，不是省地接社协作页的实时数据源。
-    if (d.quote?.items?.length) {
+    // 报价项初始化（实时数据源 = 当前 routeVersion）。
+    // - PandaKing 视角：用 pandaking 令牌二次拉取，拿到完整报价（成本①+利润①+报价A）做逐项全编辑；
+    //   完整报价仅经 pandaking 令牌返回，省地接社经自身令牌仍只见成本①（权限隔离不变）。
+    // - 省地接社视角：用 provincial 可见 quote.items（仅含 name/type/cost1）做成本①编辑。
+    // costInquiry 仅承载协作记录与提交状态，不是协作页的实时数据源。
+    if (isPk.value && d.pandakingToken) {
+      try {
+        const pd = await fetchH5Route(d.pandakingToken)
+        if (pd.quote?.items?.length) {
+          quoteItems.value = pd.quote.items.map((it) => ({
+            uid: (it as any).uid || genUid(),
+            name: String(it.name ?? ''),
+            type: it.type || 'other',
+            cost1: Number(it.cost1) || 0,
+            profit1Mode: ((it as any).profit1Mode as 'amount' | 'percent') ?? 'amount',
+            profit1: Number((it as any).profit1) || 0,
+          })) as QuoteLevel[]
+        } else if (d.quote?.items?.length) {
+          quoteItems.value = d.quote.items.map((it) => ({
+            uid: (it as any).uid || genUid(),
+            name: String(it.name ?? ''),
+            type: it.type || 'other',
+            cost1: Number(it.cost1) || 0,
+            profit1Mode: 'amount' as const,
+            profit1: 0,
+          })) as QuoteLevel[]
+        } else {
+          quoteItems.value = [
+            { uid: genUid(), name: '包车', type: 'vehicle', cost1: 0, profit1Mode: 'amount', profit1: 0 },
+            { uid: genUid(), name: '酒店', type: 'hotel', cost1: 0, profit1Mode: 'amount', profit1: 0 },
+            { uid: genUid(), name: '门票', type: 'ticket', cost1: 0, profit1Mode: 'amount', profit1: 0 },
+          ]
+        }
+      } catch {
+        // pandaking 令牌拉取失败时退回省地接社可见报价（仍可编辑成本①）
+        quoteItems.value = d.quote?.items?.length
+          ? d.quote.items.map((it) => ({
+              uid: (it as any).uid || genUid(),
+              name: String(it.name ?? ''),
+              type: it.type || 'other',
+              cost1: Number(it.cost1) || 0,
+              profit1Mode: 'amount' as const,
+              profit1: 0,
+            })) as QuoteLevel[]
+          : [
+              { uid: genUid(), name: '包车', type: 'vehicle', cost1: 0, profit1Mode: 'amount', profit1: 0 },
+              { uid: genUid(), name: '酒店', type: 'hotel', cost1: 0, profit1Mode: 'amount', profit1: 0 },
+              { uid: genUid(), name: '门票', type: 'ticket', cost1: 0, profit1Mode: 'amount', profit1: 0 },
+            ]
+      }
+    } else if (d.quote?.items?.length) {
       quoteItems.value = d.quote.items.map((it) => ({
         uid: (it as any).uid || genUid(),
         name: String(it.name ?? ''),
         type: it.type || 'other',
         cost1: Number(it.cost1) || 0,
-        profit1Mode: 'amount',
+        profit1Mode: 'amount' as const,
         profit1: 0,
       })) as QuoteLevel[]
     } else {
@@ -408,20 +451,33 @@ async function onPkGenerateLink() {
   }
 }
 
-// 断点1 修复：PandaKing 在「回传确认」视图内，把调整后的行程「保存并回传省地接社」，
+// PandaKing 在「回传确认」视图内，把调整后的行程与报价（成本①+利润①）「保存并回传省地接社」，
 // 形成微信 H5 链路 一手→省地接社 的多轮往返闭环。
-// ⚠️ 仅传行程（不传成本①：成本①归省地接社专属；利润①归一手专属），后端 provincialEdit
-// 据此生成新版本并同步省地接社/一手令牌指向新版（见 routes.service.ts 的版本同步逻辑）。
+// 走 pandakingEdit（pandaking 令牌）：写完整报价、保留利润②、并同步省地接社令牌指向新版
+// （见 routes.service.ts 的版本同步逻辑），省地接社重开协作链接即见本轮改动。
 async function onPkHandoffToProvincial() {
   pkHandoffLoading.value = true
   pkHandoffText.value = ''
   pkHandoffTip.value = ''
   try {
-    await editH5ProvincialRoute(token, { itinerary: itinerary.value })
+    const pkToken = data.value?.pandakingToken
+    if (!pkToken) throw new Error('未找到一手协作令牌，无法保存报价')
+    const quotePayload = {
+      items: quoteItems.value
+        .filter((it) => String(it.name).trim() || Number(it.cost1) > 0 || Number(it.profit1) > 0)
+        .map((it) => ({
+          name: String(it.name || '').trim() || '未命名',
+          type: it.type || 'other',
+          cost1: Math.max(0, Number(it.cost1) || 0),
+          profit1Mode: (it.profit1Mode as 'amount' | 'percent') ?? 'amount',
+          profit1: Number(it.profit1) || 0,
+        })),
+    }
+    await submitH5PandakingEdit(pkToken, { itinerary: itinerary.value, quote: quotePayload })
     const link = provincialRouteH5Url(token)
     const text = collabNotifyText({
       kind: 'plan',
-      eventLabel: provAgencyName.value ? `调整行程并回传省地接社（${provAgencyName.value}）` : '调整行程并回传省地接社',
+      eventLabel: provAgencyName.value ? `调整行程与报价并回传省地接社（${provAgencyName.value}）` : '调整行程与报价并回传省地接社',
       subject: subject.value,
       destination: destination.value,
       travelDate: data.value?.travelDate,
@@ -465,7 +521,7 @@ function goRouteDetail() {
 
         <!-- ── 头部标识 ── -->
         <div class="prov-header">
-          <h1 class="prov-title">省地接社回传确认</h1>
+          <h1 class="prov-title">{{ provAgencyName ? `省地接社（${provAgencyName}）回传确认` : '省地接社回传确认' }}</h1>
           <div class="prov-chips">
             <span class="chip"><b>客户</b>{{ subject || '—' }}</span>
             <span class="chip"><b>目的地</b>{{ destination || '—' }}</span>
@@ -479,8 +535,8 @@ function goRouteDetail() {
           <div class="prov-left">
 
             <p class="hint">
-              省地接社已回传行程与成本①。您可以直接调整行程，设置利润后生成<b>对旅行社的 H5 链接</b>，
-              粘贴到微信发给境外旅行社。
+              省地接社已回传行程与成本①。您可以直接调整行程、在报价表中逐项设置成本①与利润①，
+              然后生成<b>对旅行社的 H5 链接</b>或<b>保存并回传省地接社</b>，粘贴到微信。
             </p>
 
             <!-- ── 行程安排（可编辑折叠） ── -->
@@ -531,84 +587,20 @@ function goRouteDetail() {
               <button class="btn dash" @click="addDay">+ 添加一天</button>
             </section>
 
-            <!-- ── 已回传成本①（只读） ── -->
-            <section class="prov-section cost-section pk-cost-readonly">
-              <h3>省地接社提交的成本①</h3>
-              <p class="hint">以下为省地接社回传的成本明细（仅一手可见）。</p>
-              <div class="pk-cost-tbl">
-                <div class="pk-cost-head"><span>项目</span><span>成本①</span></div>
-                <div v-for="(it, ii) in (data.costInquiry?.costItems ?? [])" :key="ii" class="pk-cost-row">
-                  <span>{{ it.name }}</span>
-                  <span>¥{{ Number(it.amount).toLocaleString() }}</span>
-                </div>
-                <!-- 兼容旧数据：只有 cost1 无 costItems -->
-                <div v-if="!(data.costInquiry?.costItems?.length) && data.costInquiry?.cost1 != null" class="pk-cost-row">
-                  <span>省地接社成本①</span>
-                  <span>¥{{ Number(data.costInquiry.cost1).toLocaleString() }}</span>
-                </div>
-                <div class="pk-cost-total">
-                  <span>合计</span>
-                  <span class="pk-cost-amt">
-                    ¥{{ ((data.costInquiry?.costItems ?? []).reduce((s, it) => s + (Number(it.amount) || 0), 0)
-                      || Number(data.costInquiry?.cost1) || 0).toLocaleString() }}
-                  </span>
-                </div>
-              </div>
+            <!-- ── 行程报价（PandaKing 全编辑：成本① + 利润①，与控制台一致） ── -->
+            <section class="prov-section cost-section">
+              <h3>行程报价（可编辑：成本① + 利润①）</h3>
+              <p class="hint">以下报价与控制台一致，可逐项调整成本①与利润①，报价A 自动重算。成本①归省地接社填写、利润①归一手，此处作为枢纽统一维护。</p>
+              <QuoteTable v-model:items="quoteItems" role="pandaking" />
             </section>
           </div>
 
-          <!-- ════ 右栏：利润设置 + 生成链接 + 文案 ════ -->
+          <!-- ════ 右栏：生成链接 + 文案 ════ -->
           <div class="prov-right">
 
-            <!-- ── 设置利润 ── -->
-            <section class="prov-section pk-profit-section">
-              <h3>💹 设置利润（加价）</h3>
-              <div class="pk-profit-form">
-                <div class="pk-profit-mode">
-                  <label class="pk-radio">
-                    <input type="radio" v-model="pkProfit1Mode" value="amount" />
-                    <span>固定金额</span>
-                  </label>
-                  <label class="pk-radio">
-                    <input type="radio" v-model="pkProfit1Mode" value="percent" />
-                    <span>百分比</span>
-                  </label>
-                </div>
-                <div class="pk-profit-input">
-                  <input
-                    v-model.number="pkProfit1"
-                    type="number"
-                    min="0"
-                    :placeholder="pkProfit1Mode === 'percent' ? '如 15' : '如 500'"
-                  />
-                  <span class="pk-profit-unit">{{ pkProfit1Mode === 'percent' ? '%' : '¥' }}</span>
-                </div>
-              </div>
-              <div class="pk-quote-preview">
-                <div class="pk-qp-row"><span>成本①</span><span>¥{{ ((data.costInquiry?.costItems ?? []).reduce((s, it) => s + (Number(it.amount) || 0), 0) || Number(data.costInquiry?.cost1) || 0).toLocaleString() }}</span></div>
-                <div class="pk-qp-row pk-qp-profit">
-                  <span>+ 利润</span>
-                  <span>
-                    <template v-if="pkProfit1Mode === 'percent'">
-                      {{ pkProfit1 || 0 }}%
-                      = ¥{{ Math.round(((data.costInquiry?.costItems ?? []).reduce((s, it) => s + (Number(it.amount) || 0), 0) || Number(data.costInquiry?.cost1) || 0) * (Number(pkProfit1) || 0) / 100).toLocaleString() }}
-                    </template>
-                    <template v-else>
-                      ¥{{ (Number(pkProfit1) || 0).toLocaleString() }}
-                    </template>
-                  </span>
-                </div>
-                <div class="pk-qp-divider"></div>
-                <div class="pk-qp-row pk-qp-total">
-                  <span>报价A（对旅行社）</span>
-                  <span class="pk-quote-amt">¥{{ pkQuoteA.toLocaleString() }}</span>
-                </div>
-              </div>
-            </section>
-
-            <!-- ── 保存并回传省地接社（断点1 修复：一手→省地接社 多轮往返）── -->
+            <!-- ── 保存并回传省地接社（一手→省地接社 多轮往返；保存完整报价）── -->
             <button class="btn btn-primary pk-handoff-btn" :disabled="pkHandoffLoading" @click="onPkHandoffToProvincial">
-              {{ pkHandoffLoading ? '回传中…' : '💾 保存并回传省地接社' }}
+              {{ pkHandoffLoading ? '回传中…' : (provAgencyName ? `💾 保存并回传省地接社（${provAgencyName}）` : '💾 保存并回传省地接社') }}
             </button>
             <p v-if="pkHandoffTip && !pkHandoffText" class="err">{{ pkHandoffTip }}</p>
             <div v-if="pkHandoffText" class="notify-box">
