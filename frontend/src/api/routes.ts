@@ -140,3 +140,12 @@ export async function ensureAgencyShare(
   const { data } = await client.post(`/routes/${routeId}/agency-share/ensure`, {})
   return data
 }
+
+// 幂等获取「一手（PandaKing）协作 H5」令牌：同 route 复用已有令牌，不重复创建。
+// 境外旅行社在控制台「提交建议 / 状态通知」时生成一手可编辑链接，对称形成多轮往返闭环。
+export async function ensurePandakingShare(
+  routeId: string,
+): Promise<{ token: string; link: string }> {
+  const { data } = await client.post(`/routes/${routeId}/pandaking-share/ensure`, {})
+  return data
+}

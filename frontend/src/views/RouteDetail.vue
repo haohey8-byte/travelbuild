@@ -13,6 +13,7 @@ import {
   applyCostInquiry,
   ensureProvincialShare,
   ensureAgencyShare,
+  ensurePandakingShare,
 } from '@/api/routes'
 import { fetchAgencies } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
@@ -21,6 +22,7 @@ import {
   shareH5Url,
   shareH5Caption,
   agencyH5Url,
+  pandakingH5Url,
   collabNotifyText,
   roleLabel,
   copyText,
@@ -517,6 +519,10 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
           // 一手回传反馈 / 状态通知 → 带旅行社「可编辑」链接，形成多轮往返闭环
           const s = await ensureAgencyShare(id)
           link = agencyH5Url(s.token)
+        } else if (isAgency.value) {
+          // 旅行社回传反馈 / 状态通知 → 带一手「可编辑」链接，对称形成多轮往返闭环
+          const s = await ensurePandakingShare(id)
+          link = pandakingH5Url(s.token)
         } else {
           const s = await shareRoute(id)
           link = s.token ? shareH5Url(s.token) : s.link || ''
@@ -600,11 +606,17 @@ async function onSubmitSuggestion(who: 'agency' | 'provincial') {
     }
   }
 
-  // 3) 生成通知文案（指向公开免登录的 H5 分享页）并复制到剪贴板，便于粘贴到微信群同步
+  // 3) 生成通知文案并复制到剪贴板，便于粘贴到微信群同步协作方
   let link = ''
   try {
-    const s = await shareRoute(id, role.value)
-    link = s.token ? shareH5Url(s.token) : ''
+    if (who === 'agency') {
+      // 旅行社提交建议并通知一手 → 带一手「可编辑」链接，对称形成多轮往返闭环
+      const s = await ensurePandakingShare(id)
+      link = pandakingH5Url(s.token)
+    } else {
+      const s = await shareRoute(id, role.value)
+      link = s.token ? shareH5Url(s.token) : ''
+    }
   } catch (shareErr: any) {
     actionErr.value = shareErr?.response?.data?.message || '生成分享链接失败，通知文案未生成'
     savingNotify.value = false

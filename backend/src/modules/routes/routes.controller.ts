@@ -195,6 +195,16 @@ export class RoutesController {
     return this.svc.ensureAgencyShare(id, user)
   }
 
+  // 幂等获取「一手（PandaKing）协作 H5」令牌：同一 route 复用已有令牌，不重复创建。
+  // 境外旅行社 / 省地接社在控制台「提交建议 / 状态通知」时用它生成一手可编辑链接。
+  @Post(':id/pandaking-share/ensure')
+  ensurePandakingShare(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.svc.ensurePandakingShare(id, user)
+  }
+
   // 旅行社加价 → 待确认
   @Post(':id/markup')
   markup(@Param('id') id: string, @CurrentUser() user: AuthUser) {

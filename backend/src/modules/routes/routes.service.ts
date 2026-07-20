@@ -325,6 +325,23 @@ export class RoutesService {
     return { token: share.token, link: `/h5/route/${share.token}` }
   }
 
+  // 幂等获取「一手（PandaKing）协作 H5」令牌：同一 route 复用已存在的非公开 pandaking 令牌，不重复创建。
+  // 用于境外旅行社 / 省地接社在控制台「提交建议 / 状态通知」时生成一手可编辑链接，形成多轮往返闭环。
+  async ensurePandakingShare(routeId: string, principal?: RoutePrincipal) {
+    // 一手自身无需获取自己的协作链接（H5 协作页内已持有 pandakingToken）
+    if (principal && principal.role === 'pandaking') {
+      throw new ForbiddenException('一手无需获取自身协作链接')
+    }
+    const existing = await this.prisma.routeShare.findFirst({
+      where: { routeId, role: 'pandaking', public: false, costInquiryId: null },
+      orderBy: { createdAt: 'desc' },
+    })
+    if (existing) return { token: existing.token, link: `/h5/route/${existing.token}` }
+    const latest = await this.latestVersion(routeId)
+    const share = await this.createShare(routeId, 'pandaking', latest?.id, false)
+    return { token: share.token, link: `/h5/route/${share.token}` }
+  }
+
   // 一手生成「省地接社协作 H5」令牌：同时完成分配 + 发起成本询价，
   // 一个 share 关联一个 CostInquiry，省地接社打开统一链接即可编辑行程并填写成本①。
   async createProvincialShare(routeId: string, provincialId?: string, principal?: RoutePrincipal) {
