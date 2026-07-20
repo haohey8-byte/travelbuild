@@ -234,27 +234,26 @@ onMounted(async () => {
       costInquiryId.value = d.costInquiry.id
       if (d.costInquiry.status === 'submitted') {
         alreadySubmitted.value = true
-        if (d.costInquiry.costItems && d.costInquiry.costItems.length > 0) {
-          quoteItems.value = d.costInquiry.costItems.map((it) => ({
-            name: it.name,
-            type: 'other',
-            cost1: it.amount,
-            profit1Mode: 'amount',
-            profit1: 0,
-          }))
-        } else if (d.costInquiry.cost1 != null) {
-          quoteItems.value = [{ name: '地接成本', type: 'other', cost1: d.costInquiry.cost1, profit1Mode: 'amount', profit1: 0 }]
-        } else {
-          quoteItems.value = []
-        }
-      } else {
-        // 未提交时给默认项目，方便按项目填写地接成本①
-        quoteItems.value = [
-          { name: '包车', type: 'vehicle', cost1: 0, profit1Mode: 'amount', profit1: 0 },
-          { name: '酒店', type: 'hotel', cost1: 0, profit1Mode: 'amount', profit1: 0 },
-          { name: '门票', type: 'ticket', cost1: 0, profit1Mode: 'amount', profit1: 0 },
-        ]
       }
+    }
+    // 省地接社可编辑报价项：以「当前 routeVersion 的报价项（provincial 角色过滤后仅含 name/type/cost1）」为准。
+    // 不再用 costInquiry.costItems 旧快照——那样多轮往返时一手新增/调整的报价项会在省地接社侧被漏掉。
+    // costInquiry 仅承载协作记录与提交状态，不是省地接社协作页的实时数据源。
+    if (d.quote?.items?.length) {
+      quoteItems.value = d.quote.items.map((it) => ({
+        name: String(it.name ?? ''),
+        type: it.type || 'other',
+        cost1: Number(it.cost1) || 0,
+        profit1Mode: 'amount',
+        profit1: 0,
+      })) as QuoteLevel[]
+    } else {
+      // 路线尚无任何报价项时给默认项目，方便从零填写地接成本①
+      quoteItems.value = [
+        { name: '包车', type: 'vehicle', cost1: 0, profit1Mode: 'amount', profit1: 0 },
+        { name: '酒店', type: 'hotel', cost1: 0, profit1Mode: 'amount', profit1: 0 },
+        { name: '门票', type: 'ticket', cost1: 0, profit1Mode: 'amount', profit1: 0 },
+      ]
     }
     // 记录回传前基线（多轮协作：用于生成本轮关键变更摘要）
     initialCostItems.value = quoteItems.value.map((i) => ({ name: String(i.name || ''), cost1: Number(i.cost1) || 0 }))
