@@ -505,6 +505,24 @@ export class RoutesService {
       })
     }
 
+    // 同步协作版本指针：本端省地接社令牌 + 对端 PandaKing 令牌 均指向本轮改动版本，
+    // 确保双方重开链接即见最新行程/成本①（微信 H5 链路多轮往返闭环）。
+    // ⚠️ 省地接社 share 关联 costInquiryId（非 null），故不能复用 syncPeerVersion（其 where 含 costInquiryId:null），
+    // 这里用独立 updateMany 覆盖「本端 provincial + 对端 pandaking」两类令牌。
+    const syncedVersionId = version?.id ?? latest?.id
+    if (syncedVersionId) {
+      await this.prisma.routeShare.updateMany({
+        where: {
+          routeId: share.routeId,
+          OR: [
+            { id: share.id }, // 本端省地接社协作令牌
+            { role: 'pandaking', public: false, costInquiryId: null }, // 对端一手可编辑令牌
+          ],
+        },
+        data: { versionId: syncedVersionId },
+      })
+    }
+
     // 同步成本询价记录（供协作记录区展示与省地接社视角回显）
     let costInquiryUpdated: any = null
     if (provincialItems.length > 0) {
@@ -677,6 +695,13 @@ export class RoutesService {
     // 同步本端 + 对端令牌指向新版（对端打开即见本轮改动）
     await this.prisma.routeShare.update({ where: { token }, data: { versionId: version.id } })
     await this.syncPeerVersion(share.routeId, 'agency', version.id)
+    // 省地接社协作令牌（关联 costInquiryId，syncPeerVersion 不匹配）→ 独立同步，
+    // 确保 PandaKing 经「控制台省→一手通知」发来的可编辑链接改完行程后，
+    // 省地接社重开协作链接仍见最新版（PandaKing↔省地接社 多轮往返闭环）。
+    await this.prisma.routeShare.updateMany({
+      where: { routeId: share.routeId, role: 'provincial' },
+      data: { versionId: version.id },
+    })
     const visible = hideCostsForRole(version.quote, 'pandaking') as { items?: any[]; totals?: any }
     return {
       version: this.serializeVersion(version, 'pandaking'),

@@ -43,6 +43,10 @@ const pkQuoteA = computed(() => {
 const pkGenLoading = ref(false)
 const pkGeneratedText = ref('')
 const pkGeneratedTip = ref('')
+// 断点1 修复：PandaKing 在回传确认视图内「保存并回传省地接社」的状态
+const pkHandoffLoading = ref(false)
+const pkHandoffText = ref('')
+const pkHandoffTip = ref('')
 
 // —— 行程（按天，可编辑，折叠展开）——
 interface Day {
@@ -401,6 +405,39 @@ async function onPkGenerateLink() {
   }
 }
 
+// 断点1 修复：PandaKing 在「回传确认」视图内，把调整后的行程「保存并回传省地接社」，
+// 形成微信 H5 链路 一手→省地接社 的多轮往返闭环。
+// ⚠️ 仅传行程（不传成本①：成本①归省地接社专属；利润①归一手专属），后端 provincialEdit
+// 据此生成新版本并同步省地接社/一手令牌指向新版（见 routes.service.ts 的版本同步逻辑）。
+async function onPkHandoffToProvincial() {
+  pkHandoffLoading.value = true
+  pkHandoffText.value = ''
+  pkHandoffTip.value = ''
+  try {
+    await editH5ProvincialRoute(token, { itinerary: itinerary.value })
+    const link = provincialRouteH5Url(token)
+    const text = collabNotifyText({
+      kind: 'plan',
+      eventLabel: '调整行程并回传省地接社',
+      subject: subject.value,
+      destination: destination.value,
+      travelDate: data.value?.travelDate,
+      authorName: '一手 PandaKing',
+      url: link,
+    })
+    pkHandoffText.value = text
+    const ok = await copyText(text)
+    pkHandoffTip.value = ok
+      ? '✅ 通知文案已复制，去微信粘贴发给省地接社'
+      : '已生成，请手动复制下方文案'
+  } catch (e: any) {
+    pkHandoffTip.value = `回传失败：${e?.response?.data?.message || e.message || '未知错误'}`
+    console.error('[pk handoff to provincial]', e)
+  } finally {
+    pkHandoffLoading.value = false
+  }
+}
+
 // PandaKing 快速跳转到路线详情页（完整编辑）
 function goRouteDetail() {
   const id = data.value?.routeId
@@ -565,6 +602,19 @@ function goRouteDetail() {
                 </div>
               </div>
             </section>
+
+            <!-- ── 保存并回传省地接社（断点1 修复：一手→省地接社 多轮往返）── -->
+            <button class="btn btn-primary pk-handoff-btn" :disabled="pkHandoffLoading" @click="onPkHandoffToProvincial">
+              {{ pkHandoffLoading ? '回传中…' : '💾 保存并回传省地接社' }}
+            </button>
+            <p v-if="pkHandoffTip && !pkHandoffText" class="err">{{ pkHandoffTip }}</p>
+            <div v-if="pkHandoffText" class="notify-box">
+              <div class="notify-head">
+                <span>{{ pkHandoffTip || '已回传' }}</span>
+                <button class="btn ghost sm" @click="copyText(pkHandoffText)">再复制</button>
+              </div>
+              <pre class="notify-text">{{ pkHandoffText }}</pre>
+            </div>
 
             <!-- ── 生成对旅行社链接 ── -->
             <button class="btn btn-primary pk-gen-btn" :disabled="pkGenLoading" @click="onPkGenerateLink">

@@ -523,6 +523,11 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
           // 旅行社回传反馈 / 状态通知 → 带一手「可编辑」链接，对称形成多轮往返闭环
           const s = await ensurePandakingShare(id)
           link = pandakingH5Url(s.token)
+        } else if (isProv.value) {
+          // 断点2 修复：省地接社回传反馈 / 状态通知 → 带一手「可编辑」链接（原只读链接改为可编辑），
+          // 对称形成 PandaKing↔省地接社 多轮往返闭环；成本①/利润①权限隔离不受影响。
+          const s = await ensurePandakingShare(id)
+          link = pandakingH5Url(s.token)
         } else {
           const s = await shareRoute(id)
           link = s.token ? shareH5Url(s.token) : s.link || ''
@@ -614,8 +619,10 @@ async function onSubmitSuggestion(who: 'agency' | 'provincial') {
       const s = await ensurePandakingShare(id)
       link = pandakingH5Url(s.token)
     } else {
-      const s = await shareRoute(id, role.value)
-      link = s.token ? shareH5Url(s.token) : ''
+      // 断点2 修复：省地接社提交成本建议并通知一手 → 带一手「可编辑」链接（原只读 shareRoute 改为可编辑），
+      // 与旅行社分支对称；成本①/利润①权限隔离不受影响（令牌仅指向该 route 的一手协作视图）。
+      const s = await ensurePandakingShare(id)
+      link = pandakingH5Url(s.token)
     }
   } catch (shareErr: any) {
     actionErr.value = shareErr?.response?.data?.message || '生成分享链接失败，通知文案未生成'
