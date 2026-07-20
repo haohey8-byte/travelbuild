@@ -31,7 +31,8 @@ const isProv = computed(() => props.role === 'provincial')
 
 const canEditCost1 = computed(() => (isPk.value || isProv.value) && !props.readOnly)
 const canEditProfit1 = computed(() => isPk.value && !props.readOnly)
-const canEditProfit2 = computed(() => (isPk.value || isAgency.value) && !props.readOnly)
+// 利润②归境外旅行社，一手 PandaKing 永远不可编辑（仅旅行社视图可改）
+const canEditProfit2 = computed(() => isAgency.value && !props.readOnly)
 const canEditName = computed(() => (isPk.value || isProv.value) && !props.readOnly)
 const canAdd = computed(() => (isPk.value || isProv.value) && !props.readOnly)
 

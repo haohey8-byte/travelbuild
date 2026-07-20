@@ -524,22 +524,18 @@ function goHome() {
       <!-- ============ PandaKing 视角：全量编辑行程 + 价格 ============ -->
       <template v-if="isPkView">
         <section class="h5-edit-section">
-          <h3>💰 报价编辑（成本① + 利润① + 利润②）</h3>
-          <p class="hint">您可全量调整成本与利润，设置对客价附加利润②（旅行社可在此基础再调）。修改后生成新版本并同步给旅行社。</p>
+          <h3>💰 报价编辑（成本① + 利润①）</h3>
+          <p class="hint">您可调整成本①与利润①、设定报价A；利润②（对客附加）由旅行社设定，此处仅作只读预览。修改后生成新版本并同步给旅行社。</p>
           <QuoteTable v-model:items="quoteItems" role="pandaking" />
-          <!-- 利润②（对客价附加）：PandaKing 预置，旅行社可再调 -->
+          <!-- 利润②（对客价附加）：归境外旅行社，PandaKing 只读预览，不可编辑 -->
           <div class="guest-box">
             <div class="guest-row">
               <span class="guest-label">报价A</span>
               <span class="ro">¥{{ Math.round(pkDerived.quoteA).toLocaleString() }}</span>
             </div>
             <div class="guest-row">
-              <span class="guest-label">利润②（对客附加）</span>
-              <select v-model="pkProfit2Mode" class="mode">
-                <option value="amount">元</option>
-                <option value="percent">%</option>
-              </select>
-              <input type="number" v-model.number="pkProfit2" />
+              <span class="guest-label">利润②（旅行社·只读）</span>
+              <span class="ro">{{ pkProfit2Mode === 'percent' ? pkProfit2 + '%' : '¥' + Math.round(pkProfit2).toLocaleString() }}</span>
             </div>
             <div class="guest-row total">
               <span class="guest-label">对客总价</span>

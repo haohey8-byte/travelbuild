@@ -12,6 +12,7 @@ import {
   listCostInquiries,
   applyCostInquiry,
   ensureProvincialShare,
+  ensureAgencyShare,
 } from '@/api/routes'
 import { fetchAgencies } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
@@ -512,8 +513,14 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
     if (a.key !== 'reject' && data.value) {
       let link = ''
       try {
-        const s = await shareRoute(id)
-        link = s.token ? shareH5Url(s.token) : s.link || ''
+        if (isPk.value) {
+          // 一手回传反馈 / 状态通知 → 带旅行社「可编辑」链接，形成多轮往返闭环
+          const s = await ensureAgencyShare(id)
+          link = agencyH5Url(s.token)
+        } else {
+          const s = await shareRoute(id)
+          link = s.token ? shareH5Url(s.token) : s.link || ''
+        }
       } catch {
         link = ''
       }

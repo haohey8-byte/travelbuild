@@ -185,6 +185,16 @@ export class RoutesController {
     return this.svc.ensureProvincialShare(id, body?.provincialId, user as any)
   }
 
+  // 幂等获取「境外旅行社协作 H5」令牌：同一 route 复用已有令牌，不重复创建。
+  // 一手在控制台「回传反馈 / 状态通知」时用它生成旅行社可编辑链接。
+  @Post(':id/agency-share/ensure')
+  ensureAgencyShare(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.svc.ensureAgencyShare(id, user)
+  }
+
   // 旅行社加价 → 待确认
   @Post(':id/markup')
   markup(@Param('id') id: string, @CurrentUser() user: AuthUser) {

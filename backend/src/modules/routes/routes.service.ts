@@ -309,6 +309,22 @@ export class RoutesService {
     return { token: share.token, link: `/share/route/${share.token}` }
   }
 
+  // 幂等获取「境外旅行社协作 H5」令牌：同一 route 复用已存在的非公开 agency 令牌，不重复创建。
+  // 用于一手在控制台「回传反馈 / 状态通知」时生成旅行社可编辑链接，形成多轮往返闭环。
+  async ensureAgencyShare(routeId: string, principal?: RoutePrincipal) {
+    if (principal && principal.role !== 'pandaking') {
+      throw new ForbiddenException('仅一手 PandaKing 可获取旅行社协作链接')
+    }
+    const existing = await this.prisma.routeShare.findFirst({
+      where: { routeId, role: 'agency', public: false, costInquiryId: null },
+      orderBy: { createdAt: 'desc' },
+    })
+    if (existing) return { token: existing.token, link: `/h5/route/${existing.token}` }
+    const latest = await this.latestVersion(routeId)
+    const share = await this.createShare(routeId, 'agency', latest?.id, false)
+    return { token: share.token, link: `/h5/route/${share.token}` }
+  }
+
   // 一手生成「省地接社协作 H5」令牌：同时完成分配 + 发起成本询价，
   // 一个 share 关联一个 CostInquiry，省地接社打开统一链接即可编辑行程并填写成本①。
   async createProvincialShare(routeId: string, provincialId?: string, principal?: RoutePrincipal) {
@@ -613,8 +629,24 @@ export class RoutesService {
     }
     const base = await this.latestVersion(share.routeId)
     if (!base) throw new NotFoundException('路线暂无版本')
-    // 全量写价：依据 items（成本① + 利润①）重算 totals，并保留传入的 profit2（对客价利润）
-    const quote = recalcQuote(input.quote) as object
+    // 一手只改自身层（成本① + 利润①）；利润②归境外旅行社，必须从上一版保留，
+    // 绝不能由传入覆盖/清零（否则会误伤旅行社已设的对客加价）。
+    const baseQuote = (base.quote as { items?: any[]; totals?: any }) || { items: [], totals: {} }
+    const baseTotals = baseQuote.totals || {}
+    const incoming = (input.quote as { items?: any[]; totals?: any }) || {}
+    const items = (Array.isArray(incoming.items) ? incoming.items : []).map((it: any) => ({
+      name: String(it?.name || '').trim() || '未命名',
+      type: it?.type || 'other',
+      cost1: Math.max(0, Number(it?.cost1) || 0),
+      profit1Mode: (it?.profit1Mode as 'amount' | 'percent') ?? 'amount',
+      profit1: Number(it?.profit1) || 0,
+    }))
+    const profit2Mode = (baseTotals.profit2Mode as 'amount' | 'percent') ?? 'amount'
+    const profit2 = Number(baseTotals.profit2) || 0
+    const quote = recalcQuote({
+      items,
+      totals: { ...(baseTotals as object), profit2Mode, profit2 },
+    }) as object
     const next = (parseInt(String(base.version).replace(/\D/g, '') || '0', 10)) + 1
     const version = await this.prisma.routeVersion.create({
       data: {

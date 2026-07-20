@@ -131,3 +131,12 @@ export async function ensureProvincialShare(
   const { data } = await client.post(`/routes/${routeId}/provincial-share/ensure`, provincialId ? { provincialId } : {})
   return data
 }
+
+// 幂等获取「境外旅行社协作 H5」令牌：同 route 复用已有令牌，不重复创建。
+// 一手在控制台「回传反馈 / 状态通知」时生成旅行社可编辑链接，形成多轮往返闭环。
+export async function ensureAgencyShare(
+  routeId: string,
+): Promise<{ token: string; link: string }> {
+  const { data } = await client.post(`/routes/${routeId}/agency-share/ensure`, {})
+  return data
+}
