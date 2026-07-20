@@ -39,6 +39,7 @@ export type ProfitMode = 'amount' | 'percent'
 //   profit1 = PandaKing 利润（元或%，默认 0；省地接社只填成本、利润留 0）
 //   quoteA  = 行级 PandaKing 报价 = profit1Mode==='percent' ? cost1*(1+profit1/100) : cost1+profit1
 export interface QuoteLevel {
+  uid?: string // 前端稳定唯一 id（v-for :key），不参与后端计算，仅用于避免索引作 key 导致输入值串行
   name?: string // 项目名称可自定义（优先显示）
   type?: 'vehicle' | 'hotel' | 'ticket' | 'meal' | 'other' // 旧数据/快速分类保留
   cost1?: number // 省地接社成本（成本①）

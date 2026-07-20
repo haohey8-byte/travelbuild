@@ -7,6 +7,7 @@
 import { computed } from 'vue'
 import type { QuoteLevel, ProfitMode } from '@/types'
 import { calcDerived, calcGuestPrice, itemQuoteA, profitToAmount } from '@/utils/quote'
+import { genUid } from '@/utils/uid'
 
 const props = defineProps<{
   role: 'pandaking' | 'agency' | 'provincial'
@@ -44,7 +45,7 @@ const derived = computed(() => calcDerived(items.value))
 const guestPrice = computed(() => calcGuestPrice(derived.value.quoteA, profit2Mode.value, profit2.value))
 
 function newItem(): QuoteLevel {
-  return { name: '', type: 'other', cost1: 0, profit1Mode: 'amount', profit1: 0 }
+  return { uid: genUid(), name: '', type: 'other', cost1: 0, profit1Mode: 'amount', profit1: 0 }
 }
 function addItem() {
   items.value.push(newItem())
@@ -68,7 +69,7 @@ function removeItem(i: number) {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(it, i) in items" :key="i">
+          <tr v-for="(it, i) in items" :key="it.uid ?? i">
             <td>
               <input
                 v-model="it.name"

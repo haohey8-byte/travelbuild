@@ -31,6 +31,7 @@ import {
 import type { Route, RouteVersion, RouteStatusKey, QuoteLevel, RouteFeedbackItem, Agency, CostInquiry } from '@/types'
 import { buildPdfModel, type PdfModel } from '@/utils/pdf-model'
 import { calcDerived, calcGuestPrice } from '@/utils/quote'
+import { genUid } from '@/utils/uid'
 import { generatePdf } from '@/utils/pdf-export'
 import { PDF_LANG_OPTIONS, PDF_VERSION_LABEL, type PdfLang, type PdfVersion } from '@/utils/pdf-i18n'
 import RoutePdf from '@/components/RoutePdf.vue'
@@ -313,7 +314,24 @@ async function openInquireDialog() {
     await doInquire()
     return
   }
-  // 未关联省地接社 → 打开弹窗让用户选机构后点「生成询价链接」
+  // 未关联省地接社 → 先自动保存当前行程与报价（如新加的「9座车」成本①），再打开弹窗让用户选机构
+  savingNotify.value = true
+  actionErr.value = ''
+  try {
+    await saveVersion(id, {
+      itinerary: itinerary.value,
+      quote: buildQuote(),
+      draft: false,
+      notify: false,
+    })
+    await load()
+  } catch (e: any) {
+    savingNotify.value = false
+    actionErr.value = e?.response?.data?.message || '保存行程失败'
+    return
+  } finally {
+    savingNotify.value = false
+  }
   dialogText.value = ''
   dialogSubtitle.value = inquireSubtitle.value
   inquireDialog.value = true
@@ -429,7 +447,7 @@ async function load() {
     }
     if (v?.quote && typeof v.quote === 'object') {
       const q = v.quote as { items?: QuoteLevel[]; totals?: Record<string, unknown> }
-      quoteItems.value = (q.items ?? []).map((it) => ({ ...it }))
+      quoteItems.value = (q.items ?? []).map((it) => ({ ...it, uid: (it as any).uid || genUid() }))
       const t: any = q.totals || {}
       profit2Mode.value = t.profit2Mode === 'percent' ? 'percent' : 'amount'
       profit2.value = Number(t.profit2) || 0

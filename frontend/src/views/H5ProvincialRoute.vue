@@ -5,6 +5,7 @@ import { fetchH5Route, submitH5Feedback, fetchH5Feedback, editH5ProvincialRoute 
 import { shareRoute, applyCostInquiry } from '@/api/routes'
 import { safeName, safeText } from '@/utils/name'
 import { shareH5Url, agencyH5Url, provincialRouteH5Url, shareH5Caption, collabNotifyText, copyText, diffProvincialChanges } from '@/utils/share'
+import { genUid } from '@/utils/uid'
 import { useAuthStore } from '@/stores/auth'
 import QuoteTable from '@/components/QuoteTable.vue'
 import type { H5Route, RouteFeedbackItem, QuoteLevel, RouteStatusKey } from '@/types'
@@ -241,6 +242,7 @@ onMounted(async () => {
     // costInquiry 仅承载协作记录与提交状态，不是省地接社协作页的实时数据源。
     if (d.quote?.items?.length) {
       quoteItems.value = d.quote.items.map((it) => ({
+        uid: (it as any).uid || genUid(),
         name: String(it.name ?? ''),
         type: it.type || 'other',
         cost1: Number(it.cost1) || 0,
@@ -250,9 +252,9 @@ onMounted(async () => {
     } else {
       // 路线尚无任何报价项时给默认项目，方便从零填写地接成本①
       quoteItems.value = [
-        { name: '包车', type: 'vehicle', cost1: 0, profit1Mode: 'amount', profit1: 0 },
-        { name: '酒店', type: 'hotel', cost1: 0, profit1Mode: 'amount', profit1: 0 },
-        { name: '门票', type: 'ticket', cost1: 0, profit1Mode: 'amount', profit1: 0 },
+        { uid: genUid(), name: '包车', type: 'vehicle', cost1: 0, profit1Mode: 'amount', profit1: 0 },
+        { uid: genUid(), name: '酒店', type: 'hotel', cost1: 0, profit1Mode: 'amount', profit1: 0 },
+        { uid: genUid(), name: '门票', type: 'ticket', cost1: 0, profit1Mode: 'amount', profit1: 0 },
       ]
     }
     // 记录回传前基线（多轮协作：用于生成本轮关键变更摘要）
