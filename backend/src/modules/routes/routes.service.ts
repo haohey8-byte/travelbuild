@@ -807,11 +807,20 @@ export class RoutesService {
       guestPrice: (visible?.totals?.guestPrice as number) ?? null,
     }
     if (share.role === 'provincial' && share.costInquiry) {
+      // 解析被询价省地接社的机构名，供 H5 两条回传微信文案个性化展示（需求：文案带具体机构名）
+      let agencyName: string | null = null
+      if (share.costInquiry.provincialId) {
+        const ag = await this.prisma.agency.findUnique({
+          where: { id: share.costInquiry.provincialId },
+        })
+        agencyName = ag?.name ?? null
+      }
       result.costInquiry = {
         id: share.costInquiry.id,
         status: share.costInquiry.status,
         cost1: share.costInquiry.cost1 != null ? Number(share.costInquiry.cost1) : null,
         costItems: (share.costInquiry.costItems as { name: string; amount: number }[] | undefined) ?? [],
+        agencyName,
       }
     }
     // 协作回路：返回「对端」可编辑令牌，便于双方直接在 H5 内互相发送可编辑链接。

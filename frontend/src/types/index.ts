@@ -177,6 +177,7 @@ export interface H5Route {
     status: 'pending' | 'submitted'
     cost1: number | null
     costItems?: CostInquiryItem[]
+    agencyName?: string | null // 被询价省地接社机构名（后端 getH5 解析，用于回传文案个性化）
   } | null
 }
 

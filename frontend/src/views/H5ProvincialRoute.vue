@@ -120,6 +120,8 @@ const fbErr = ref('')
 const quoteItems = ref<QuoteLevel[]>([])
 const alreadySubmitted = ref(false)
 const costInquiryId = ref<string | null>(null)
+// 后端 getH5 返回的省地接社机构名（用于两条回传微信文案个性化展示，需求：文案带具体机构名）
+const provAgencyName = computed(() => data.value?.costInquiry?.agencyName || '')
 const totalCost = computed(() => quoteItems.value.reduce((s, it) => s + (Number(it.cost1) || 0), 0))
 // 回传前的基线快照：用于多轮回传时计算「关键变更摘要」（与一手逐轮核对）
 const initialCostItems = ref<{ name: string; cost1: number }[]>([])
@@ -332,7 +334,7 @@ async function onSubmitHandoff() {
         subject: subject.value,
         destination: destination.value,
         travelDate: data.value?.travelDate,
-        authorName: '省地接社',
+        authorName: provAgencyName.value ? `省地接社（${provAgencyName.value}）` : '省地接社',
         changes,
         url: window.location.href,
       })
@@ -419,7 +421,7 @@ async function onPkHandoffToProvincial() {
     const link = provincialRouteH5Url(token)
     const text = collabNotifyText({
       kind: 'plan',
-      eventLabel: '调整行程并回传省地接社',
+      eventLabel: provAgencyName.value ? `调整行程并回传省地接社（${provAgencyName.value}）` : '调整行程并回传省地接社',
       subject: subject.value,
       destination: destination.value,
       travelDate: data.value?.travelDate,

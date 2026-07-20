@@ -270,6 +270,16 @@ async function loadProvincialAgencies() {
     loadingProvincialAgencies.value = false
   }
 }
+
+// 已关联的省地接社机构名：用于「发起询价」按钮文案、弹窗标题与通知文案个性化（需求：显示具体机构名）
+const linkedProvName = computed(() => {
+  const pid = data.value?.provincialId
+  if (!pid) return ''
+  return provincialAgencies.value.find((a) => a.id === pid)?.name || ''
+})
+const inquireTargetLabel = computed(() =>
+  linkedProvName.value ? `向"${linkedProvName.value}"咨询` : '向省地接社咨询',
+)
 async function loadInquiries() {
   if (role.value !== 'pandaking') return
   loadingInquiries.value = true
@@ -406,9 +416,11 @@ async function doInquire() {
     const qs = params.toString()
     const link = qs ? `${base}?${qs}` : base
 
-    // 3) 构造结构化文案
+    // 3) 构造结构化文案（需求：措辞改为「向你规划路线和询价并回传」，并带上具体省地接社机构名）
     const caption = shareH5Caption(data.value ?? undefined)
-    const text = `${caption}\n\n一手 PandaKing 已生成行程方案，邀请你填写成本①并回传：\n\n👉 查看并回复：${link}`
+    const provAg = provincialAgencies.value.find((a) => a.id === collabProvId.value)
+    const targetLabel = provAg?.name ? `（${provAg.name}）` : ''
+    const text = `${caption}\n\nPandaKing 已生成行程方案，向你${targetLabel}规划路线和询价并回传：\n\n👉 查看并回复：${link}`
     dialogText.value = text
 
     // 4) 自动复制
@@ -958,7 +970,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
           <!-- 一手：发起询价 + 保存并报价（双主操作，弹 NotifyDialog 统一弹结构化文案+URL） -->
           <div v-if="isPk" class="pk-actions">
             <button class="d-btn primary block" :disabled="savingDraft || savingNotify" @click="openInquireDialog">
-              🤝 发起询价（向省地接社咨询）
+              🤝 发起询价（{{ inquireTargetLabel }}）
             </button>
             <button class="d-btn primary block" :disabled="savingDraft || savingNotify" @click="openQuoteDialog">
               💼 保存并报价（向境外旅行社报价）
@@ -1186,7 +1198,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
       <!-- ============ 协作通知弹窗（一手复用）============ -->
       <NotifyDialog
         v-model:open="inquireDialog"
-        :title="'🤝 发起询价（向省地接社咨询）'"
+        :title="'🤝 发起询价（' + inquireTargetLabel + '）'"
         :subtitle="inquireSubtitle"
         :text="dialogText"
         generate-label="📋 生成询价链接"
