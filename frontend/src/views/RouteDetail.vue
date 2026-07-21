@@ -651,7 +651,7 @@ async function onSaveDraft() {
 
 async function onAction(a: { key: string; label: string; needNote?: boolean }) {
   if (a.needNote && !feedbackNote.value.trim()) {
-    actionErr.value = '请填写反馈内容'
+    actionErr.value = '请填写补充说明'
     return
   }
   doing.value = a.key
@@ -1137,7 +1137,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
           <!-- 非一手：反馈建议输入框（提交给一手 PandaKing） -->
           <div v-if="isAgency || isProv" class="suggest">
             <label>补充说明（可选）</label>
-            <textarea v-model="consSuggestion" rows="2" :placeholder="isAgency ? ('填写对报价 / 行程的修改建议，将随报价一并通知 ' + ownerName) : ('填写成本说明或协作备注，将通知 ' + ownerName)"></textarea>
+            <textarea v-model="consSuggestion" rows="2" :placeholder="isAgency ? ('填写对报价 / 行程的补充说明，将随报价一并通知 ' + ownerName) : ('填写成本补充说明，将通知 ' + ownerName)"></textarea>
           </div>
 
           <!-- 非一手：本轮变更摘要（旅行社加价 / 行程调整后实时展示） -->
@@ -1221,8 +1221,8 @@ const collabEvents = computed<CollabEvent[]>(() => {
               </button>
             </div>
             <div v-if="availableActions.find((a) => a.needNote)" class="field full" style="margin-top: 14px">
-              <label>补充说明（可选）</label>
-              <textarea v-model="feedbackNote" rows="3" placeholder="填写要回传给对方 / 旅行社的修改意见"></textarea>
+            <label>补充说明（可选）</label>
+            <textarea v-model="feedbackNote" rows="3" placeholder="填写要回传给对方 / 旅行社的补充说明"></textarea>
             </div>
           </div>
         </div>

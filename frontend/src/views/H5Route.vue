@@ -528,7 +528,7 @@ onMounted(async () => {
 async function onSend() {
   const content = feedback.value.trim()
   if (!content) {
-    sendErr.value = '请填写反馈内容'
+    sendErr.value = '请填写补充说明'
     return
   }
   submitting.value = true
@@ -539,11 +539,11 @@ async function onSend() {
     if (data.value) {
       // 反馈接收方恒为对端：PandaKing 视图 → 发 agency 可编辑链接；agency/公开视图 → 发 pandaking 可编辑链接
       let url = ''
-      let eventLabel = '提交了修改意见'
+      let eventLabel = '提交了补充说明'
       let author = authorName.value.trim() || undefined
       if (isPkView.value) {
         url = data.value.agencyToken ? agencyH5Url(data.value.agencyToken) : shareH5Url(token)
-        eventLabel = '回复了修改意见'
+        eventLabel = '回复了补充说明'
         author = author || ownerName.value
       } else if (isAgencyView.value) {
         url = data.value.pandakingToken ? pandakingH5Url(data.value.pandakingToken) : shareH5Url(token)
@@ -678,7 +678,7 @@ function goHome() {
           <!-- 补充说明（可选） -->
           <div class="h5-fb-field">
             <label>补充说明（可选）</label>
-            <textarea v-model="agFbText" rows="2" placeholder="如有额外说明可在此补充；变更摘要会自动合并提交"></textarea>
+            <textarea v-model="agFbText" rows="2" placeholder="填写您的补充说明（可选）；变更摘要会自动合并提交"></textarea>
           </div>
 
           <button class="btn btn-primary" :disabled="agSaving" @click="onAgSave">
@@ -802,11 +802,11 @@ function goHome() {
       <p v-else class="muted">暂无行程详情</p>
 
       <div class="h5-feedback">
-        <h3>修改反馈</h3>
-        <input v-model="authorName" class="h5-input" placeholder="您的名称（可选）" />
-        <textarea v-model="feedback" class="h5-input" rows="4" placeholder="请输入您的修改意见…"></textarea>
+        <h3>补充说明（可选）</h3>
+        <input v-model="authorName" class="h5-input" placeholder="您的称呼（可选，将显示在历史记录中）" />
+        <textarea v-model="feedback" class="h5-input" rows="4" placeholder="填写您对行程 / 报价的补充说明…"></textarea>
         <button class="btn btn-primary" :disabled="submitting" @click="onSend">
-          {{ submitting ? '提交中…' : '提交反馈' }}
+          {{ submitting ? '提交中…' : '提交补充说明' }}
         </button>
         <p v-if="sendErr" class="err">{{ sendErr }}</p>
         <p v-if="thanks" class="thanks">感谢反馈，已提交！</p>

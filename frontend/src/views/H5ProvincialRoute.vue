@@ -361,7 +361,7 @@ async function onSubmitHandoff() {
       }
     } else if (manual) {
       try {
-        await submitH5Feedback(token, manual, '省地接社')
+        await submitH5Feedback(token, manual, provAuthorName.value)
         fbText.value = ''
       } catch (fe: any) {
         fbErr.value = fe?.response?.data?.message || '说明提交失败（行程与成本已保存）'
