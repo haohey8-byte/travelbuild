@@ -295,6 +295,38 @@ const hasAnyChange = computed(() => {
   return costChanged || profit2Changed || itinChanged
 })
 
+// 按收件方可见域计算变更摘要（通知文案应展示对方能看到的改动，而非发送方编辑的全部字段）
+function buildChanges(fields: ('cost1' | 'profit1' | 'profit2' | 'itinerary')[]): ProvincialChanges {
+  return diffQuoteChanges({
+    before: {
+      items: baselineQuoteItems.value,
+      profit2: baselineProfit2.value,
+      profit2Mode: baselineProfit2Mode.value,
+      itinerary: baselineItinerary.value,
+    },
+    after: {
+      items: quoteItems.value,
+      profit2: Number(profit2.value) || 0,
+      profit2Mode: profit2Mode.value,
+      itinerary: { days: itinerary.value.days.map((d) => ({ day: d.day, city: d.city })) },
+    },
+    editableFields: fields,
+    versionLabel: versionLabel.value,
+  })
+}
+function checkHasChange(ch: ProvincialChanges) {
+  const costChanged = !!ch.cost && ch.cost.items.length > 0
+  const profit2Changed = !!ch.totals?.profit2
+  const itinChanged = !!ch.itinerary && ch.itinerary.cityChanges.length > 0
+  return costChanged || profit2Changed || itinChanged
+}
+// 一手 → 省地接社：仅展示成本① + 行程（利润① 对省地接社不可见，不应出现在摘要）
+const changesForProvincial = computed<ProvincialChanges>(() => buildChanges(['cost1', 'itinerary']))
+const hasProvincialChange = computed(() => checkHasChange(changesForProvincial.value))
+// 一手 → 境外旅行社：仅展示利润② + 行程（利润① 是 PandaKing 内部字段，不应向旅行社摘要）
+const changesForAgency = computed<ProvincialChanges>(() => buildChanges(['profit2', 'itinerary']))
+const hasAgencyChange = computed(() => checkHasChange(changesForAgency.value))
+
 // —— 省地接社协作（一手：用于「发起询价」弹窗的机构选择 + 「状态与协作」tab 的成本询价列表）——
 const costInquiries = ref<CostInquiry[]>([])
 const loadingInquiries = ref(false)
@@ -418,13 +450,13 @@ async function openQuoteDialog() {
     const qa = Math.round(d.quoteA)
     const text = `${caption}\n报价A ¥${qa.toLocaleString()}（您的成本基线）\n\n👉 查看并加价回复：${link}`
 
-    // 计算本轮关键变更摘要，合并为修改记录（写入历史修改记录），并附到微信文案
-    const changes = currentChanges.value
+    // 计算本轮关键变更摘要（面向境外旅行社：仅利润② + 行程，不含 PandaKing 内部利润①），合并为修改记录，并附到微信文案
+    const changes = changesForAgency.value
     const manual = pkSuggestion.value.trim()
     const autoNote = formatQuoteChanges(changes)
     const combinedNote = manual
-      ? (hasAnyChange.value ? `${autoNote}\n\n【补充说明】${manual}` : manual)
-      : (hasAnyChange.value ? autoNote : '')
+      ? (hasAgencyChange.value ? `${autoNote}\n\n【补充说明】${manual}` : manual)
+      : (hasAgencyChange.value ? autoNote : '')
     if (combinedNote) {
       try {
         await submitConsoleFeedback(id, combinedNote, user.value?.name || 'PandaKing', 'pandaking')
@@ -432,7 +464,7 @@ async function openQuoteDialog() {
         /* 变更记录失败不阻断保存 */
       }
     }
-    const notifyBody = hasAnyChange.value ? `${text}\n\n${autoNote}` : text
+    const notifyBody = hasAgencyChange.value ? `${text}\n\n${autoNote}` : text
     dialogText.value = notifyBody
     dialogSubtitle.value = quoteSubtitle.value
 
@@ -484,13 +516,13 @@ async function doInquire() {
     const targetLabel = provAg?.name ? `（${provAg.name}）` : ''
     const text = `${caption}\n\nPandaKing 已生成行程方案，向你${targetLabel}规划路线和询价并回传：\n\n👉 查看并回复：${link}`
 
-    // 计算本轮关键变更摘要，合并为修改记录（写入历史修改记录），并附到微信文案
-    const changes = currentChanges.value
+    // 计算本轮关键变更摘要（面向省地接社：仅成本① + 行程，不含 PandaKing 内部利润①），合并为修改记录，并附到微信文案
+    const changes = changesForProvincial.value
     const manual = pkSuggestion.value.trim()
     const autoNote = formatQuoteChanges(changes)
     const combinedNote = manual
-      ? (hasAnyChange.value ? `${autoNote}\n\n【补充说明】${manual}` : manual)
-      : (hasAnyChange.value ? autoNote : '')
+      ? (hasProvincialChange.value ? `${autoNote}\n\n【补充说明】${manual}` : manual)
+      : (hasProvincialChange.value ? autoNote : '')
     if (combinedNote) {
       try {
         await submitConsoleFeedback(id, combinedNote, user.value?.name || 'PandaKing', 'pandaking')
@@ -498,11 +530,11 @@ async function doInquire() {
         /* 变更记录失败不阻断保存 */
       }
     }
-    const notifyBody = hasAnyChange.value ? `${text}\n\n${autoNote}` : text
+    const notifyBody = hasProvincialChange.value ? `${text}\n\n${autoNote}` : text
     dialogText.value = notifyBody
 
-    // 4) 自动复制
-    const ok = await copyText(text)
+    // 4) 自动复制（必须与 dialogText 一致，否则预览有摘要而粘贴到微信的文案缺摘要）
+    const ok = await copyText(notifyBody)
     actionOk.value = ok ? '询价链接已生成并复制，去微信粘贴发给省地接社 ✅' : '已生成，请手动复制下方文案'
 
     // 5) 弹出文案预览弹窗（已关联省地接社时弹窗尚未打开需在此打开；未关联场景弹窗已开）
@@ -621,10 +653,11 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
   actionOk.value = ''
   try {
     const note = feedbackNote.value
-    const autoNote = formatQuoteChanges(currentChanges.value)
+    // 历史记录仍保存「完整摘要 + 补充说明」（发送方视角）
+    const historyNote = formatQuoteChanges(currentChanges.value)
     const combinedNote = note.trim()
-      ? (hasAnyChange.value ? `${autoNote}\n\n【补充说明】${note.trim()}` : note.trim())
-      : (hasAnyChange.value ? autoNote : '')
+      ? (hasAnyChange.value ? `${historyNote}\n\n【补充说明】${note.trim()}` : note.trim())
+      : (hasAnyChange.value ? historyNote : '')
     const body = a.needNote ? { feedback: combinedNote || note } : undefined
     await routeAction(id, a.key, body)
     feedbackNote.value = ''
@@ -632,11 +665,14 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
     // 都生成「主题 + 事件 + H5 链接」通知文案并复制到剪贴板，便于粘贴到微信群同步协作方。
     if (a.key !== 'reject' && data.value) {
       let link = ''
+      // 通知文案的变更摘要必须按收件方可见域裁剪，避免向省地接社/旅行社暴露 PandaKing 内部利润①
+      let notifyChanges: ProvincialChanges = currentChanges.value
       try {
         if (isPk.value) {
           // 一手回传反馈 / 状态通知 → 带旅行社「可编辑」链接，形成多轮往返闭环
           const s = await ensureAgencyShare(id)
           link = agencyH5Url(s.token)
+          notifyChanges = changesForAgency.value
         } else if (isAgency.value) {
           // 旅行社回传反馈 / 状态通知 → 带一手「可编辑」链接，对称形成多轮往返闭环
           const s = await ensurePandakingShare(id)
@@ -646,6 +682,7 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
           // 对称形成 PandaKing↔省地接社 多轮往返闭环；成本①/利润①权限隔离不受影响。
           const s = await ensurePandakingShare(id)
           link = pandakingH5Url(s.token)
+          notifyChanges = changesForProvincial.value
         } else {
           const s = await shareRoute(id)
           link = s.token ? shareH5Url(s.token) : s.link || ''
@@ -662,8 +699,9 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
           destination: safeText(data.value.destination),
           travelDate: data.value.travelDate,
           authorName: user.value?.name || roleLabel(role.value),
-          detail: isFeedback ? (combinedNote || note) : undefined,
-          changes: currentChanges.value,
+          // detail 仅传人工补充说明，避免与 changes 渲染的【本轮关键变更】重复
+          detail: isFeedback ? (note.trim() || undefined) : undefined,
+          changes: notifyChanges,
           url: link,
         })
         const ok = await copyText(text)
@@ -715,11 +753,13 @@ async function onSubmitSuggestion(who: 'agency' | 'provincial') {
 
   // 2) 提交反馈建议给一手（允许为空：仅保存工作也可）。合并「本轮变更摘要」一并记录
   const note = consSuggestion.value.trim()
-  const changes = currentChanges.value
+  // 按当前操作方角色选取变更域：旅行社只能改利润②+行程；省地接社只能改成本①+行程
+  const changes = who === 'agency' ? changesForAgency.value : changesForProvincial.value
+  const hasChange = who === 'agency' ? hasAgencyChange.value : hasProvincialChange.value
   const autoNote = formatQuoteChanges(changes)
   const combinedNote = note
-    ? (hasAnyChange.value ? `${autoNote}\n\n【补充说明】${note}` : note)
-    : (hasAnyChange.value ? autoNote : '')
+    ? (hasChange ? `${autoNote}\n\n【补充说明】${note}` : note)
+    : (hasChange ? autoNote : '')
   if (combinedNote) {
     try {
       await submitConsoleFeedback(
@@ -765,7 +805,8 @@ async function onSubmitSuggestion(who: 'agency' | 'provincial') {
     destination: safeText(data.value?.destination),
     travelDate: data.value?.travelDate,
     authorName: user.value?.name || roleLabel(role.value),
-    detail: combinedNote || undefined,
+    // detail 仅传人工补充说明，changes 块会单独渲染【本轮关键变更】
+    detail: note || undefined,
     changes,
     url: link,
   })

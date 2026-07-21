@@ -305,7 +305,8 @@ async function onAgSave() {
         destination: data.value.destination,
         travelDate: data.value.travelDate,
         authorName: authorName.value.trim() || undefined,
-        detail: combinedNote || undefined,
+        // detail 仅传人工补充说明，changes 块会单独渲染【本轮关键变更】，避免 summary 重复
+        detail: manual || undefined,
         changes,
         url,
       })
