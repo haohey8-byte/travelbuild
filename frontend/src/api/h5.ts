@@ -11,8 +11,9 @@ export async function submitH5Feedback(
   token: string,
   content: string,
   authorName?: string,
+  authorRole?: string,
 ): Promise<H5Feedback> {
-  const { data } = await client.post(`/h5/route/${token}/feedback`, { content, authorName })
+  const { data } = await client.post(`/h5/route/${token}/feedback`, { content, authorName, authorRole })
   return data
 }
 

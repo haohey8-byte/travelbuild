@@ -765,10 +765,6 @@ export class RoutesService {
       .catch(() => {
         throw new NotFoundException('路线不存在')
       })
-    const owner = await this.prisma.user.findUnique({
-      where: { id: route.createdById },
-      select: { name: true },
-    })
     let version = share.versionId
       ? await this.prisma.routeVersion.findUnique({ where: { id: share.versionId } })
       : null
@@ -809,8 +805,10 @@ export class RoutesService {
       // 按角色字段级可见性返回报价：省地接社仅见成本①、旅行社见报价A、一手全见
       quote: visible,
       guestPrice: (visible?.totals?.guestPrice as number) ?? null,
-      // 路线归属账号名（创建者），用于 H5 内替代「一手」字眼，显示具体注册名
-      ownerName: owner?.name ?? 'PandaKing',
+      // 路线归属账号名（PandaKing 平台方），用于 H5 内替代「一手」字眼。
+      // 路线可能由机构账号(agency/provincial)创建，其 createdById 并非 PandaKing，
+      // 此时回退到 PandaKing 平台账号，而非把上游机构名当作「一手」。
+      ownerName: await this.resolveOwnerName(route),
     }
     if (share.role === 'provincial' && share.costInquiry) {
       // 解析被询价省地接社的机构名，供 H5 两条回传微信文案个性化展示（需求：文案带具体机构名）
@@ -847,8 +845,26 @@ export class RoutesService {
     return result
   }
 
+  // 解析路线归属的 PandaKing 账号名（H5 / 控制台替代「一手」字眼用）。
+  // 路线可能由机构账号(agency/provincial)创建，其 createdById 并非 PandaKing，
+  // 此时回退到 PandaKing 平台账号；多 PandaKing 场景下取首个平台账号
+  // （如需精确归属可后续在 Route 上挂 pandakingOwnerId，再按 agencyId 归属反查）。
+  private async resolveOwnerName(route: { id: string; createdById: string }): Promise<string> {
+    const creator = await this.prisma.user.findUnique({
+      where: { id: route.createdById },
+      select: { name: true, role: true },
+    })
+    if (creator?.role === 'pandaking' && creator.name) return creator.name
+    const pk = await this.prisma.user.findFirst({
+      where: { role: 'pandaking' },
+      select: { name: true },
+      orderBy: { createdAt: 'asc' },
+    })
+    return pk?.name ?? 'PandaKing'
+  }
+
   // 协作 H5 反馈提交（客户/对方在链接内填写修改意见）
-  async submitFeedback(token: string, content: string, authorName?: string) {
+  async submitFeedback(token: string, content: string, authorName?: string, authorRole?: string) {
     if (!content || !content.trim()) throw new BadRequestException('反馈内容不能为空')
     const share = await this.prisma.routeShare.findUnique({ where: { token } })
     if (!share) throw new NotFoundException('协作链接无效')
@@ -862,7 +878,9 @@ export class RoutesService {
         authorName: authorName ?? null,
         // 公开(对客)链接的客户反馈不归入任何内部角色(authorRole=null)，
         // 避免客户反馈泄漏到 agency/provincial 视图；角色链接(旅行社/省地接社)按 share.role 标记。
-        authorRole: share.public ? null : (share.role ?? null),
+        // 允许调用方显式传入 authorRole（如 PandaKing 经省地接社令牌回传时标注为 pandaking），
+        // 避免被 share.role 误标为 provincial。
+        authorRole: authorRole ?? (share.public ? null : (share.role ?? null)),
         source: 'h5',
         content,
       },

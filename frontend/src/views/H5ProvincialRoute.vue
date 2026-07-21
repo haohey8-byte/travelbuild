@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { fetchH5Route, submitH5Feedback, fetchH5Feedback, editH5ProvincialRoute, submitH5PandakingEdit } from '@/api/h5'
 import { shareRoute, applyCostInquiry } from '@/api/routes'
 import { safeName, safeText } from '@/utils/name'
-import { shareH5Url, agencyH5Url, provincialRouteH5Url, shareH5Caption, collabNotifyText, copyText, diffProvincialChanges } from '@/utils/share'
+import { shareH5Url, agencyH5Url, provincialRouteH5Url, shareH5Caption, collabNotifyText, copyText, diffProvincialChanges, roleLabel } from '@/utils/share'
 import { calcDerived } from '@/utils/quote'
 import { genUid } from '@/utils/uid'
 import { useAuthStore } from '@/stores/auth'
@@ -44,6 +44,9 @@ const pkGeneratedTip = ref('')
 const pkHandoffLoading = ref(false)
 const pkHandoffText = ref('')
 const pkHandoffTip = ref('')
+// PandaKing 视角「补充说明（可选）」——与省地接社视角一致，随保存并回传一并记录为修改说明
+const pkFbText = ref('')
+const pkHandoffOk = ref('')
 
 // —— 行程（按天，可编辑，折叠展开）——
 interface Day {
@@ -384,6 +387,7 @@ async function onSubmitHandoff() {
         destination: destination.value,
         travelDate: data.value?.travelDate,
         authorName: provAuthorName.value,
+        detail: fbText.value.trim() || undefined,
         changes,
         url: window.location.href,
       })
@@ -465,6 +469,7 @@ async function onPkHandoffToProvincial() {
   pkHandoffLoading.value = true
   pkHandoffText.value = ''
   pkHandoffTip.value = ''
+  pkHandoffOk.value = ''
   try {
     const pkToken = data.value?.pandakingToken
     if (!pkToken) throw new Error('未找到 PandaKing 协作令牌，无法保存报价')
@@ -480,6 +485,23 @@ async function onPkHandoffToProvincial() {
         })),
     }
     await submitH5PandakingEdit(pkToken, { itinerary: itinerary.value, quote: quotePayload })
+
+    // 记录 PandaKing 本轮修改（变更摘要 + 补充说明）为反馈，供「历史修改记录」展示（我 + 多个角色）
+    const manual = pkFbText.value.trim()
+    const autoNote = changeSummaryText()
+    const combinedNote = manual
+      ? (hasAnyChange.value ? `${autoNote}\n\n【补充说明】${manual}` : manual)
+      : (hasAnyChange.value ? autoNote : '')
+    if (combinedNote) {
+      try {
+        await submitH5Feedback(token, combinedNote, ownerName.value, 'pandaking')
+        pkFbText.value = ''
+      } catch (fe: any) {
+        pkHandoffTip.value = fe?.response?.data?.message || '修改记录提交失败（报价与行程已保存）'
+      }
+    }
+    await loadFeedback()
+
     const link = provincialRouteH5Url(token)
     const text = collabNotifyText({
       kind: 'plan',
@@ -488,10 +510,15 @@ async function onPkHandoffToProvincial() {
       destination: destination.value,
       travelDate: data.value?.travelDate,
       authorName: ownerName.value,
+      detail: manual || undefined,
+      changes: currentChanges.value,
       url: link,
     })
     pkHandoffText.value = text
     const ok = await copyText(text)
+    pkHandoffOk.value = combinedNote
+      ? `行程、报价与修改记录已保存并同步给 ${provAgencyName.value || '省地接社'} ✅`
+      : `行程与报价已保存并同步给 ${provAgencyName.value || '省地接社'} ✅`
     pkHandoffTip.value = ok
       ? '✅ 通知文案已复制，去微信粘贴发给省地接社'
       : '已生成，请手动复制下方文案'
@@ -616,6 +643,7 @@ function goRouteDetail() {
               </div>
               <pre class="notify-text">{{ pkHandoffText }}</pre>
             </div>
+            <p v-if="pkHandoffOk" class="ok">{{ pkHandoffOk }}</p>
 
             <!-- ── 生成对旅行社链接 ── -->
             <button class="btn btn-primary pk-gen-btn" :disabled="pkGenLoading" @click="onPkGenerateLink">
@@ -631,6 +659,62 @@ function goRouteDetail() {
               </div>
               <pre class="notify-text">{{ pkGeneratedText }}</pre>
             </div>
+
+            <!-- ── 本轮变更摘要（PandaKing 视角编辑后实时展示） ── -->
+            <section v-if="hasAnyChange" class="prov-section changes-summary">
+              <h3>📋 本轮变更摘要</h3>
+              <p class="hint">系统自动检测到以下变动，保存并回传后将记录为修改说明。</p>
+              <div v-if="hasCostChange" class="ch-block">
+                <span class="ch-label">报价</span>
+                <span class="ch-detail">
+                  ¥{{ Number(currentChanges.cost?.totalBefore).toLocaleString() }} → ¥{{ Number(currentChanges.cost?.totalAfter).toLocaleString() }}
+                  <span v-if="currentChanges.cost" :class="(currentChanges.cost.totalAfter - currentChanges.cost.totalBefore) >= 0 ? 'ch-up' : 'ch-down'">
+                    {{ (currentChanges.cost.totalAfter - currentChanges.cost.totalBefore) >= 0 ? '↑' : '↓' }}
+                    ¥{{ Math.abs(currentChanges.cost.totalAfter - currentChanges.cost.totalBefore).toLocaleString() }}
+                  </span>
+                </span>
+              </div>
+              <div v-if="hasItineraryChange" class="ch-block">
+                <span class="ch-label">行程</span>
+                <span class="ch-detail">
+                  {{ currentChanges.itinerary?.dayCountAfter }} 天
+                  <template v-if="currentChanges.itinerary && currentChanges.itinerary.dayDelta !== 0">
+                    （{{ currentChanges.itinerary.dayDelta > 0 ? '+' : '' }}{{ currentChanges.itinerary.dayDelta }} 天）
+                  </template>
+                  <span v-if="currentChanges.itinerary?.cityChanges" class="ch-city-list">
+                    <span v-for="c in currentChanges.itinerary.cityChanges" :key="c" class="ch-city-tag">{{ c }}</span>
+                  </span>
+                </span>
+              </div>
+            </section>
+
+            <!-- ── 补充说明（可选） ── -->
+            <section class="prov-section note-section">
+              <h3>补充说明（可选）</h3>
+              <p class="hint">
+                如有额外说明，可在此补充。<template v-if="hasAnyChange">变更摘要将自动合并提交，无需重复填写。</template>
+              </p>
+              <textarea v-model="pkFbText" rows="3" placeholder="如：利润已含导服与保险；或 D3 需升级为9座车"></textarea>
+            </section>
+
+            <!-- ── 历史修改记录（我 + 多个角色） ── -->
+            <section class="prov-section fb-history">
+              <div class="section-head">
+                <h3>历史修改记录</h3>
+                <span v-if="feedbackList.length" class="pill xs st-role">{{ feedbackList.length }}</span>
+              </div>
+              <ul v-if="feedbackList.length" class="fb-list">
+                <li v-for="fb in feedbackList" :key="fb.id" class="fb-item">
+                  <div class="fb-meta">
+                    <b>{{ fb.authorName || (fb.authorRole === 'pandaking' ? 'PandaKing' : fb.authorRole === 'provincial' ? '省地接社' : '协作方') }}</b>
+                    <span class="pill xs" :class="fb.authorRole === 'pandaking' ? 'st-role' : 'st-awaiting_quote'">{{ roleLabel(fb.authorRole) }}</span>
+                    <span class="fb-time">{{ fmtTime(fb.createdAt) }}</span>
+                  </div>
+                  <p class="fb-content">{{ fb.content }}</p>
+                </li>
+              </ul>
+              <p v-else class="muted">暂无修改记录。</p>
+            </section>
 
             <!-- ── 跳转完整编辑 ── -->
             <p class="pk-nav-hint">
@@ -712,8 +796,8 @@ function goRouteDetail() {
 
           <!-- 提示 -->
           <p class="hint">
-            您正在与 <b>{{ ownerName }}</b> 协作本路线（支持<b>多轮反复沟通</b>）。
-            点击每日行程可展开编辑；修改后系统自动记录变更摘要。每轮点「保存并回传」，{{ ownerName }} 都会收到带<b>关键变更摘要</b>的通知。
+            您正在与 <b>{{ ownerName }}</b> 沟通本路线规划和报价（支持<b>多轮反复沟通</b>）。
+            点击每日行程可展开编辑；修改后系统自动记录变更摘要。每轮沟通点【保存并微信回传】，{{ ownerName }} 都会收到关键变更摘要的通知；
           </p>
 
           <!-- ──── 行程安排（折叠展开） ──── -->
@@ -808,9 +892,9 @@ function goRouteDetail() {
             </div>
           </section>
 
-          <!-- ──── 回传说明（手动补充） ──── -->
+          <!-- ──── 补充说明（手动补充） ──── -->
           <section class="prov-section note-section">
-            <h3>回传说明（可选）</h3>
+            <h3>补充说明（可选）</h3>
             <p class="hint">
               如有额外说明，可在此补充。<template v-if="hasAnyChange">变更摘要将自动合并提交，无需重复填写。</template>
             </p>
@@ -820,7 +904,7 @@ function goRouteDetail() {
 
           <!-- ──── 保存按钮 ──── -->
           <button class="btn btn-primary" :disabled="saving" @click="onSubmitHandoff">
-            {{ saving ? '保存中…' : '保存并回传' }}
+            {{ saving ? '保存中…' : '保存并微信回传' }}
           </button>
           <p v-if="saveErr" class="err">{{ saveErr }}</p>
           <p v-if="saveOk" class="ok">{{ saveOk }}</p>
@@ -833,23 +917,23 @@ function goRouteDetail() {
             <pre class="notify-text">{{ notifyText }}</pre>
           </div>
 
-          <!-- ──── 已回传的记录 ──── -->
+          <!-- ──── 历史修改记录 ──── -->
           <section class="prov-section fb-history">
             <div class="section-head">
-              <h3>已回传的记录</h3>
+              <h3>历史修改记录</h3>
               <span v-if="feedbackList.length" class="pill xs st-role">{{ feedbackList.length }}</span>
             </div>
             <ul v-if="feedbackList.length" class="fb-list">
               <li v-for="fb in feedbackList" :key="fb.id" class="fb-item">
                 <div class="fb-meta">
-                  <b>{{ fb.authorName || (fb.source === 'h5' ? '协作方' : 'PandaKing') }}</b>
-                  <span class="pill xs st-awaiting_quote">回传说明</span>
+                  <b>{{ fb.authorName || (fb.authorRole === 'pandaking' ? 'PandaKing' : fb.authorRole === 'provincial' ? '省地接社' : '协作方') }}</b>
+                  <span class="pill xs" :class="fb.authorRole === 'pandaking' ? 'st-role' : 'st-awaiting_quote'">{{ roleLabel(fb.authorRole) }}</span>
                   <span class="fb-time">{{ fmtTime(fb.createdAt) }}</span>
                 </div>
                 <p class="fb-content">{{ fb.content }}</p>
               </li>
             </ul>
-            <p v-else class="muted">暂无回传记录。</p>
+            <p v-else class="muted">暂无修改记录。</p>
           </section>
 
         </div>
