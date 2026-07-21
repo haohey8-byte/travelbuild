@@ -46,6 +46,7 @@ const pkHandoffText = ref('')
 const pkHandoffTip = ref('')
 // PandaKing 视角「补充说明（可选）」——与省地接社视角一致，随保存并回传一并记录为修改说明
 const pkFbText = ref('')
+const pkFbName = ref('') // 填写人（PandaKing 回传确认视图，预填 ownerName，可编辑）
 const pkHandoffOk = ref('')
 
 // —— 行程（按天，可编辑，折叠展开）——
@@ -114,6 +115,9 @@ function removeMeal(d: Day, i: number) {
 const feedbackList = ref<RouteFeedbackItem[]>([])
 const fbText = ref('')
 const fbErr = ref('')
+const provFbName = ref('') // 填写人（省地接社视图，预填机构名，可编辑）
+const provFbSubmitting = ref(false) // 独立提交补充说明 loading
+const provFbStandaloneErr = ref('') // 独立提交补充说明错误
 
 // —— 成本①（省地接社按项目填写；与一手/旅行社共用同一报价表组件，利润默认 0）——
 const quoteItems = ref<QuoteLevel[]>([])
@@ -315,6 +319,9 @@ onMounted(async () => {
     initialCostItems.value = quoteItems.value.map((i) => ({ name: String(i.name || ''), cost1: Number(i.cost1) || 0 }))
     initialItinerary.value = { days: itinerary.value.days.map((d) => ({ day: d.day, city: d.city })) }
     document.title = pageTitle.value
+    // 预填「填写人」：省地接社视图用机构名、PandaKing 视图用账号名（均可编辑）
+    provFbName.value = provAgencyName.value || '省地接社'
+    pkFbName.value = ownerName.value || 'PandaKing'
     await loadFeedback()
   } catch {
     notFound.value = true
@@ -421,6 +428,47 @@ function goHome() {
   router.push('/routes/kanban')
 }
 
+// 省地接社视图：独立提交「补充说明」（仅把这条说明写入历史，不碰成本①/行程）
+// 与 H5Route 旅行社 H5 的「提交补充说明」独立框保持一致的双通道结构。
+async function onProvStandaloneSubmit() {
+  provFbSubmitting.value = true
+  provFbStandaloneErr.value = ''
+  const content = fbText.value.trim()
+  if (!content) {
+    provFbStandaloneErr.value = '请填写补充说明'
+    provFbSubmitting.value = false
+    return
+  }
+  try {
+    const author = provFbName.value.trim() || provAuthorName.value
+    await submitH5Feedback(token, content, author, 'provincial')
+    if (data.value) {
+      const link = provincialRouteH5Url(token)
+      const text = collabNotifyText({
+        kind: 'feedback',
+        eventLabel: '提交了补充说明',
+        subject: subject.value,
+        destination: destination.value,
+        travelDate: data.value?.travelDate,
+        authorName: author,
+        detail: content,
+        url: link,
+      })
+      notifyText.value = text
+      const ok = await copyText(text)
+      notifyTip.value = ok
+        ? `通知文案已复制，去微信粘贴发给 ${ownerName.value} 同步 ✅`
+        : '通知文案已生成，请长按上方文字手动复制'
+    }
+    fbText.value = ''
+    await loadFeedback()
+  } catch (e: any) {
+    provFbStandaloneErr.value = e?.response?.data?.message || '提交失败，请重试'
+  } finally {
+    provFbSubmitting.value = false
+  }
+}
+
 // PandaKing 生成对旅行社链接：应用成本① → 创建 share（role=agency, public=false，让旅行社在 H5 SPA 上加利润②）→ 复制文案+URL
 async function onPkGenerateLink() {
   pkGenLoading.value = true
@@ -494,7 +542,7 @@ async function onPkHandoffToProvincial() {
       : (hasAnyChange.value ? autoNote : '')
     if (combinedNote) {
       try {
-        await submitH5Feedback(token, combinedNote, ownerName.value, 'pandaking')
+        await submitH5Feedback(token, combinedNote, pkFbName.value.trim() || ownerName.value, 'pandaking')
         pkFbText.value = ''
       } catch (fe: any) {
         pkHandoffTip.value = fe?.response?.data?.message || '修改记录提交失败（报价与行程已保存）'
@@ -694,6 +742,7 @@ function goRouteDetail() {
               <p class="hint">
                 如有额外说明，可在此补充。<template v-if="hasAnyChange">变更摘要将自动合并提交，无需重复填写。</template>
               </p>
+              <input v-model="pkFbName" class="fb-name-input" placeholder="填写人（将显示在历史记录中）" />
               <textarea v-model="pkFbText" rows="3" placeholder="如：利润已含导服与保险；或 D3 需升级为9座车"></textarea>
             </section>
 
@@ -898,8 +947,13 @@ function goRouteDetail() {
             <p class="hint">
               如有额外说明，可在此补充。<template v-if="hasAnyChange">变更摘要将自动合并提交，无需重复填写。</template>
             </p>
+            <input v-model="provFbName" class="fb-name-input" placeholder="填写人（将显示在历史记录中）" />
             <textarea v-model="fbText" rows="3" placeholder="如：D3 景点太满，建议拆分到两天；或车辆需升级为9座"></textarea>
+            <button class="btn ghost sm fb-submit-note" :disabled="provFbSubmitting" @click="onProvStandaloneSubmit">
+              {{ provFbSubmitting ? '提交中…' : '提交补充说明' }}
+            </button>
             <p v-if="fbErr" class="err">{{ fbErr }}</p>
+            <p v-if="provFbStandaloneErr" class="err">{{ provFbStandaloneErr }}</p>
           </section>
 
           <!-- ──── 保存按钮 ──── -->
@@ -971,6 +1025,21 @@ function goRouteDetail() {
 .prov-section h3 { margin: 0 0 10px; font-size: 15px; color: var(--ink); }
 .section-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .section-head h3 { margin-bottom: 0; }
+
+/* ── 补充说明：填写人输入 + 独立提交按钮（与旅行社 H5 对齐） ── */
+.note-section .fb-name-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 14px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.note-section .fb-name-input::placeholder { color: var(--ink-2, #6b7585); }
+.note-section .fb-submit-note { margin-top: 4px; }
 
 /* ── pill 标签 ── */
 .pill { display: inline-flex; align-items: center; border-radius: 999px; font-size: 12px; white-space: nowrap; }
