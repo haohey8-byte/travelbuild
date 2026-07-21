@@ -424,7 +424,9 @@ async function copyAgain() {
 }
 async function loadFeedback() {
   try {
-    feedbackList.value = await fetchH5Feedback(token)
+    const list = await fetchH5Feedback(token)
+    // 历史修改记录按时间逆序展示（最新在最上面）：后端返回为 createdAt 升序，此处倒序
+    feedbackList.value = [...list].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
   } catch {
     feedbackList.value = []
   }
