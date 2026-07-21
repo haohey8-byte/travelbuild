@@ -824,11 +824,11 @@ function goHome() {
         <ul v-if="feedbackList.length" class="h5-fb-list">
           <li v-for="fb in feedbackList" :key="fb.id" class="h5-fb-item">
             <div class="h5-fb-meta">
+              <b>{{ fb.authorName || (fb.authorRole === 'pandaking' ? 'PandaKing' : fb.authorRole === 'agency' ? '境外旅行社' : '协作方') }}</b>
               <span
                 class="fb-role"
                 :class="fb.authorRole === 'pandaking' ? 'rb-pk' : fb.authorRole === 'agency' ? 'rb-ag' : 'rb-pub'"
               >{{ fb.authorRole ? roleLabel(fb.authorRole) : '协作方' }}</span>
-              <b>{{ fb.authorName || (fb.authorRole === 'pandaking' ? 'PandaKing' : fb.authorRole === 'agency' ? '境外旅行社' : '协作方') }}</b>
               <span class="h5-fb-time">{{ fmtTime(fb.createdAt) }}</span>
             </div>
             <p class="h5-fb-content">{{ fb.content }}</p>

@@ -123,10 +123,8 @@ const costInquiryId = ref<string | null>(null)
 const provAgencyName = computed(() => data.value?.costInquiry?.agencyName || '')
 // 路线归属账号名（创建者，即 PandaKing 平台方）：用于 H5 内替代「一手」字眼，显示具体注册名
 const ownerName = computed(() => data.value?.ownerName || 'PandaKing')
-// 省地接社回传反馈的作者名：带具体机构名（个性化）
-const provAuthorName = computed(() =>
-  provAgencyName.value ? `省地接社（${provAgencyName.value}）` : '省地接社',
-)
+// 省地接社回传反馈的作者名：仅显示机构名（如「新疆河马旅行社」），角色由历史记录徽章单独标「省地接社」
+const provAuthorName = computed(() => provAgencyName.value || '省地接社')
 const totalCost = computed(() => quoteItems.value.reduce((s, it) => s + (Number(it.cost1) || 0), 0))
 // 回传前的基线快照：用于多轮回传时计算「关键变更摘要」（与一手逐轮核对）
 const initialCostItems = ref<{ name: string; cost1: number }[]>([])
