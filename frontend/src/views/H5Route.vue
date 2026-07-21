@@ -950,4 +950,34 @@ h3 { font-size: 15px; margin: 14px 0 0; }
 
 /* 离屏渲染容器：保留布局尺寸供 html2canvas 截图，并移出可视区 */
 .pdf-offscreen { position: fixed; left: -10000px; top: 0; width: 794px; background: #fff; z-index: -1; }
+
+/* —— 本轮变更摘要（agency 视角，#229 新增；需显式样式，否则 <pre> 在窄屏横向溢出）—— */
+.ch-summary { margin: 12px 0 0; border: 1px solid var(--brand-100, #f9c7c2); border-radius: 10px; padding: 10px 12px; background: var(--brand-50, #fdeef0); }
+.ch-summary h4 { margin: 0 0 6px; font-size: 13px; color: var(--brand-600, #a60d26); }
+.ch-summary pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.6; color: var(--ink); font-family: inherit; }
+
+/* —— 桌面端适配（H5 在 PC 上呈现为舒适的居中宽栏 + 整页柔和背景，而非窄手机条）—— */
+@media (min-width: 768px) {
+  .h5 { position: relative; z-index: 0; max-width: 720px; padding: 32px 28px; }
+  .h5::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(160deg, #f7f9fc 0%, #eef2f7 100%);
+  }
+  .h5-card { box-shadow: 0 8px 30px rgba(20, 30, 50, 0.08); padding: 24px 28px; }
+  .h5-title { font-size: 26px; }
+  .h5-meta { font-size: 14px; gap: 16px; }
+  .day-field-row { flex-direction: row; gap: 12px; }
+  .day-field { flex: 1; }
+  .day-row { padding: 12px 16px; }
+  .day-edit { padding: 16px; }
+  .btn-primary { padding: 15px; font-size: 15px; }
+  .h5-input { font-size: 14px; }
+  .guest-label { min-width: 150px; }
+  .h5-quotea-card { padding: 18px 20px; }
+  .h5-quotea-val { font-size: 28px; }
+  .h5-feedback, .h5-fb-history { margin-top: 22px; }
+}
 </style>

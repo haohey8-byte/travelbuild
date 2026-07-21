@@ -1571,4 +1571,21 @@ const collabEvents = computed<CollabEvent[]>(() => {
   .seg { width: 100%; }
   .seg-btn { flex: 1; }
 }
+@media (max-width: 480px) {
+  .head { gap: 10px; margin-bottom: 12px; }
+  .head .actions { width: 100%; }
+  .head .actions .d-btn { flex: 1; min-width: 0; }
+  .panel-head { padding: 14px; }
+  .savebar { padding: 12px 14px; }
+  .pk-actions { padding: 12px 14px; }
+  .ch-summary { margin: 12px 14px 0; }
+  .day-row { padding: 12px 14px; }
+  .day-edit { padding: 12px 14px; }
+  .collab-form { gap: 8px; }
+  .collab-form select { min-width: 0; }
+  .link-box { flex-direction: column; align-items: stretch; }
+  .link-box input { width: 100%; }
+  .node { padding: 10px 12px; }
+  .flow .arrow { padding: 8px 0; }
+}
 </style>
