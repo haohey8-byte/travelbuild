@@ -2,6 +2,7 @@
 // 分享页由后端服务端渲染（/share/route/:token，带 OG 注入），部署在后端域名下。
 // 因此分享链接必须指向「后端域名」而非前端静态托管域名（前端域名的 hash 路由无法被爬虫解析 token）。
 import { safeName, safeText } from '@/utils/name'
+import type { QuoteLevel, ProfitMode } from '@/types'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string) || '/api'
 
@@ -100,17 +101,26 @@ export type CollabKind = 'plan' | 'feedback'
 // 现状：省地接社与一手就行程编辑与成本价格存在多轮反复沟通（非一次性回传），
 // 因此每次回传的通知文案需自动汇总「修改了哪些价格 / 行程有哪些关键变更」，
 // 让一手在微信里一眼看清本轮改动，无需逐页比对。
+export type ChangeField = 'cost1' | 'profit1' | 'quoteA' | 'guestPrice' | 'profit2'
 export interface ProvincialCostChange {
   name: string
   before: number
   after: number
   isNew: boolean // 本轮新增的成本项
+  field?: ChangeField // 变更字段：成本① / 利润① / 报价A / 对客价 / 利润②（省地接社默认 cost1）
 }
 export interface ProvincialItineraryChange {
   dayCountBefore: number
   dayCountAfter: number
   dayDelta: number // 天数增减
   cityChanges: string[] // 人类可读的城市变更，如 "D3 大阪→京都" / "D5 东京(新增)"
+}
+export interface QuoteTotalsChange {
+  cost1?: { before: number; after: number }
+  profit1?: { before: number; after: number }
+  quoteA?: { before: number; after: number }
+  profit2?: { before: number; after: number; mode?: ProfitMode }
+  guestPrice?: { before: number; after: number }
 }
 export interface ProvincialChanges {
   versionLabel?: string // 基于的版本号，如 "v2"
@@ -119,6 +129,7 @@ export interface ProvincialChanges {
     totalAfter: number
     items: ProvincialCostChange[]
   }
+  totals?: QuoteTotalsChange
   itinerary?: ProvincialItineraryChange
 }
 
@@ -194,6 +205,153 @@ export function diffProvincialChanges(opts: {
   return changes
 }
 
+// 字段中文标签（用于变更摘要与通知文案）
+export function fieldLabel(f?: ChangeField): string {
+  switch (f) {
+    case 'cost1': return '成本①'
+    case 'profit1': return '利润①'
+    case 'quoteA': return '报价A'
+    case 'guestPrice': return '对客价'
+    case 'profit2': return '利润②'
+    default: return '成本①'
+  }
+}
+
+// 按角色可编辑域对比「报价/行程」变更（泛化 diffProvincialChanges）
+//   editableFields 决定比哪些域：
+//   - pandaking 全字段：cost1 + profit1 + itinerary
+//   - agency     仅利润②：profit2 + itinerary
+//   - provincial 成本①  ：cost1 + itinerary（见下方 diffProvincialChanges 薄壳）
+export interface QuoteDiffInput {
+  items?: QuoteLevel[]
+  profit2Mode?: ProfitMode
+  profit2?: number
+  itinerary?: { days: { day: number; city: string }[] }
+}
+export function diffQuoteChanges(opts: {
+  before: QuoteDiffInput
+  after: QuoteDiffInput
+  editableFields: ('cost1' | 'profit1' | 'profit2' | 'itinerary')[]
+  versionLabel?: string
+}): ProvincialChanges {
+  const changes: ProvincialChanges = {}
+  if (opts.versionLabel) changes.versionLabel = opts.versionLabel
+  const fields = opts.editableFields
+
+  // 报价项字段对比（cost1 / profit1）
+  const itemFields = fields.filter((f): f is 'cost1' | 'profit1' => f === 'cost1' || f === 'profit1')
+  if (itemFields.length) {
+    const bItems = opts.before.items ?? []
+    const aItems = opts.after.items ?? []
+    const bMap = new Map(bItems.map((i) => [String(i.name).trim(), i]))
+    const aMap = new Map(aItems.map((i) => [String(i.name).trim(), i]))
+    const allNames = Array.from(new Set([...bMap.keys(), ...aMap.keys()]))
+    const items: ProvincialCostChange[] = []
+    for (const name of allNames) {
+      const b = bMap.get(name)
+      const a = aMap.get(name)
+      for (const f of itemFields) {
+        const before = b ? Number((b as Record<string, unknown>)[f]) || 0 : 0
+        const after = a ? Number((a as Record<string, unknown>)[f]) || 0 : 0
+        if (before === after) continue
+        items.push({ name, field: f, before, after, isNew: !b && !!a })
+      }
+    }
+    if (items.length > 0) {
+      changes.cost = {
+        totalBefore: items.reduce((s, i) => s + i.before, 0),
+        totalAfter: items.reduce((s, i) => s + i.after, 0),
+        items,
+      }
+    }
+    // 汇总各字段合计到 totals（供文案与摘要按字段展示）
+    const totals: QuoteTotalsChange = {}
+    for (const f of itemFields) {
+      const before = bItems.reduce((s, i) => s + (Number((i as Record<string, unknown>)[f]) || 0), 0)
+      const after = aItems.reduce((s, i) => s + (Number((i as Record<string, unknown>)[f]) || 0), 0)
+      if (before !== after) (totals as Record<string, unknown>)[f] = { before, after }
+    }
+    if (Object.keys(totals).length) changes.totals = totals
+  }
+
+  // 利润②（境外旅行社）
+  if (fields.includes('profit2')) {
+    const before = Number(opts.before.profit2) || 0
+    const after = Number(opts.after.profit2) || 0
+    if (before !== after) {
+      changes.totals = changes.totals || {}
+      changes.totals.profit2 = { before, after, mode: opts.after.profit2Mode }
+    }
+  }
+
+  // 行程差异
+  if (fields.includes('itinerary')) {
+    const bDays = opts.before.itinerary?.days ?? []
+    const aDays = opts.after.itinerary?.days ?? []
+    const cityChanges: string[] = []
+    const maxLen = Math.max(bDays.length, aDays.length)
+    for (let i = 0; i < maxLen; i++) {
+      const d = i + 1
+      const b = bDays[i]
+      const a = aDays[i]
+      const bCity = (b?.city || '').trim()
+      const aCity = (a?.city || '').trim()
+      if (!b && a) cityChanges.push(`D${d} ${aCity || '（空白）'}(新增)`)
+      else if (b && !a) cityChanges.push(`D${d} ${bCity}(移除)`)
+      else if (bCity !== aCity) {
+        if (!bCity) cityChanges.push(`D${d} ${aCity}(新增城市)`)
+        else if (!aCity) cityChanges.push(`D${d} ${bCity}(清空城市)`)
+        else cityChanges.push(`D${d} ${bCity}→${aCity}`)
+      }
+    }
+    changes.itinerary = {
+      dayCountBefore: bDays.length,
+      dayCountAfter: aDays.length,
+      dayDelta: aDays.length - bDays.length,
+      cityChanges,
+    }
+  }
+
+  return changes
+}
+
+// 把变更摘要结构渲染为「【本轮变更摘要】」文本（页面展示 + 反馈记录复用）
+export function formatQuoteChanges(ch: ProvincialChanges): string {
+  if (!ch) return ''
+  const lines: string[] = ['【本轮变更摘要】']
+  if (ch.cost && ch.cost.items.length > 0) {
+    const groups = new Map<ChangeField, ProvincialCostChange[]>()
+    for (const it of ch.cost.items) {
+      const f = (it.field as ChangeField) || 'cost1'
+      if (!groups.has(f)) groups.set(f, [])
+      groups.get(f)!.push(it)
+    }
+    for (const [f, items] of groups) {
+      const totalBefore = items.reduce((s, it) => s + (it.before || 0), 0)
+      const totalAfter = items.reduce((s, it) => s + (it.after || 0), 0)
+      const sign = totalAfter - totalBefore >= 0 ? '+' : ''
+      lines.push(`${fieldLabel(f)} 合计：¥${totalBefore.toLocaleString()} → ¥${totalAfter.toLocaleString()} (${sign}¥${(totalAfter - totalBefore).toLocaleString()})`)
+      for (const it of items.slice(0, 10)) {
+        if (it.isNew) lines.push(`  + ${it.name}：¥${it.after.toLocaleString()}(新增)`)
+        else lines.push(`  · ${it.name}：¥${it.before.toLocaleString()} → ¥${it.after.toLocaleString()}`)
+      }
+    }
+  }
+  if (ch.totals?.profit2) {
+    const p = ch.totals.profit2
+    lines.push(`利润②：${Math.round(p.before).toLocaleString()} → ${Math.round(p.after).toLocaleString()}${p.mode === 'percent' ? '%' : ''}`)
+  }
+  if (ch.itinerary && ch.itinerary.cityChanges.length > 0) {
+    const dayDelta = ch.itinerary.dayDelta
+    const daysText = dayDelta !== 0
+      ? `（天数：${ch.itinerary.dayCountBefore}天 → ${ch.itinerary.dayCountAfter}天${dayDelta > 0 ? `，+${dayDelta}` : dayDelta}天）`
+      : ''
+    lines.push(`行程调整${daysText}`)
+    for (const c of ch.itinerary.cityChanges.slice(0, 15)) lines.push(`  ${c}`)
+  }
+  return lines.join('\n')
+}
+
 function buildNotify(tag: string, head: string, bodyLines: string[], url: string): string {
   return ['【行程协作·' + tag + '】' + (head || '定制行程'), '', ...bodyLines, '', '👉 查看并回复：' + url].join('\n')
 }
@@ -210,12 +368,28 @@ export function collabNotifyText(opts: CollabNotifyOpts): string {
   if (ch) {
     const sub: string[] = []
     if (ch.versionLabel) sub.push(`基于 ${ch.versionLabel}`)
+    // 成本/利润明细（按字段分组：成本① / 利润① / 报价A / 对客价）
     if (ch.cost && ch.cost.items.length > 0) {
-      sub.push(`成本① 合计 ¥${ch.cost.totalBefore.toLocaleString()} → ¥${ch.cost.totalAfter.toLocaleString()}（${ch.cost.items.length}项变更）`)
-      for (const it of ch.cost.items.slice(0, 8)) {
-        if (it.isNew) sub.push(`• ${it.name}(新增)：¥${it.after.toLocaleString()}`)
-        else sub.push(`• ${it.name}：¥${it.before.toLocaleString()} → ¥${it.after.toLocaleString()}`)
+      const groups = new Map<ChangeField, ProvincialCostChange[]>()
+      for (const it of ch.cost.items) {
+        const f = (it.field as ChangeField) || 'cost1'
+        if (!groups.has(f)) groups.set(f, [])
+        groups.get(f)!.push(it)
       }
+      for (const [f, items] of groups) {
+        const totalBefore = items.reduce((s, it) => s + (it.before || 0), 0)
+        const totalAfter = items.reduce((s, it) => s + (it.after || 0), 0)
+        sub.push(`${fieldLabel(f)} 合计 ¥${totalBefore.toLocaleString()} → ¥${totalAfter.toLocaleString()}（${items.length}项变更）`)
+        for (const it of items.slice(0, 8)) {
+          if (it.isNew) sub.push(`• ${it.name}(新增)：¥${it.after.toLocaleString()}`)
+          else sub.push(`• ${it.name}：¥${it.before.toLocaleString()} → ¥${it.after.toLocaleString()}`)
+        }
+      }
+    }
+    // 利润②（境外旅行社单独成块）
+    if (ch.totals?.profit2) {
+      const p = ch.totals.profit2
+      sub.push(`利润② 合计 ¥${Math.round(p.before).toLocaleString()} → ¥${Math.round(p.after).toLocaleString()}${p.mode === 'percent' ? '(%)' : ''}（本次调整）`)
     }
     if (ch.itinerary && ch.itinerary.cityChanges.length > 0) {
       sub.push(`行程：${ch.itinerary.dayCountBefore} → ${ch.itinerary.dayCountAfter} 天`)

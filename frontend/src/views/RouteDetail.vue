@@ -27,7 +27,10 @@ import {
   roleLabel,
   copyText,
   provincialRouteH5Url,
+  diffQuoteChanges,
+  formatQuoteChanges,
 } from '@/utils/share'
+import type { ProvincialChanges } from '@/utils/share'
 import type { Route, RouteVersion, RouteStatusKey, QuoteLevel, RouteFeedbackItem, Agency, CostInquiry } from '@/types'
 import { buildPdfModel, type PdfModel } from '@/utils/pdf-model'
 import { calcDerived, calcGuestPrice } from '@/utils/quote'
@@ -203,6 +206,13 @@ const quoteItems = ref<QuoteLevel[]>([])
 // 境外旅行社利润2（元/%），作用于报价A 合计 → 对客价（由 QuoteTable 双向绑定）
 const profit2Mode = ref<'amount' | 'percent'>('amount')
 const profit2 = ref(0)
+// 变更基线快照：用于多轮协作时计算「本轮关键变更摘要」（与对端逐轮核对价格/行程变化）
+const baselineQuoteItems = ref<QuoteLevel[]>([])
+const baselineProfit2Mode = ref<'amount' | 'percent'>('amount')
+const baselineProfit2 = ref(0)
+const baselineItinerary = ref<{ days: { day: number; city: string }[] }>({ days: [] })
+// PandaKing 视角「补充说明（可选）」——随「保存并报价 / 发起询价」一并记录为修改说明
+const pkSuggestion = ref('')
 // 当前角色
 const role = computed(() => auth.currentRole)
 const isPk = computed(() => role.value === 'pandaking')
@@ -251,6 +261,39 @@ const availableActions = computed(() => {
 const feedbackNote = ref('')
 
 const versionLabel = computed(() => pickCurrentVersion(data.value?.versions)?.version ?? 'v1')
+
+// 实时变更检测（对齐 H5 协作页）：按当前角色可编辑域比对「基线快照 ↔ 当前编辑态」
+const currentChanges = computed<ProvincialChanges>(() => {
+  const editable: ('cost1' | 'profit1' | 'profit2' | 'itinerary')[] = isPk.value
+    ? ['cost1', 'profit1', 'itinerary']
+    : isAgency.value
+      ? ['profit2', 'itinerary']
+      : []
+  if (!editable.length) return {}
+  return diffQuoteChanges({
+    before: {
+      items: baselineQuoteItems.value,
+      profit2: baselineProfit2.value,
+      profit2Mode: baselineProfit2Mode.value,
+      itinerary: baselineItinerary.value,
+    },
+    after: {
+      items: quoteItems.value,
+      profit2: Number(profit2.value) || 0,
+      profit2Mode: profit2Mode.value,
+      itinerary: { days: itinerary.value.days.map((d) => ({ day: d.day, city: d.city })) },
+    },
+    editableFields: editable,
+    versionLabel: versionLabel.value,
+  })
+})
+const hasAnyChange = computed(() => {
+  const ch = currentChanges.value
+  const costChanged = !!ch.cost && ch.cost.items.length > 0
+  const profit2Changed = !!ch.totals?.profit2
+  const itinChanged = !!ch.itinerary && ch.itinerary.cityChanges.length > 0
+  return costChanged || profit2Changed || itinChanged
+})
 
 // —— 省地接社协作（一手：用于「发起询价」弹窗的机构选择 + 「状态与协作」tab 的成本询价列表）——
 const costInquiries = ref<CostInquiry[]>([])
@@ -374,15 +417,32 @@ async function openQuoteDialog() {
     const d = calcDerived(quoteItems.value)
     const qa = Math.round(d.quoteA)
     const text = `${caption}\n报价A ¥${qa.toLocaleString()}（您的成本基线）\n\n👉 查看并加价回复：${link}`
-    dialogText.value = text
+
+    // 计算本轮关键变更摘要，合并为修改记录（写入历史修改记录），并附到微信文案
+    const changes = currentChanges.value
+    const manual = pkSuggestion.value.trim()
+    const autoNote = formatQuoteChanges(changes)
+    const combinedNote = manual
+      ? (hasAnyChange.value ? `${autoNote}\n\n【补充说明】${manual}` : manual)
+      : (hasAnyChange.value ? autoNote : '')
+    if (combinedNote) {
+      try {
+        await submitConsoleFeedback(id, combinedNote, user.value?.name || 'PandaKing', 'pandaking')
+      } catch {
+        /* 变更记录失败不阻断保存 */
+      }
+    }
+    const notifyBody = hasAnyChange.value ? `${text}\n\n${autoNote}` : text
+    dialogText.value = notifyBody
     dialogSubtitle.value = quoteSubtitle.value
 
     // 4) 自动复制到剪贴板
-    const ok = await copyText(text)
+    const ok = await copyText(notifyBody)
     actionOk.value = ok ? '报价链接已生成并复制，去微信粘贴发给境外旅行社 ✅' : '已生成，请手动复制下方文案'
 
     // 5) 弹 NotifyDialog
     quoteDialog.value = true
+    pkSuggestion.value = ''
     await load()
   } catch (e: any) {
     actionErr.value = e?.response?.data?.message || '生成报价链接失败'
@@ -423,7 +483,23 @@ async function doInquire() {
     const provAg = provincialAgencies.value.find((a) => a.id === collabProvId.value)
     const targetLabel = provAg?.name ? `（${provAg.name}）` : ''
     const text = `${caption}\n\nPandaKing 已生成行程方案，向你${targetLabel}规划路线和询价并回传：\n\n👉 查看并回复：${link}`
-    dialogText.value = text
+
+    // 计算本轮关键变更摘要，合并为修改记录（写入历史修改记录），并附到微信文案
+    const changes = currentChanges.value
+    const manual = pkSuggestion.value.trim()
+    const autoNote = formatQuoteChanges(changes)
+    const combinedNote = manual
+      ? (hasAnyChange.value ? `${autoNote}\n\n【补充说明】${manual}` : manual)
+      : (hasAnyChange.value ? autoNote : '')
+    if (combinedNote) {
+      try {
+        await submitConsoleFeedback(id, combinedNote, user.value?.name || 'PandaKing', 'pandaking')
+      } catch {
+        /* 变更记录失败不阻断保存 */
+      }
+    }
+    const notifyBody = hasAnyChange.value ? `${text}\n\n${autoNote}` : text
+    dialogText.value = notifyBody
 
     // 4) 自动复制
     const ok = await copyText(text)
@@ -431,6 +507,7 @@ async function doInquire() {
 
     // 5) 弹出文案预览弹窗（已关联省地接社时弹窗尚未打开需在此打开；未关联场景弹窗已开）
     inquireDialog.value = true
+    pkSuggestion.value = ''
     await load()
     await loadInquiries()
   } catch (e: any) {
@@ -470,6 +547,11 @@ async function load() {
       profit2Mode.value = 'amount'
       profit2.value = 0
     }
+    // 记录本轮编辑基线（用于计算「本轮关键变更摘要」，多轮协作逐轮核对）
+    baselineQuoteItems.value = quoteItems.value.map((it) => ({ ...it }))
+    baselineProfit2Mode.value = profit2Mode.value
+    baselineProfit2.value = Number(profit2.value) || 0
+    baselineItinerary.value = { days: itinerary.value.days.map((d) => ({ day: d.day, city: d.city })) }
     await loadFeedback()
     await loadInquiries()
   } catch (e: any) {
@@ -539,7 +621,11 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
   actionOk.value = ''
   try {
     const note = feedbackNote.value
-    const body = a.needNote ? { feedback: note } : undefined
+    const autoNote = formatQuoteChanges(currentChanges.value)
+    const combinedNote = note.trim()
+      ? (hasAnyChange.value ? `${autoNote}\n\n【补充说明】${note.trim()}` : note.trim())
+      : (hasAnyChange.value ? autoNote : '')
+    const body = a.needNote ? { feedback: combinedNote || note } : undefined
     await routeAction(id, a.key, body)
     feedbackNote.value = ''
     // 除「拒绝/流失」外，所有状态流转（规划提交类动作）与反馈意见，
@@ -576,7 +662,8 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
           destination: safeText(data.value.destination),
           travelDate: data.value.travelDate,
           authorName: user.value?.name || roleLabel(role.value),
-          detail: isFeedback ? note : undefined,
+          detail: isFeedback ? (combinedNote || note) : undefined,
+          changes: currentChanges.value,
           url: link,
         })
         const ok = await copyText(text)
@@ -626,13 +713,18 @@ async function onSubmitSuggestion(who: 'agency' | 'provincial') {
     return
   }
 
-  // 2) 提交反馈建议给一手（允许为空：仅保存工作也可）
+  // 2) 提交反馈建议给一手（允许为空：仅保存工作也可）。合并「本轮变更摘要」一并记录
   const note = consSuggestion.value.trim()
-  if (note) {
+  const changes = currentChanges.value
+  const autoNote = formatQuoteChanges(changes)
+  const combinedNote = note
+    ? (hasAnyChange.value ? `${autoNote}\n\n【补充说明】${note}` : note)
+    : (hasAnyChange.value ? autoNote : '')
+  if (combinedNote) {
     try {
       await submitConsoleFeedback(
         id,
-        note,
+        combinedNote,
         user.value?.name || roleLabel(role.value),
         who,
       )
@@ -673,7 +765,8 @@ async function onSubmitSuggestion(who: 'agency' | 'provincial') {
     destination: safeText(data.value?.destination),
     travelDate: data.value?.travelDate,
     authorName: user.value?.name || roleLabel(role.value),
-    detail: note || undefined,
+    detail: combinedNote || undefined,
+    changes,
     url: link,
   })
   consSuggestion.value = ''
@@ -969,6 +1062,18 @@ const collabEvents = computed<CollabEvent[]>(() => {
             </p>
           </div>
 
+          <!-- 一手：本轮变更摘要 + 补充说明（可选） -->
+          <div v-if="isPk" class="pk-extra">
+            <div v-if="hasAnyChange" class="ch-summary">
+              <h4>📋 本轮变更摘要</h4>
+              <pre>{{ formatQuoteChanges(currentChanges) }}</pre>
+            </div>
+            <div class="suggest">
+              <label>补充说明（可选）</label>
+              <textarea v-model="pkSuggestion" rows="2" placeholder="如有额外说明可在此补充；变更摘要会自动合并提交"></textarea>
+            </div>
+          </div>
+
           <!-- 一手：发起询价 + 保存并报价（双主操作，弹 NotifyDialog 统一弹结构化文案+URL） -->
           <div v-if="isPk" class="pk-actions">
             <button class="d-btn primary block" :disabled="savingDraft || savingNotify" @click="openInquireDialog">
@@ -984,8 +1089,14 @@ const collabEvents = computed<CollabEvent[]>(() => {
 
           <!-- 非一手：反馈建议输入框（提交给一手 PandaKing） -->
           <div v-if="isAgency || isProv" class="suggest">
-            <label>反馈建议（提交给 {{ ownerName }}）</label>
+            <label>补充说明（可选）</label>
             <textarea v-model="consSuggestion" rows="2" :placeholder="isAgency ? ('填写对报价 / 行程的修改建议，将随报价一并通知 ' + ownerName) : ('填写成本说明或协作备注，将通知 ' + ownerName)"></textarea>
+          </div>
+
+          <!-- 非一手：本轮变更摘要（旅行社加价 / 行程调整后实时展示） -->
+          <div v-if="isAgency && hasAnyChange" class="ch-summary">
+            <h4>📋 本轮变更摘要</h4>
+            <pre>{{ formatQuoteChanges(currentChanges) }}</pre>
           </div>
 
           <!-- 非一手：保存栏（与一手对称：仅保存 + 提交建议并通知） -->
@@ -1063,7 +1174,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
               </button>
             </div>
             <div v-if="availableActions.find((a) => a.needNote)" class="field full" style="margin-top: 14px">
-              <label>反馈内容（回传修改意见）</label>
+              <label>补充说明（可选）</label>
               <textarea v-model="feedbackNote" rows="3" placeholder="填写要回传给对方 / 旅行社的修改意见"></textarea>
             </div>
           </div>
@@ -1072,7 +1183,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
         <!-- 反馈记录 -->
         <div class="panel solo">
           <div class="panel-head">
-            <h2>反馈记录</h2>
+            <h2>历史修改记录</h2>
             <span v-if="feedbackList.length" class="pill st-role xs">{{ feedbackList.length }}</span>
           </div>
           <div class="panel-body">
@@ -1080,15 +1191,15 @@ const collabEvents = computed<CollabEvent[]>(() => {
               <li v-for="fb in feedbackList" :key="fb.id" class="fb-item">
                 <div class="fb-meta">
                   <b>{{ fb.authorName || (fb.source === 'h5' ? '协作方' : 'PandaKing') }}</b>
-                  <span class="pill xs" :class="fb.source === 'h5' ? 'st-awaiting_quote' : 'st-confirmed'">
-                    {{ fb.source === 'h5' ? 'H5 链接反馈' : '回传反馈' }}
+                  <span class="pill xs" :class="fb.authorRole === 'pandaking' ? 'st-role' : (fb.authorRole === 'agency' ? 'st-awaiting_quote' : 'st-confirmed')">
+                    {{ fb.authorRole ? roleLabel(fb.authorRole) : (fb.source === 'h5' ? 'H5 链接反馈' : '回传反馈') }}
                   </span>
                   <span class="fb-time">{{ fmtTime(fb.createdAt) }}</span>
                 </div>
                 <p class="fb-content">{{ fb.content }}</p>
               </li>
             </ul>
-            <p v-else class="muted">暂无反馈意见。对方可在协作 H5 链接内提交修改意见，或在此回传反馈。</p>
+            <p v-else class="muted">暂无修改记录。对方可在协作 H5 链接内提交修改意见，或在此回传反馈。</p>
           </div>
         </div>
 
@@ -1365,6 +1476,9 @@ const collabEvents = computed<CollabEvent[]>(() => {
 .suggest { padding: 14px 18px 0; }
 .suggest label { display: block; font-size: 12px; color: var(--k-muted); font-weight: 600; margin-bottom: 6px; }
 .suggest textarea { width: 100%; background: #fff; border: 1px solid var(--k-line); border-radius: 8px; padding: 8px 10px; font-size: 13px; font-family: inherit; color: var(--k-ink); resize: vertical; min-height: 48px; box-sizing: border-box; }
+.ch-summary { margin: 14px 18px 0; border: 1px solid var(--teal-200); border-radius: 10px; padding: 10px 12px; background: var(--teal-50); }
+.ch-summary h4 { margin: 0 0 6px; font-size: 13px; color: var(--teal-600); }
+.ch-summary pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.6; color: var(--k-ink); font-family: inherit; }
 .share-row { display: flex; gap: 12px; align-items: center; padding: 0 18px 4px; }
 .note { font-size: 11px; color: var(--k-muted); padding: 8px 18px 16px; line-height: 1.6; }
 .formula { display: inline-block; background: var(--purple-50); color: var(--purple-800); border: 1px solid var(--purple-200); border-radius: 6px; padding: 2px 7px; font-weight: 700; font-size: 11px; margin: 0 2px; }

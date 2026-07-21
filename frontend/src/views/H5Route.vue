@@ -16,7 +16,11 @@ import {
   copyText,
   pandakingH5Url,
   agencyH5Url,
+  roleLabel,
+  diffQuoteChanges,
+  formatQuoteChanges,
 } from '@/utils/share'
+import type { ProvincialChanges } from '@/utils/share'
 import type { H5Route, RouteFeedbackItem, QuoteLevel } from '@/types'
 import { buildPdfModel, type PdfModel } from '@/utils/pdf-model'
 import { generatePdf } from '@/utils/pdf-export'
@@ -143,6 +147,30 @@ const agSaving = ref(false)
 const agSaveOk = ref('')
 const agSaveErr = ref('')
 const agPeerTip = ref('')
+// 旅行社「补充说明（可选）」+ 变更基线快照（用于计算本轮关键变更摘要）
+const agFbText = ref('')
+const agNotifyText = ref('')
+const agNotifyTip = ref('')
+const initialAgProfit2Mode = ref<'amount' | 'percent'>('amount')
+const initialAgProfit2 = ref(0)
+const initialAgItinerary = ref<{ days: { day: number; city: string }[] }>({ days: [] })
+const agChanges = computed<ProvincialChanges>(() => {
+  if (!isAgencyView.value) return {}
+  return diffQuoteChanges({
+    before: { profit2: initialAgProfit2.value, profit2Mode: initialAgProfit2Mode.value, itinerary: initialAgItinerary.value },
+    after: {
+      profit2: Number(agProfit2.value) || 0,
+      profit2Mode: agProfit2Mode.value,
+      itinerary: { days: itinerary.value.days.map((d) => ({ day: d.day, city: d.city })) },
+    },
+    editableFields: ['profit2', 'itinerary'],
+    versionLabel: data.value?.version,
+  })
+})
+const agHasChange = computed(() => {
+  const ch = agChanges.value
+  return !!ch.totals?.profit2 || (!!ch.itinerary && ch.itinerary.cityChanges.length > 0)
+})
 
 // —— 旅行社 AI 翻译：行程+对客总价 → 泰语版文字（供旅行社复制粘贴发客户） ——
 const agThBusy = ref(false)
@@ -253,7 +281,47 @@ async function onAgSave() {
     if (res.pandakingToken) data.value.pandakingToken = res.pandakingToken
     if (res.guestPrice != null) data.value.guestPrice = res.guestPrice
     const gp = res.guestPrice ?? agGuestPrice.value
-    agSaveOk.value = `已保存行程与报价（对客总价 ¥${Number(gp).toLocaleString()}）✅ 可把下方链接发回 ${ownerName.value} 继续协作`
+
+    // 计算本轮关键变更摘要，合并为修改记录（写入历史修改记录），并生成微信文案发给 PandaKing
+    const changes = agChanges.value
+    const manual = agFbText.value.trim()
+    const autoNote = formatQuoteChanges(changes)
+    const combinedNote = manual
+      ? (agHasChange.value ? `${autoNote}\n\n【补充说明】${manual}` : manual)
+      : (agHasChange.value ? autoNote : '')
+    if (combinedNote) {
+      try {
+        await submitH5Feedback(token, combinedNote, authorName.value.trim() || undefined, 'agency')
+      } catch {
+        /* 变更记录失败不阻断保存 */
+      }
+    }
+    if (data.value) {
+      const url = data.value.pandakingToken ? pandakingH5Url(data.value.pandakingToken) : shareH5Url(token)
+      const text = collabNotifyText({
+        kind: 'plan',
+        eventLabel: '更新行程与报价并回传',
+        subject: safeName(data.value.customerNameCn, data.value.customerName),
+        destination: data.value.destination,
+        travelDate: data.value.travelDate,
+        authorName: authorName.value.trim() || undefined,
+        detail: combinedNote || undefined,
+        changes,
+        url,
+      })
+      agNotifyText.value = text
+      const ok = await copyText(text)
+      agNotifyTip.value = ok
+        ? `通知文案已复制，去微信粘贴发给 ${ownerName.value} 同步 ✅`
+        : '通知文案已生成，请长按上方文字手动复制'
+    }
+    // 更新基线（下一轮基于新基线检测变更）
+    initialAgProfit2Mode.value = agProfit2Mode.value
+    initialAgProfit2.value = Number(agProfit2.value) || 0
+    initialAgItinerary.value = { days: itinerary.value.days.map((dd) => ({ day: dd.day, city: dd.city })) }
+    if (combinedNote) await loadFeedback()
+    agFbText.value = ''
+    agSaveOk.value = `已保存行程与报价（对客总价 ¥${Number(gp).toLocaleString()}）并通知 ${ownerName.value}，可把下方链接发回继续协作`
   } catch (e: any) {
     agSaveErr.value = e?.response?.data?.message || e.message || '保存失败'
   } finally {
@@ -420,6 +488,10 @@ onMounted(async () => {
       const tot = d.quote.totals
       agProfit2Mode.value = (tot.profit2Mode as 'amount' | 'percent') ?? 'amount'
       agProfit2.value = Number(tot.profit2) || 0
+      // 记录本轮编辑基线（用于计算「本轮关键变更摘要」，多轮协作逐轮核对）
+      initialAgProfit2Mode.value = agProfit2Mode.value
+      initialAgProfit2.value = Number(agProfit2.value) || 0
+      initialAgItinerary.value = { days: itinerary.value.days.map((dd) => ({ day: dd.day, city: dd.city })) }
     }
     const title = `${safeText(d.destination) || '定制行程'} · 定制行程方案`
     document.title = title
@@ -595,11 +667,29 @@ function goHome() {
               <span class="h5-ag-guest">¥{{ agGuestPrice.toLocaleString() }}</span>
             </div>
           </div>
+          <!-- 本轮变更摘要（旅行社加价 + 行程调整实时展示） -->
+          <div v-if="agHasChange" class="ch-summary">
+            <h4>📋 本轮变更摘要</h4>
+            <pre>{{ formatQuoteChanges(agChanges) }}</pre>
+          </div>
+          <!-- 补充说明（可选） -->
+          <div class="h5-fb-field">
+            <label>补充说明（可选）</label>
+            <textarea v-model="agFbText" rows="2" placeholder="如有额外说明可在此补充；变更摘要会自动合并提交"></textarea>
+          </div>
+
           <button class="btn btn-primary" :disabled="agSaving" @click="onAgSave">
-            {{ agSaving ? '保存中…' : '💾 保存行程与报价' }}
+            {{ agSaving ? '保存中…' : '💾 保存并微信回传' }}
           </button>
           <p v-if="agSaveErr" class="err">{{ agSaveErr }}</p>
-          <p v-if="agSaveOk" class="ok">{{ agSaveOk }} ✅</p>
+          <p v-if="agSaveOk" class="ok">{{ agSaveOk }}</p>
+          <div v-if="agNotifyText" class="notify-box">
+            <div class="notify-head">
+              <span>{{ agNotifyTip || ('通知文案（去微信粘贴发给 ' + ownerName + '）') }}</span>
+              <button class="btn ghost sm" @click="copyText(agNotifyText)">再复制</button>
+            </div>
+            <pre class="notify-text">{{ agNotifyText }}</pre>
+          </div>
 
           <button class="btn ghost share-btn" @click="copyPeerLink">📋 复制对 {{ ownerName }} 链接发微信</button>
           <p v-if="agPeerTip" class="share-tip">{{ agPeerTip }}</p>
@@ -726,17 +816,22 @@ function goHome() {
         </div>
       </div>
 
-      <div v-if="feedbackList.length" class="h5-fb-history">
-        <h3>已提交的反馈</h3>
-        <ul class="h5-fb-list">
+      <div class="h5-fb-history">
+        <h3>历史修改记录</h3>
+        <ul v-if="feedbackList.length" class="h5-fb-list">
           <li v-for="fb in feedbackList" :key="fb.id" class="h5-fb-item">
             <div class="h5-fb-meta">
-              <b>{{ fb.authorName || '协作方' }}</b>
+              <span
+                class="fb-role"
+                :class="fb.authorRole === 'pandaking' ? 'rb-pk' : fb.authorRole === 'agency' ? 'rb-ag' : 'rb-pub'"
+              >{{ fb.authorRole ? roleLabel(fb.authorRole) : '协作方' }}</span>
+              <b>{{ fb.authorName || (fb.authorRole === 'pandaking' ? 'PandaKing' : fb.authorRole === 'agency' ? '境外旅行社' : '协作方') }}</b>
               <span class="h5-fb-time">{{ fmtTime(fb.createdAt) }}</span>
             </div>
             <p class="h5-fb-content">{{ fb.content }}</p>
           </li>
         </ul>
+        <p v-else class="h5-fb-empty">暂无修改记录</p>
       </div>
 
       <!-- 离屏 PDF 渲染容器（导出时填充，不直接显示） -->
