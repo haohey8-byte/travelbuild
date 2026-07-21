@@ -25,6 +25,8 @@ const subject = computed(() =>
   data.value ? safeName(data.value.route.customerNameCn, data.value.route.customerName) : '',
 )
 const destination = computed(() => data.value?.route.destination || '')
+const ownerName = computed(() => data.value?.ownerName || 'PandaKing')
+const agencyName = computed(() => data.value?.agencyName || '省地接社')
 
 function fmtTime(s?: string): string {
   if (!s) return ''
@@ -43,7 +45,7 @@ onMounted(async () => {
       alreadySubmitted.value = true
       cost1.value = d.cost1
     }
-    const title = `${safeText(d.route.destination) || '行程'} · 成本询价`
+    const title = `${safeText(d.route.destination) || '行程'} · 报价询价`
     document.title = title
   } catch {
     notFound.value = true
@@ -55,7 +57,7 @@ onMounted(async () => {
 
 async function onSubmit() {
   if (cost1.value == null || Number.isNaN(Number(cost1.value)) || Number(cost1.value) < 0) {
-    sendErr.value = '请填写有效的成本①（非负数字）'
+    sendErr.value = '请填写有效的报价（非负数字）'
     return
   }
   submitting.value = true
@@ -67,18 +69,18 @@ async function onSubmit() {
     if (data.value) {
       const text = collabNotifyText({
         kind: 'plan',
-        eventLabel: '回传了成本询价',
+        eventLabel: '回传了报价',
         subject: subject.value,
         destination: destination.value,
         travelDate: data.value?.route.travelDate,
-        authorName: '省地接社',
-        detail: `成本① ¥${Number(cost1.value).toLocaleString()}`,
+        authorName: agencyName.value,
+        detail: `报价 ¥${Number(cost1.value).toLocaleString()}`,
         url: window.location.href,
       })
       notifyText.value = text
       const ok = await copyText(text)
       notifyTip.value = ok
-        ? '通知文案已复制，去微信粘贴发给一手同步 ✅'
+        ? `通知文案已复制，去微信粘贴发给 ${ownerName.value} 同步 ✅`
         : '通知文案已生成，请长按上方文字手动复制'
     }
   } catch (e: any) {
@@ -103,24 +105,24 @@ function goHome() {
     </div>
 
     <div v-else-if="data" class="h5-card">
-      <h1 class="h5-title">{{ safeText(data.route.destination) || '定制行程' }} · 成本询价</h1>
+      <h1 class="h5-title">{{ safeText(data.route.destination) || '定制行程' }} · 报价询价</h1>
       <div class="h5-meta">
         <span>客户: {{ safeName(data.route.customerNameCn, data.route.customerName) || '—' }}</span>
         <span>人数: {{ data.route.groupSize }}</span>
       </div>
 
       <div v-if="alreadySubmitted" class="submitted">
-        <p>✅ 您已回传成本询价，无需重复提交。</p>
+        <p>✅ 您已回传报价询价，无需重复提交。</p>
         <p v-if="data.cost1 != null" class="cost-readonly">
-          成本①：<b>¥{{ Number(data.cost1).toLocaleString() }}</b>
+          报价：<b>¥{{ Number(data.cost1).toLocaleString() }}</b>
         </p>
       </div>
 
       <template v-else>
         <p class="hint">
-          请填写本路线的<b>地接成本①</b>（仅一手可见）。提交后系统会生成通知文案，复制发到微信即可同步一手。
+          请填写本路线的<b>报价</b>（仅 {{ ownerName }} 可见）。提交后系统会生成通知文案，复制发到微信即可同步 {{ ownerName }}。
         </p>
-        <label class="h5-label">成本①（地接成本，¥）</label>
+        <label class="h5-label">报价（¥）</label>
         <input
           v-model.number="cost1"
           class="h5-input"
@@ -129,7 +131,7 @@ function goHome() {
           placeholder="如 12000"
         />
         <button class="btn btn-primary" :disabled="submitting" @click="onSubmit">
-          {{ submitting ? '提交中…' : '提交成本询价' }}
+          {{ submitting ? '提交中…' : '提交报价' }}
         </button>
         <p v-if="sendErr" class="err">{{ sendErr }}</p>
       </template>
@@ -138,7 +140,7 @@ function goHome() {
 
       <div v-if="notifyText" class="notify-box">
         <div class="notify-head">
-          <span>📋 {{ notifyTip || '通知文案（去微信粘贴发给一手）' }}</span>
+          <span>📋 {{ notifyTip || '通知文案（去微信粘贴发给 ' + ownerName + '）' }}</span>
           <button class="btn ghost sm" @click="copyText(notifyText)">再复制</button>
         </div>
         <pre class="notify-text">{{ notifyText }}</pre>

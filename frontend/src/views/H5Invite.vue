@@ -81,7 +81,7 @@ async function onAccept() {
             {{ busy ? '处理中…' : '接受邀请并进入' }}
           </button>
           <p v-if="acceptErr" class="err">{{ acceptErr }}</p>
-          <p class="tip">接受后将以该机构成员身份登录，可复制协作 H5 到微信群与一手对接。</p>
+          <p class="tip">接受后将以该机构成员身份登录，可复制协作 H5 到微信群与 PandaKing 对接。</p>
         </template>
 
         <div v-else class="state ok">已加入，正在进入工作台…</div>

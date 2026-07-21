@@ -45,7 +45,7 @@ const zh: Dict = {
   type_meal: '餐饮',
   type_other: '其他',
   footer_internal: '内部机密文件 · 含全部成本价，请勿外传',
-  footer_agency: '仅供合作旅行社参考 · 不含成本价与一手利润',
+  footer_agency: '仅供合作旅行社参考 · 不含成本价与 PandaKing 利润',
   footer_tourist: '仅供游客参考 · 含对游客报价',
   noQuote: '暂无报价明细',
 }

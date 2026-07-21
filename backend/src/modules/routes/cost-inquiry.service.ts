@@ -51,11 +51,24 @@ export class CostInquiryService {
       throw new NotFoundException('询价链接无效')
     })
     const route = await this.prisma.route.findUniqueOrThrow({ where: { id: ci.routeId } })
+    const owner = await this.prisma.user.findUnique({
+      where: { id: route.createdById },
+      select: { name: true },
+    })
+    let agencyName: string | null = null
+    if (ci.provincialId) {
+      const ag = await this.prisma.agency.findUnique({ where: { id: ci.provincialId } })
+      agencyName = ag?.name ?? null
+    }
     return {
       token: ci.token,
       status: ci.status,
       cost1: ci.cost1 != null ? Number(ci.cost1) : null,
       costItems: (ci.costItems as { name: string; amount: number }[] | undefined) ?? [],
+      // 路线归属账号名（创建者，即 PandaKing 平台方），用于 H5 内替代「一手」字眼
+      ownerName: owner?.name ?? 'PandaKing',
+      // 被询价省地接社机构名，用于回传通知文案个性化（显示为具体机构名）
+      agencyName,
       route: {
         id: route.id,
         customerName: route.customerName,

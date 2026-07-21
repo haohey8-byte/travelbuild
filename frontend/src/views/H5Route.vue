@@ -53,10 +53,11 @@ const isPublicView = computed(() => !!data.value?.public)
 const canEditItinerary = computed(() => isPkView.value || isAgencyView.value)
 const roleBadgeClass = computed(() => (isPkView.value ? 'rb-pk' : isAgencyView.value ? 'rb-ag' : 'rb-pub'))
 const roleBadgeText = computed(() => {
-  if (isPkView.value) return '👑 一手 PandaKing · 可编辑行程与价格'
+  if (isPkView.value) return '👑 PandaKing · 可编辑行程与价格'
   if (isAgencyView.value) return '🧳 境外旅行社 · 可编辑行程与加价'
   return '👀 客户预览 · 只读'
 })
+const ownerName = computed(() => (data.value && data.value.ownerName) || 'PandaKing')
 
 // —— 行程（按天，可编辑：PandaKing / agency；只读：public）——
 interface Day {
@@ -173,11 +174,11 @@ async function copyPeerLink() {
   } else if (isAgencyView.value) {
     link = data.value.pandakingToken ? pandakingH5Url(data.value.pandakingToken) : ''
     if (!link) {
-      agPeerTip.value = '暂无可发送的一手链接'
+      agPeerTip.value = '暂无可发送的 ' + ownerName.value + ' 链接'
       return
     }
-    const ok = await copyText(`${caption}\n\n👉 查看并编辑行程报价（一手 PandaKing）：${link}`)
-    agPeerTip.value = ok ? '对一手链接已复制，去微信粘贴 ✅' : '复制失败，请长按上方文案手动复制'
+    const ok = await copyText(`${caption}\n\n👉 查看并编辑行程报价（${ownerName.value}）：${link}`)
+    agPeerTip.value = ok ? '对 ' + ownerName.value + ' 链接已复制，去微信粘贴 ✅' : '复制失败，请长按上方文案手动复制'
   }
 }
 
@@ -252,7 +253,7 @@ async function onAgSave() {
     if (res.pandakingToken) data.value.pandakingToken = res.pandakingToken
     if (res.guestPrice != null) data.value.guestPrice = res.guestPrice
     const gp = res.guestPrice ?? agGuestPrice.value
-    agSaveOk.value = `已保存行程与报价（对客总价 ¥${Number(gp).toLocaleString()}）✅ 可把下方链接发回一手继续协作`
+    agSaveOk.value = `已保存行程与报价（对客总价 ¥${Number(gp).toLocaleString()}）✅ 可把下方链接发回 ${ownerName.value} 继续协作`
   } catch (e: any) {
     agSaveErr.value = e?.response?.data?.message || e.message || '保存失败'
   } finally {
@@ -371,7 +372,7 @@ function fmtTime(s?: string): string {
 // 状态中文标签（避免 H5 暴露原始机器键）
 const STATUS_LABEL: Record<string, string> = {
   consulting: '咨询中',
-  awaiting_pk_confirm: '待一手确认',
+  awaiting_pk_confirm: '待确认',
   awaiting_agency_revision: '待旅行社修订',
   awaiting_quote: '待报价',
   awaiting_feedback: '待反馈',
@@ -468,7 +469,7 @@ async function onSend() {
       if (isPkView.value) {
         url = data.value.agencyToken ? agencyH5Url(data.value.agencyToken) : shareH5Url(token)
         eventLabel = '回复了修改意见'
-        author = author || '一手 PandaKing'
+        author = author || ownerName.value
       } else if (isAgencyView.value) {
         url = data.value.pandakingToken ? pandakingH5Url(data.value.pandakingToken) : shareH5Url(token)
       } else {
@@ -600,7 +601,7 @@ function goHome() {
           <p v-if="agSaveErr" class="err">{{ agSaveErr }}</p>
           <p v-if="agSaveOk" class="ok">{{ agSaveOk }} ✅</p>
 
-          <button class="btn ghost share-btn" @click="copyPeerLink">📋 复制对一手链接发微信</button>
+          <button class="btn ghost share-btn" @click="copyPeerLink">📋 复制对 {{ ownerName }} 链接发微信</button>
           <p v-if="agPeerTip" class="share-tip">{{ agPeerTip }}</p>
 
           <!-- AI 翻译为泰语版（行程+对客总价）—— 旅行社复制粘贴发客户 -->

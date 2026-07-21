@@ -37,7 +37,11 @@ const canEditProfit2 = computed(() => isAgency.value && !props.readOnly)
 const canEditName = computed(() => (isPk.value || isProv.value) && !props.readOnly)
 const canAdd = computed(() => (isPk.value || isProv.value) && !props.readOnly)
 
-const costColLabel = computed(() => (isAgency.value ? '报价A（成本）' : '成本①'))
+const costColLabel = computed(() => {
+  if (isAgency.value) return '报价A（成本）'
+  if (isProv.value) return '报价'
+  return '成本①'
+})
 const profitColLabel = computed(() => '利润')
 const quoteColLabel = computed(() => (isAgency.value ? '对客价' : '报价A'))
 

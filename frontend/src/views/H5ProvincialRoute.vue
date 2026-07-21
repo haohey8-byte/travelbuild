@@ -118,6 +118,12 @@ const alreadySubmitted = ref(false)
 const costInquiryId = ref<string | null>(null)
 // 后端 getH5 返回的省地接社机构名（用于两条回传微信文案个性化展示，需求：文案带具体机构名）
 const provAgencyName = computed(() => data.value?.costInquiry?.agencyName || '')
+// 路线归属账号名（创建者，即 PandaKing 平台方）：用于 H5 内替代「一手」字眼，显示具体注册名
+const ownerName = computed(() => data.value?.ownerName || 'PandaKing')
+// 省地接社回传反馈的作者名：带具体机构名（个性化）
+const provAuthorName = computed(() =>
+  provAgencyName.value ? `省地接社（${provAgencyName.value}）` : '省地接社',
+)
 const totalCost = computed(() => quoteItems.value.reduce((s, it) => s + (Number(it.cost1) || 0), 0))
 // 回传前的基线快照：用于多轮回传时计算「关键变更摘要」（与一手逐轮核对）
 const initialCostItems = ref<{ name: string; cost1: number }[]>([])
@@ -157,7 +163,7 @@ function changeSummaryText(): string {
   if (ch.cost && ch.cost.items.length > 0) {
     const totalChange = ch.cost.totalAfter - ch.cost.totalBefore
     const sign = totalChange >= 0 ? '+' : ''
-    lines.push(`成本①合计：¥${ch.cost.totalBefore.toLocaleString()} → ¥${ch.cost.totalAfter.toLocaleString()} (${sign}¥${totalChange.toLocaleString()})`)
+    lines.push(`报价合计：¥${ch.cost.totalBefore.toLocaleString()} → ¥${ch.cost.totalAfter.toLocaleString()} (${sign}¥${totalChange.toLocaleString()})`)
     for (const it of ch.cost.items.slice(0, 10)) {
       if (it.isNew) lines.push(`  + ${it.name}：¥${it.after.toLocaleString()}(新增)`)
       else lines.push(`  · ${it.name}：¥${it.before.toLocaleString()} → ¥${it.after.toLocaleString()}`)
@@ -194,7 +200,7 @@ const pageTitle = computed(() => {
 
 const STATUS_LABEL: Record<string, string> = {
   consulting: '咨询中',
-  awaiting_pk_confirm: '待一手确认',
+  awaiting_pk_confirm: '待确认',
   awaiting_agency_revision: '待旅行社修订',
   awaiting_quote: '待报价',
   awaiting_feedback: '待反馈',
@@ -340,7 +346,7 @@ async function onSubmitHandoff() {
       : (hasAnyChange.value ? autoNote : '')
     if (combinedNote) {
       try {
-        await submitH5Feedback(token, combinedNote, '省地接社')
+        await submitH5Feedback(token, combinedNote, provAuthorName.value)
         fbText.value = ''
         // 更新基线（下一轮基于新基线检测变更）
         initialCostItems.value = items.map((i) => ({ ...i }))
@@ -359,8 +365,8 @@ async function onSubmitHandoff() {
     await loadFeedback()
 
     saveOk.value = combinedNote
-      ? '行程、成本①与变更记录已保存并同步给一手 ✅'
-      : '行程与成本①已保存并同步给一手 ✅'
+      ? `行程、报价与变更记录已保存并同步给 ${ownerName.value} ✅`
+      : `行程与报价已保存并同步给 ${ownerName.value} ✅`
     if (data.value) {
       // 多轮协作：计算本轮关键变更摘要，让一手一眼看清改了哪些价格/行程
       const afterItinerary = { days: itinerary.value.days.map((d) => ({ day: d.day, city: d.city })) }
@@ -373,18 +379,18 @@ async function onSubmitHandoff() {
       })
       const text = collabNotifyText({
         kind: 'plan',
-        eventLabel: '更新了行程规划并回传成本',
+        eventLabel: '更新了行程规划并回传报价',
         subject: subject.value,
         destination: destination.value,
         travelDate: data.value?.travelDate,
-        authorName: provAgencyName.value ? `省地接社（${provAgencyName.value}）` : '省地接社',
+        authorName: provAuthorName.value,
         changes,
         url: window.location.href,
       })
       notifyText.value = text
       const ok = await copyText(text)
       notifyTip.value = ok
-        ? '通知文案已复制，去微信粘贴发给一手同步 ✅'
+        ? `通知文案已复制，去微信粘贴发给 ${ownerName.value} 同步 ✅`
         : '通知文案已生成，请长按上方文字手动复制'
     }
   } catch (e: any) {
@@ -461,7 +467,7 @@ async function onPkHandoffToProvincial() {
   pkHandoffTip.value = ''
   try {
     const pkToken = data.value?.pandakingToken
-    if (!pkToken) throw new Error('未找到一手协作令牌，无法保存报价')
+    if (!pkToken) throw new Error('未找到 PandaKing 协作令牌，无法保存报价')
     const quotePayload = {
       items: quoteItems.value
         .filter((it) => String(it.name).trim() || Number(it.cost1) > 0 || Number(it.profit1) > 0)
@@ -481,7 +487,7 @@ async function onPkHandoffToProvincial() {
       subject: subject.value,
       destination: destination.value,
       travelDate: data.value?.travelDate,
-      authorName: '一手 PandaKing',
+      authorName: ownerName.value,
       url: link,
     })
     pkHandoffText.value = text
@@ -525,7 +531,7 @@ function goRouteDetail() {
           <div class="prov-chips">
             <span class="chip"><b>客户</b>{{ subject || '—' }}</span>
             <span class="chip"><b>目的地</b>{{ destination || '—' }}</span>
-            <span class="chip"><b>省地接社</b>已回传成本</span>
+            <span class="chip"><b>{{ provAgencyName }}</b>已回传报价</span>
             <span class="chip pk-chip">👑 PandaKing 加价</span>
           </div>
         </div>
@@ -535,14 +541,14 @@ function goRouteDetail() {
           <div class="prov-left">
 
             <p class="hint">
-              省地接社已回传行程与成本①。您可以直接调整行程、在报价表中逐项设置成本①与利润①，
+              {{ provAgencyName }} 已回传行程与报价。您可以直接调整行程、在报价表中逐项设置报价与利润，
               然后生成<b>对旅行社的 H5 链接</b>或<b>保存并回传省地接社</b>，粘贴到微信。
             </p>
 
             <!-- ── 行程安排（可编辑折叠） ── -->
             <section class="prov-section itinerary-section">
               <div class="section-head">
-                <h3>省地接社提交的行程（可编辑）</h3>
+                <h3>{{ provAgencyName }} 提交的行程（可编辑）</h3>
                 <span class="pill sm st-neutral">共 {{ itinerary.days.length }} 天</span>
               </div>
               <div v-for="(d, di) in itinerary.days" :key="di" class="day-card">
@@ -590,7 +596,7 @@ function goRouteDetail() {
             <!-- ── 行程报价（PandaKing 全编辑：成本① + 利润①，与控制台一致） ── -->
             <section class="prov-section cost-section">
               <h3>行程报价（可编辑：成本① + 利润①）</h3>
-              <p class="hint">以下报价与控制台一致，可逐项调整成本①与利润①，报价A 自动重算。成本①归省地接社填写、利润①归一手，此处作为枢纽统一维护。</p>
+              <p class="hint">以下报价与控制台一致，可逐项调整报价与利润，报价A 自动重算。报价由 {{ provAgencyName }} 填写，利润由 {{ ownerName }} 维护，此处作为枢纽统一维护。</p>
               <QuoteTable v-model:items="quoteItems" role="pandaking" />
             </section>
           </div>
@@ -641,19 +647,19 @@ function goRouteDetail() {
       <div class="prov-content pk-view pk-pending">
         <!-- ── 头部标识 ── -->
         <div class="prov-header">
-          <h1 class="prov-title">⏳ 等待省地接社回传成本①</h1>
+          <h1 class="prov-title">⏳ 等待 {{ provAgencyName }} 回传报价</h1>
           <div class="prov-chips">
             <span class="chip"><b>客户</b>{{ subject || '—' }}</span>
             <span class="chip"><b>目的地</b>{{ destination || '—' }}</span>
-            <span class="chip"><b>状态</b>已发起询价，等待省地接社回传</span>
+            <span class="chip"><b>状态</b>已发起询价，等待 {{ provAgencyName }} 回传</span>
           </div>
         </div>
 
-        <p class="hint pk-pending-tip">
-          询价链接已生成并发给省地接社。对方在微信打开此链接、填写成本①并回传后，<br/>
-          您可在此页面设置利润、生成对旅行社的 H5 链接。<br/>
-          <b>当前阶段尚无成本①，无需加价。</b>
-        </p>
+          <p class="hint pk-pending-tip">
+            询价链接已生成并发给 {{ provAgencyName }}。对方在微信打开此链接、填写报价并回传后，<br/>
+            您可在此页面设置利润、生成对旅行社的 H5 链接。<br/>
+            <b>当前阶段尚无报价，无需加价。</b>
+          </p>
 
         <!-- ── 行程只读预览 ── -->
         <section class="prov-section itinerary-section">
@@ -706,8 +712,8 @@ function goRouteDetail() {
 
           <!-- 提示 -->
           <p class="hint">
-            您正在以<b>省地接社</b>身份与一手 PandaKing 协作本路线（支持<b>多轮反复沟通</b>）。
-            点击每日行程可展开编辑；修改后系统自动记录变更摘要。每轮点「保存并回传一手」，一手都会收到带<b>关键变更摘要</b>的通知。
+            您正在与 <b>{{ ownerName }}</b> 协作本路线（支持<b>多轮反复沟通</b>）。
+            点击每日行程可展开编辑；修改后系统自动记录变更摘要。每轮点「保存并回传」，{{ ownerName }} 都会收到带<b>关键变更摘要</b>的通知。
           </p>
 
           <!-- ──── 行程安排（折叠展开） ──── -->
@@ -762,11 +768,11 @@ function goRouteDetail() {
 
           <!-- ──── 成本① ──── -->
           <section class="prov-section cost-section">
-            <h3>地接成本①</h3>
-            <p class="hint">按项目填写本路线的地接成本①（仅一手可见），与行程一起提交。</p>
+            <h3>报价</h3>
+            <p class="hint">按项目填写本路线的报价，与行程一起提交。</p>
             <QuoteTable v-model:items="quoteItems" role="provincial" />
             <p class="cost-total">合计：<b>¥{{ totalCost.toLocaleString() }}</b></p>
-            <p v-if="alreadySubmitted" class="submitted-tip">✅ 您已回传过成本询价，修改后再次保存即可更新。</p>
+            <p v-if="alreadySubmitted" class="submitted-tip">✅ 您已回传过询价，修改后再次保存即可更新。</p>
           </section>
 
         </div>
@@ -779,7 +785,7 @@ function goRouteDetail() {
             <h3>📋 本轮变更摘要</h3>
             <p class="hint">系统自动检测到以下变动，保存后将记录为回传说明。</p>
             <div v-if="hasCostChange" class="ch-block">
-              <span class="ch-label">成本①</span>
+              <span class="ch-label">报价</span>
               <span class="ch-detail">
                 ¥{{ Number(currentChanges.cost?.totalBefore).toLocaleString() }} → ¥{{ Number(currentChanges.cost?.totalAfter).toLocaleString() }}
                 <span v-if="currentChanges.cost" :class="(currentChanges.cost.totalAfter - currentChanges.cost.totalBefore) >= 0 ? 'ch-up' : 'ch-down'">
@@ -814,14 +820,14 @@ function goRouteDetail() {
 
           <!-- ──── 保存按钮 ──── -->
           <button class="btn btn-primary" :disabled="saving" @click="onSubmitHandoff">
-            {{ saving ? '保存中…' : '保存并回传一手' }}
+            {{ saving ? '保存中…' : '保存并回传' }}
           </button>
           <p v-if="saveErr" class="err">{{ saveErr }}</p>
           <p v-if="saveOk" class="ok">{{ saveOk }}</p>
 
           <div v-if="notifyText" class="notify-box">
             <div class="notify-head">
-              <span>{{ notifyTip || '通知文案（去微信粘贴发给一手）' }}</span>
+              <span>{{ notifyTip || ('通知文案（去微信粘贴发给 ' + ownerName + '）') }}</span>
               <button class="btn ghost sm" @click="copyText(notifyText)">再复制</button>
             </div>
             <pre class="notify-text">{{ notifyText }}</pre>
@@ -836,7 +842,7 @@ function goRouteDetail() {
             <ul v-if="feedbackList.length" class="fb-list">
               <li v-for="fb in feedbackList" :key="fb.id" class="fb-item">
                 <div class="fb-meta">
-                  <b>{{ fb.authorName || (fb.source === 'h5' ? '协作方' : '一手地接社') }}</b>
+                  <b>{{ fb.authorName || (fb.source === 'h5' ? '协作方' : 'PandaKing') }}</b>
                   <span class="pill xs st-awaiting_quote">回传说明</span>
                   <span class="fb-time">{{ fmtTime(fb.createdAt) }}</span>
                 </div>

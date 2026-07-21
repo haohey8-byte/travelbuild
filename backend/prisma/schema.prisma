@@ -58,6 +58,7 @@ model User {
   disabled   Boolean   @default(false)
   createdAt  DateTime  @default(now())
   invites    Invite[]
+  createdRoutes Route[] @relation("RouteCreatedBy")
 }
 
 // 邀请（两层级：一手邀请机构管理员 → 管理员/一手邀请机构员工）
@@ -96,6 +97,7 @@ model Route {
   provincialId  String? // 归属省地接社 org id；一手将该路线分配给某省地接社后，该省地接社通过 H5 参与协作
   provincialOrg Agency?        @relation(fields: [provincialId], references: [id], onDelete: SetNull, name: "RouteProvincial")
   createdById   String
+  createdBy     User           @relation(fields: [createdById], references: [id], onDelete: Cascade, name: "RouteCreatedBy")
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   versions      RouteVersion[]

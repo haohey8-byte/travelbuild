@@ -208,11 +208,13 @@ const role = computed(() => auth.currentRole)
 const isPk = computed(() => role.value === 'pandaking')
 const isAgency = computed(() => role.value === 'agency')
 const isProv = computed(() => role.value === 'provincial')
+// 路线归属账号名（创建者 = PandaKing 平台方），用于替代「一手」字眼，显示具体注册名
+const ownerName = computed(() => data.value?.ownerName || 'PandaKing')
 
 // —— 状态流转 ——
 const STATUS_LABEL: Record<RouteStatusKey, string> = {
   consulting: '咨询中',
-  awaiting_pk_confirm: '待一手确认',
+  awaiting_pk_confirm: '待确认',
   awaiting_agency_revision: '待旅行社修订',
   awaiting_quote: '待报价',
   awaiting_feedback: '待反馈',
@@ -635,7 +637,7 @@ async function onSubmitSuggestion(who: 'agency' | 'provincial') {
         who,
       )
     } catch (e: any) {
-      actionErr.value = e?.response?.data?.message || '建议已保存，但通知一手失败'
+      actionErr.value = e?.response?.data?.message || `建议已保存，但通知 ${ownerName.value} 失败`
       savingNotify.value = false
       return
     }
@@ -678,10 +680,10 @@ async function onSubmitSuggestion(who: 'agency' | 'provincial') {
   try {
     const ok = await copyText(text)
     actionOk.value = ok
-      ? '已保存并通知一手（通知文案已复制，去微信粘贴到协作群即可 ✅）'
-      : '已保存并通知一手，请手动复制下方文案'
+      ? `已保存并通知 ${ownerName.value}（通知文案已复制，去微信粘贴到协作群即可 ✅）`
+      : `已保存并通知 ${ownerName.value}，请手动复制下方文案`
   } catch {
-    actionOk.value = '已保存并通知一手，请手动复制下方文案'
+    actionOk.value = `已保存并通知 ${ownerName.value}，请手动复制下方文案`
   }
   await load()
   await loadFeedback()
@@ -795,7 +797,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
           : fb.authorRole === 'provincial'
             ? 'prov'
             : 'pk'
-    const fTagText = fb.source === 'h5' ? 'H5 反馈' : fRole === 'pk' ? '回传反馈' : '提交一手建议'
+    const fTagText = fb.source === 'h5' ? 'H5 反馈' : fRole === 'pk' ? '回传反馈' : '提交给 ' + ownerName.value
     const fCb = fb.source === 'h5' ? 'pk2ag' : fRole === 'pk' ? undefined : 'prov2pk'
     evts.push({
       key: 'fb-' + fb.id,
@@ -956,10 +958,10 @@ const collabEvents = computed<CollabEvent[]>(() => {
 
           <div class="panel-body">
             <p v-if="isProv" class="hint">
-              省地接社只需填写<b>成本①</b>（利润默认 0）；成本①保存后即时回填一手 PandaKing。左侧行程规划可直接编辑。
+              省地接社只需填写<b>报价</b>（利润默认 0）；报价保存后即时回填 {{ ownerName }}。左侧行程规划可直接编辑。
             </p>
             <p v-else-if="isAgency" class="hint">
-              您看到的「报价A」是一手 PandaKing 的报价（即您的成本），在此加上<b>利润</b>即生成对客价。填好后点击下方「提交建议并通知一手」，即可把报价与修改建议一并发送给一手。
+              您看到的「报价A」是 {{ ownerName }} 的报价（即您的成本），在此加上<b>利润</b>即生成对客价。填好后点击下方「提交建议并通知 {{ ownerName }}」，即可把报价与修改建议一并发送给 {{ ownerName }}。
             </p>
             <QuoteTable v-model:items="quoteItems" v-model:profit2Mode="profit2Mode" v-model:profit2="profit2" :role="role" />
             <p v-if="isPk" class="tip">
@@ -982,8 +984,8 @@ const collabEvents = computed<CollabEvent[]>(() => {
 
           <!-- 非一手：反馈建议输入框（提交给一手 PandaKing） -->
           <div v-if="isAgency || isProv" class="suggest">
-            <label>反馈建议（提交给一手 PandaKing）</label>
-            <textarea v-model="consSuggestion" rows="2" :placeholder="isAgency ? '填写对报价 / 行程的修改建议，将随报价一并通知一手' : '填写成本说明或协作备注，将通知一手'"></textarea>
+            <label>反馈建议（提交给 {{ ownerName }}）</label>
+            <textarea v-model="consSuggestion" rows="2" :placeholder="isAgency ? ('填写对报价 / 行程的修改建议，将随报价一并通知 ' + ownerName) : ('填写成本说明或协作备注，将通知 ' + ownerName)"></textarea>
           </div>
 
           <!-- 非一手：保存栏（与一手对称：仅保存 + 提交建议并通知） -->
@@ -992,7 +994,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
               {{ savingDraft ? '保存中…' : '仅保存' }}
             </button>
             <button class="d-btn primary" :disabled="savingDraft || savingNotify" @click="onSubmitSuggestion(isAgency ? 'agency' : 'provincial')">
-              {{ savingNotify ? '提交中…' : (isAgency ? '提交建议并通知一手' : '保存成本并通知一手') }}
+              {{ savingNotify ? '提交中…' : (isAgency ? ('提交建议并通知 ' + ownerName) : ('保存成本并通知 ' + ownerName)) }}
             </button>
           </div>
 
@@ -1077,7 +1079,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
             <ul v-if="feedbackList.length" class="fb-list">
               <li v-for="fb in feedbackList" :key="fb.id" class="fb-item">
                 <div class="fb-meta">
-                  <b>{{ fb.authorName || (fb.source === 'h5' ? '协作方' : '一手地接社') }}</b>
+                  <b>{{ fb.authorName || (fb.source === 'h5' ? '协作方' : 'PandaKing') }}</b>
                   <span class="pill xs" :class="fb.source === 'h5' ? 'st-awaiting_quote' : 'st-confirmed'">
                     {{ fb.source === 'h5' ? 'H5 链接反馈' : '回传反馈' }}
                   </span>

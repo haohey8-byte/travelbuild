@@ -11,7 +11,7 @@ const { routes, loading, filterStatus } = storeToRefs(store)
 
 const STATUS_LABEL: Record<RouteStatusKey, string> = {
   consulting: '咨询中',
-  awaiting_pk_confirm: '待一手确认',
+  awaiting_pk_confirm: '待确认',
   awaiting_agency_revision: '待旅行社修订',
   awaiting_quote: '待报价',
   awaiting_feedback: '待反馈',
@@ -24,7 +24,7 @@ const STATUS_LABEL: Record<RouteStatusKey, string> = {
 const statusOptions: { key: string; label: string }[] = [
   { key: 'all', label: '全部' },
   { key: 'consulting', label: '咨询中' },
-  { key: 'awaiting_pk_confirm', label: '待一手确认' },
+  { key: 'awaiting_pk_confirm', label: '待确认' },
   { key: 'awaiting_agency_revision', label: '待旅行社修订' },
   { key: 'awaiting_quote', label: '待报价' },
   { key: 'awaiting_feedback', label: '待反馈' },

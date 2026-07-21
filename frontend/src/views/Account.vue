@@ -11,12 +11,12 @@ const auth = useAuthStore()
 const { user, currentRole } = storeToRefs(auth)
 
 const roles: { key: Role; label: string }[] = [
-  { key: 'pandaking', label: '一手 PandaKing' },
+  { key: 'pandaking', label: 'PandaKing' },
   { key: 'agency', label: '境外旅行社' },
   { key: 'provincial', label: '省地接社' },
 ]
 const ROLE_LABEL: Record<Role, string> = {
-  pandaking: '一手 PandaKing',
+  pandaking: 'PandaKing',
   agency: '境外旅行社',
   provincial: '省地接社',
 }
@@ -204,7 +204,7 @@ const matrix = [
   { field: '客户档案', pandaking: '✓', agency: '✓(自身)', provincial: '✗' },
   { field: '行程草案(规划)', pandaking: '✓', agency: '✓', provincial: '✓(被分配路线)' },
   { field: '成本①(地接成本)', pandaking: '✓', agency: '✗', provincial: '✓(自身)' },
-  { field: '成本②(一手利润)', pandaking: '✓', agency: '✗', provincial: '✗' },
+  { field: '成本②(PandaKing 利润)', pandaking: '✓', agency: '✗', provincial: '✗' },
   { field: '对旅行社报价', pandaking: '✓', agency: '✓', provincial: '✗' },
   { field: '加价/游客价', pandaking: '✓', agency: '✓', provincial: '✗' },
   { field: '知识库', pandaking: '读写', agency: '读', provincial: '✗' },
@@ -371,12 +371,12 @@ const LEVEL_LABEL: Record<string, string> = { admin: '管理员', staff: '员工
 
     <!-- 省地接社：我的成本询价（打开 H5 回填地接成本） -->
     <div v-if="user && user.role === 'provincial'" class="card" style="margin-top: 16px">
-      <h3>我的成本询价</h3>
-      <p class="muted">一手发来的成本询价会出现在这里，点开 H5 填写地接成本①即可回传。</p>
+      <h3>我的询价</h3>
+      <p class="muted">PandaKing 发来的询价会出现在这里，点开 H5 填写报价即可回传。</p>
       <p v-if="loadingInquiries">加载中…</p>
       <div v-else class="tbl-wrap">
         <table class="tbl">
-          <thead><tr><th>路线</th><th>状态</th><th>成本①</th><th>操作</th></tr></thead>
+          <thead><tr><th>路线</th><th>状态</th><th>报价</th><th>操作</th></tr></thead>
           <tbody>
             <tr v-for="ci in myInquiries" :key="ci.id">
               <td>{{ ci.routeId.slice(0, 8) }}</td>
@@ -397,7 +397,7 @@ const LEVEL_LABEL: Record<string, string> = { admin: '管理员', staff: '员工
       <h3>权限矩阵（字段级）</h3>
       <div class="tbl-wrap">
       <table class="tbl matrix">
-        <thead><tr><th>字段 / 能力</th><th>一手</th><th>旅行社</th><th>省地接社</th></tr></thead>
+        <thead><tr><th>字段 / 能力</th><th>PandaKing</th><th>旅行社</th><th>省地接社</th></tr></thead>
         <tbody>
           <tr v-for="row in matrix" :key="row.field">
             <td>{{ row.field }}</td>

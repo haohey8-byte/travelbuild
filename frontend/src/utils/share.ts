@@ -231,7 +231,7 @@ export function collabNotifyText(opts: CollabNotifyOpts): string {
 
 // 角色中文标签（用于通知文案中标注操作方）
 export function roleLabel(role?: string | null): string {
-  if (role === 'pandaking') return '一手 PandaKing'
+  if (role === 'pandaking') return 'PandaKing'
   if (role === 'agency') return '境外旅行社'
   if (role === 'provincial') return '省地接社'
   return safeText(role) || '协作方'

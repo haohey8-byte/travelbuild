@@ -34,7 +34,7 @@ const { user } = storeToRefs(auth)
 
 const STATUS_LABEL: Record<RouteStatusKey, string> = {
   consulting: '咨询中',
-  awaiting_pk_confirm: '待一手确认',
+  awaiting_pk_confirm: '待确认',
   awaiting_agency_revision: '待旅行社修订',
   awaiting_quote: '待报价',
   awaiting_feedback: '待反馈',
@@ -128,7 +128,7 @@ const todos = computed<Todo[]>(() => {
     } else if (r.statusKey === 'awaiting_quote') {
       list.push({ id: r.id, bar: 'blue', html: `<b>${who}</b> 待报价，请尽快完成行程与报价`, action: '去报价', route: r })
     } else if (r.statusKey === 'awaiting_pk_confirm') {
-      list.push({ id: r.id, bar: 'amber', html: `<b>${who}</b> 旅行社已提交草案，等待一手确认`, action: '去确认', route: r })
+      list.push({ id: r.id, bar: 'amber', html: `<b>${who}</b> 旅行社已提交草案，等待确认`, action: '去确认', route: r })
     }
   }
   return list.slice(0, 5)
@@ -230,7 +230,7 @@ async function onCreate() {
     return
   }
   if (user.value?.role === 'pandaking' && !form.value.agencyId.trim()) {
-    createErr.value = '一手创建路线必须选择境外旅行社'
+    createErr.value = 'PandaKing 创建路线必须选择境外旅行社'
     return
   }
   creating.value = true
@@ -299,7 +299,7 @@ async function confirmDelete() {
   <div v-if="user?.role === 'provincial'" class="forbidden">
     <h2>⛔ 无权限访问</h2>
     <p>按系统权限设计，省地接社不进入控制台路线视图。</p>
-    <p>你的协作入口：账号页 →「我的成本询价」，或通过一手发来的 H5 链接填写成本。</p>
+    <p>你的协作入口：账号页 →「我的询价」，或通过 PandaKing 发来的 H5 链接填写报价。</p>
   </div>
 
   <div v-else class="kanban-v2">
@@ -442,7 +442,7 @@ async function confirmDelete() {
             <span>模式</span>
             <select v-model="form.modeKey">
               <option value="collab">协作（旅行社发起草案）</option>
-              <option value="solo">自营（一手直接报价）</option>
+              <option value="solo">自营（PandaKing 直接报价）</option>
             </select>
           </label>
           <p v-if="createErr" class="err">{{ createErr }}</p>

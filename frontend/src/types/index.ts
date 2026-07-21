@@ -29,6 +29,8 @@ export interface Route {
   version?: string
   lastAction?: string
   versions?: RouteVersion[]
+  // 路线归属账号名（创建者，即 PandaKing 平台方），供控制台页替代「一手」字眼显示具体账号名
+  ownerName?: string | null
 }
 
 // 利润表示方式：金额(元) 或 百分比(%)。百分比以「成本」为基准。
@@ -149,6 +151,8 @@ export interface H5Route {
   // 双向协作回路：对端可编辑令牌（PandaKing 视图返回 agencyToken，旅行社/公开视图返回 pandakingToken）
   pandakingToken?: string | null
   agencyToken?: string | null
+  // 路线归属账号名（创建者，即 PandaKing 平台方），用于 H5 内替代「一手」字眼显示具体注册名
+  ownerName?: string | null
   // 净化报价：仅含对客报价（guestPrice），不含成本①/②/加价（公开 H5 不泄漏内部成本）
   // 旅行社视角（role=agency, public=false）下 totals 还会返回 quoteA/profit2Mode/profit2，便于 H5 旅行社视图加利润②
   // 一手视角（role=pandaking, public=false）下返回全量：items 含 cost1/profit1Mode/profit1/quoteA，totals 含 quoteA/profit2
@@ -221,6 +225,10 @@ export interface H5CostInquiry {
   status: string
   cost1: number | null
   costItems?: CostInquiryItem[]
+  // 路线归属账号名（创建者，即 PandaKing 平台方），用于 H5 内替代「一手」字眼显示具体注册名
+  ownerName?: string | null
+  // 被询价省地接社机构名，用于回传通知文案个性化（显示为具体机构名）
+  agencyName?: string | null
   route: {
     id: string
     customerName?: string | null

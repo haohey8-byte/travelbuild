@@ -28,7 +28,7 @@ const nav = computed(() => {
 
 
 const roles: { key: Role; label: string }[] = [
-  { key: 'pandaking', label: '一手 PandaKing' },
+  { key: 'pandaking', label: 'PandaKing' },
   { key: 'agency', label: '境外旅行社' },
   { key: 'provincial', label: '省地接社' },
 ]

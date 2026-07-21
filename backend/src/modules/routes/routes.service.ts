@@ -62,7 +62,7 @@ export class RoutesService {
     }
     const routes = await this.prisma.route.findMany({
       where,
-      include: { versions: { orderBy: { createdAt: 'desc' } } },
+      include: { versions: { orderBy: { createdAt: 'desc' } }, createdBy: true },
       orderBy: { updatedAt: 'desc' },
     })
     return routes.map((r) => this.serialize(r, effectiveRole))
@@ -72,7 +72,7 @@ export class RoutesService {
     const route = await this.prisma.route
       .findUniqueOrThrow({
         where: { id },
-        include: { versions: { orderBy: { createdAt: 'desc' } } },
+        include: { versions: { orderBy: { createdAt: 'desc' } }, createdBy: true },
       })
       .catch(() => {
         throw new NotFoundException('路线不存在')
@@ -107,7 +107,7 @@ export class RoutesService {
     const updated = await this.prisma.route.update({
       where: { id: routeId },
       data: { provincialId: provincialId.trim() },
-      include: { versions: { orderBy: { createdAt: 'desc' } } },
+      include: { versions: { orderBy: { createdAt: 'desc' } }, createdBy: true },
     })
     return this.serialize(updated, principal?.role ?? 'pandaking')
   }
@@ -183,7 +183,7 @@ export class RoutesService {
     const created = await this.prisma.route
       .findUniqueOrThrow({
         where: { id: route.id },
-        include: { versions: { orderBy: { createdAt: 'desc' } } },
+        include: { versions: { orderBy: { createdAt: 'desc' } }, createdBy: true },
       })
       .catch(() => {
         throw new NotFoundException('路线不存在')
@@ -765,6 +765,10 @@ export class RoutesService {
       .catch(() => {
         throw new NotFoundException('路线不存在')
       })
+    const owner = await this.prisma.user.findUnique({
+      where: { id: route.createdById },
+      select: { name: true },
+    })
     let version = share.versionId
       ? await this.prisma.routeVersion.findUnique({ where: { id: share.versionId } })
       : null
@@ -805,6 +809,8 @@ export class RoutesService {
       // 按角色字段级可见性返回报价：省地接社仅见成本①、旅行社见报价A、一手全见
       quote: visible,
       guestPrice: (visible?.totals?.guestPrice as number) ?? null,
+      // 路线归属账号名（创建者），用于 H5 内替代「一手」字眼，显示具体注册名
+      ownerName: owner?.name ?? 'PandaKing',
     }
     if (share.role === 'provincial' && share.costInquiry) {
       // 解析被询价省地接社的机构名，供 H5 两条回传微信文案个性化展示（需求：文案带具体机构名）
@@ -1094,7 +1100,7 @@ export class RoutesService {
     const updated = await this.prisma.route.update({
       where: { id: routeId },
       data: { statusKey: to },
-      include: { versions: { orderBy: { createdAt: 'desc' } } },
+      include: { versions: { orderBy: { createdAt: 'desc' } }, createdBy: true },
     })
     return this.serialize(updated, principal.role)
   }
@@ -1112,7 +1118,7 @@ export class RoutesService {
   // 视线剥离：境外旅行社不返回 provincialId；省地接社不返回 agencyId 与 agency(旅行社名称)，
   // 确保双方互不知道对方的存在与机构标识（一手保留全部）。
   private serialize(route: any, role: Role) {
-    const { versions, ...rest } = route
+    const { versions, createdBy, ...rest } = route
     const safe: Record<string, unknown> = { ...rest }
     if (role === 'agency') {
       delete safe.provincialId
@@ -1122,6 +1128,8 @@ export class RoutesService {
     }
     return {
       ...safe,
+      // 路线归属账号名（创建者，即 PandaKing 平台方），供控制台页替代「一手」字眼显示具体账号名
+      ownerName: createdBy?.name ?? null,
       versions: (versions ?? []).map((v: any) => this.serializeVersion(v, role)),
     }
   }
