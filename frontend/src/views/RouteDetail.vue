@@ -464,7 +464,9 @@ async function openQuoteDialog() {
         /* 变更记录失败不阻断保存 */
       }
     }
-    const notifyBody = hasAgencyChange.value ? `${text}\n\n${autoNote}` : text
+    const notifyBody = [text, hasAgencyChange.value ? autoNote : '', manual ? `【补充说明】${manual}` : '']
+      .filter(Boolean)
+      .join('\n\n')
     dialogText.value = notifyBody
     dialogSubtitle.value = quoteSubtitle.value
 
@@ -530,7 +532,9 @@ async function doInquire() {
         /* 变更记录失败不阻断保存 */
       }
     }
-    const notifyBody = hasProvincialChange.value ? `${text}\n\n${autoNote}` : text
+    const notifyBody = [text, hasProvincialChange.value ? autoNote : '', manual ? `【补充说明】${manual}` : '']
+      .filter(Boolean)
+      .join('\n\n')
     dialogText.value = notifyBody
 
     // 4) 自动复制（必须与 dialogText 一致，否则预览有摘要而粘贴到微信的文案缺摘要）
