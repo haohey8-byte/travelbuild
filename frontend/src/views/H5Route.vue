@@ -58,7 +58,7 @@ const canEditItinerary = computed(() => isPkView.value || isAgencyView.value)
 const roleBadgeClass = computed(() => (isPkView.value ? 'rb-pk' : isAgencyView.value ? 'rb-ag' : 'rb-pub'))
 const roleBadgeText = computed(() => {
   if (isPkView.value) return '👑 PandaKing · 可编辑行程与价格'
-  if (isAgencyView.value) return '🧳 境外旅行社 · 可编辑行程与加价'
+  if (isAgencyView.value) return '🧳 您 · 可编辑行程与加价'
   return '👀 客户预览 · 只读'
 })
 const ownerName = computed(() => (data.value && data.value.ownerName) || 'PandaKing')
@@ -149,6 +149,8 @@ const agSaveErr = ref('')
 const agPeerTip = ref('')
 // 旅行社「补充说明（可选）」+ 变更基线快照（用于计算本轮关键变更摘要）
 const agFbText = ref('')
+// 填写人：旅行社视角下预填为空，由用户输入（也用于历史记录展示）
+const agFbName = ref('')
 const agNotifyText = ref('')
 const agNotifyTip = ref('')
 const initialAgProfit2Mode = ref<'amount' | 'percent'>('amount')
@@ -171,6 +173,28 @@ const agHasChange = computed(() => {
   const ch = agChanges.value
   return !!ch.totals?.profit2 || (!!ch.itinerary && ch.itinerary.cityChanges.length > 0)
 })
+
+// —— 旅行社视角：成本明细（per-item quoteA 来自后端 hideCostsForRole 暴露的 items.cost1） ——
+// 后端 role-visibility.ts:101-103 把每个 item 的 quoteA 重命名为 cost1 暴露给 agency；
+// 在 UI 上统一以「成本」概念展示，去掉内部命名痕迹。
+const agItems = computed<{ name: string; type: string; cost: number }[]>(() => {
+  const items = data.value?.quote?.items
+  if (!Array.isArray(items)) return []
+  return items
+    .map((it) => ({
+      name: String(it?.name ?? '').trim() || '未命名项目',
+      type: String(it?.type ?? 'other'),
+      cost: Math.round(Number(it?.cost1) || 0),
+    }))
+    .filter((it) => it.cost > 0) // 隐藏 0 元项，避免明细里出现一堆空行
+})
+const agItemTypeLabels: Record<string, string> = {
+  vehicle: '用车',
+  hotel: '酒店',
+  ticket: '门票',
+  meal: '餐饮',
+  other: '其他',
+}
 
 // —— 旅行社 AI 翻译：行程+对客总价 → 泰语版文字（供旅行社复制粘贴发客户） ——
 const agThBusy = ref(false)
@@ -291,7 +315,7 @@ async function onAgSave() {
       : (agHasChange.value ? autoNote : '')
     if (combinedNote) {
       try {
-        await submitH5Feedback(token, combinedNote, authorName.value.trim() || undefined, 'agency')
+        await submitH5Feedback(token, combinedNote, agFbName.value.trim() || authorName.value.trim() || undefined, 'agency')
       } catch {
         /* 变更记录失败不阻断保存 */
       }
@@ -304,7 +328,7 @@ async function onAgSave() {
         subject: safeName(data.value.customerNameCn, data.value.customerName),
         destination: data.value.destination,
         travelDate: data.value.travelDate,
-        authorName: authorName.value.trim() || undefined,
+        authorName: agFbName.value.trim() || authorName.value.trim() || undefined,
         // detail 仅传人工补充说明，changes 块会单独渲染【本轮关键变更】，避免 summary 重复
         detail: manual || undefined,
         changes,
@@ -628,14 +652,36 @@ function goHome() {
         </section>
       </template>
 
-      <!-- ============ 旅行社视角：行程 + 利润② ============ -->
+      <!-- ============ 旅行社视角：成本明细 + 行程 + 利润 ============ -->
       <template v-else-if="isAgencyView">
-        <div class="h5-quotea-card">
-          <div class="h5-quotea-lab">报价A（您的成本基线）</div>
-          <div class="h5-quotea-val">¥{{ agQuoteA.toLocaleString() }}</div>
+        <!-- 顶部大额成本卡（去"您的成本基线"副标，纯从旅行社视角） -->
+        <div class="h5-ag-cost-hero">
+          <div class="h5-ag-cost-lab">成本</div>
+          <div class="h5-ag-cost-val">¥{{ agQuoteA.toLocaleString() }}</div>
+          <div class="h5-ag-cost-sub">来自 PandaKing 报价明细 · 不可编辑</div>
         </div>
+
+        <!-- 成本明细：按后端 items 逐项展开（per-item quoteA 已重命名为 items.cost1） -->
+        <div v-if="agItems.length" class="h5-ag-breakdown">
+          <h3>📋 成本明细</h3>
+          <ul class="h5-ag-items">
+            <li v-for="(it, idx) in agItems" :key="idx" class="h5-ag-item">
+              <div class="h5-ag-item-name">
+                <span class="h5-ag-item-tag">{{ agItemTypeLabels[it.type] || '其他' }}</span>
+                <span class="h5-ag-item-title">{{ it.name }}</span>
+              </div>
+              <span class="h5-ag-item-price">¥{{ it.cost.toLocaleString() }}</span>
+            </li>
+            <li class="h5-ag-item h5-ag-item-total">
+              <span>合计</span>
+              <span class="h5-ag-item-total-val">¥{{ agQuoteA.toLocaleString() }}</span>
+            </li>
+          </ul>
+        </div>
+        <p v-else class="muted h5-ag-empty">暂未提供成本明细</p>
+
         <section class="h5-ag-section">
-          <h3>💹 加价（利润②）</h3>
+          <h3>💹 加价</h3>
           <div class="h5-ag-mode">
             <label class="h5-ag-radio">
               <input type="radio" v-model="agProfit2Mode" value="amount" /><span>固定金额 ¥</span>
@@ -653,7 +699,7 @@ function goHome() {
           />
           <div class="h5-ag-preview">
             <div class="h5-ag-row">
-              <span>报价A（成本）</span>
+              <span>成本</span>
               <span>¥{{ agQuoteA.toLocaleString() }}</span>
             </div>
             <div class="h5-ag-row">
@@ -675,10 +721,17 @@ function goHome() {
             <h4>📋 本轮变更摘要</h4>
             <pre>{{ formatQuoteChanges(agChanges) }}</pre>
           </div>
-          <!-- 补充说明（可选） -->
+          <!-- 补充说明（可选）：填写人 + 宽敞输入框，匹配系统风格 -->
           <div class="h5-fb-field">
             <label>补充说明（可选）</label>
-            <textarea v-model="agFbText" rows="2" placeholder="填写您的补充说明（可选）；变更摘要会自动合并提交"></textarea>
+            <input v-model="agFbName" class="h5-input" placeholder="填写人（可选，将显示在历史记录中）" />
+            <textarea
+              v-model="agFbText"
+              class="h5-input"
+              rows="5"
+              placeholder="如对行程或报价有补充说明…"
+              style="resize: vertical; min-height: 110px; line-height: 1.6;"
+            ></textarea>
           </div>
 
           <button class="btn btn-primary" :disabled="agSaving" @click="onAgSave">
@@ -947,6 +1000,28 @@ h3 { font-size: 15px; margin: 14px 0 0; }
 .h5-quotea-card { margin: 14px 0; padding: 14px 16px; background: #fdeef0; border-radius: 12px; display: flex; align-items: baseline; justify-content: space-between; border: 1px solid var(--brand); }
 .h5-quotea-lab { color: var(--brand-600, #a60d26); font-size: 13px; font-weight: 600; }
 .h5-quotea-val { color: var(--brand); font-size: 24px; font-weight: 800; }
+
+/* —— 旅行社视角：顶部成本大额卡（方案A：去"您的成本基线"副标，纯从旅行社视角） —— */
+.h5-ag-cost-hero { margin: 14px 0 12px; padding: 16px 18px; background: var(--brand-50, #fdeef0); border: 1px solid var(--brand); border-radius: 12px; display: flex; flex-direction: column; gap: 4px; }
+.h5-ag-cost-lab { color: var(--brand-600, #a60d26); font-size: 13px; font-weight: 600; }
+.h5-ag-cost-val { color: var(--brand); font-size: 30px; font-weight: 800; line-height: 1.1; }
+.h5-ag-cost-sub { color: var(--muted); font-size: 11px; margin-top: 2px; }
+
+/* —— 旅行社视角：成本明细列表（按后端 items 逐项展开，per-item quoteA 即"成本"） —— */
+.h5-ag-breakdown { margin: 14px 0; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.h5-ag-breakdown h3 { margin: 0 0 8px; font-size: 14px; color: var(--ink); }
+.h5-ag-items { list-style: none; margin: 0; padding: 0; }
+.h5-ag-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid #f1f3f6; }
+.h5-ag-item:last-child { border-bottom: none; }
+.h5-ag-item-name { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+.h5-ag-item-tag { display: inline-block; padding: 2px 6px; font-size: 11px; border-radius: 4px; background: var(--bg, #f4f6fa); color: var(--muted); flex-shrink: 0; font-weight: 500; }
+.h5-ag-item-title { font-size: 14px; color: var(--ink); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.h5-ag-item-price { color: var(--ink); font-weight: 600; font-size: 14px; flex-shrink: 0; }
+.h5-ag-item-total { border-top: 1px dashed var(--line); margin-top: 4px; padding-top: 10px; font-weight: 700; }
+.h5-ag-item-total span:first-child { color: var(--ink); font-size: 14px; }
+.h5-ag-item-total-val { color: var(--brand); font-size: 18px; }
+.h5-ag-empty { color: var(--muted); font-size: 13px; padding: 10px 0; }
+
 .ro { font-weight: 600; }
 .ro.total { color: var(--brand); font-size: 18px; }
 .h5-ag-translate { margin-top: 12px; }
@@ -981,6 +1056,8 @@ h3 { font-size: 15px; margin: 14px 0 0; }
   .guest-label { min-width: 150px; }
   .h5-quotea-card { padding: 18px 20px; }
   .h5-quotea-val { font-size: 28px; }
+  .h5-ag-cost-hero { padding: 20px 24px; }
+  .h5-ag-cost-val { font-size: 36px; }
   .h5-feedback, .h5-fb-history { margin-top: 22px; }
 }
 </style>
