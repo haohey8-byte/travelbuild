@@ -445,12 +445,12 @@ async function openQuoteDialog() {
     const share = await shareRoute(id, 'agency', false)
     const link = agencyH5Url(share.token)
 
-    // 3) 构造结构化文案（仅主题 + 报价A + URL，**不暴露**「成本① / 利润①」等内部信息）
-    const caption = shareH5Caption(data.value)
+    // 3) 构造结构化文案（仅主题 + 报价 + URL，**不暴露**「成本① / 利润①」等内部信息）
+    const caption = shareH5Caption(data.value, 'agency')
     const profitLabel = profit2Mode.value === 'percent' ? `${profit2.value || 0}%` : `¥${(Number(profit2.value) || 0).toLocaleString()}`
     const d = calcDerived(quoteItems.value)
     const qa = Math.round(d.quoteA)
-    const text = `${caption}\n报价A ¥${qa.toLocaleString()}（您的成本基线）\n\n👉 查看并加价回复：${link}`
+    const text = `${caption}\n报价 ¥${qa.toLocaleString()}\n\n👉 查看路线及报价：${link}`
 
     // 计算本轮关键变更摘要（面向境外旅行社：仅利润② + 行程，不含 PandaKing 内部利润①），合并为修改记录，并附到微信文案
     const changes = changesForAgency.value

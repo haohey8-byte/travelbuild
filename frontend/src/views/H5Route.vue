@@ -189,7 +189,7 @@ const pdfWrap = ref<HTMLElement | null>(null)
 // —— 角色切换后把当前协作链接转发给对端（复制「说明 + 可编辑链接」）——
 async function copyPeerLink() {
   if (!data.value) return
-  const caption = shareH5Caption(data.value)
+  const caption = shareH5Caption(data.value, 'agency')
   let link = ''
   if (isPkView.value) {
     link = data.value.agencyToken ? agencyH5Url(data.value.agencyToken) : ''
@@ -212,7 +212,7 @@ async function copyPeerLink() {
 
 async function copyShareLink() {
   if (!data.value) return
-  const caption = shareH5Caption(data.value)
+  const caption = shareH5Caption(data.value, 'agency')
   const ok = await copyText(`${caption}\n${shareH5Url(token)}`)
   shareTip.value = ok ? '协作链接已复制，去微信粘贴到群里即可 ✅' : '复制失败，请长按上方链接手动复制'
 }
@@ -496,7 +496,7 @@ onMounted(async () => {
       initialAgProfit2.value = Number(agProfit2.value) || 0
       initialAgItinerary.value = { days: itinerary.value.days.map((dd) => ({ day: dd.day, city: dd.city })) }
     }
-    const title = `${safeText(d.destination) || '定制行程'} · 规划路线审核及询价方案`
+    const title = `${safeText(d.destination) || '定制行程'} · 规划路线及报价方案`
     document.title = title
     updateOgMeta('og:title', title)
     if (isPublicView.value) {
@@ -507,12 +507,12 @@ onMounted(async () => {
     } else if (d.role === 'agency') {
       updateOgMeta(
         'og:description',
-        `PandaKing9 为您定制的${safeText(d.destination) || '行程'}方案，报价A ¥${agQuoteA.value.toLocaleString()}（您的成本基线）`,
+        `PandaKing9 为您定制的${safeText(d.destination) || '行程'}方案，报价 ¥${agQuoteA.value.toLocaleString()}`,
       )
     } else {
       updateOgMeta(
         'og:description',
-        `PandaKing9 协作编辑页：${safeText(d.destination) || '行程'}，报价A ¥${pkDerived.value.quoteA.toLocaleString()}`,
+        `PandaKing9 协作编辑页：${safeText(d.destination) || '行程'}，报价 ¥${pkDerived.value.quoteA.toLocaleString()}`,
       )
     }
     await loadFeedback()

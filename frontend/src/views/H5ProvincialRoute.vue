@@ -488,12 +488,12 @@ async function onPkGenerateLink() {
     //    public=false（不是客户只读页，而是旅行社可加利润② 的交互页）
     const share = await shareRoute(routeId, 'agency', false)
 
-    // 3) 构造通知文案：主题+报价A+URL。
+    // 3) 构造通知文案：主题+报价+URL。
     //    ⚠️ 不暴露「成本①」「利润①」等 PandaKing 内部数据（PRD 隔离矩阵 + agency↔provincial 物理隔绝）。
-    //    「报价A」是旅行社的「成本基线」，告诉旅行社无妨（但不是对客价，对客价由旅行社加完利润② 后得出）。
+    //    「报价」是旅行社的「成本基线」，告诉旅行社无妨（但不是对客价，对客价由旅行社加完利润② 后得出）。
     const link = agencyH5Url(share.token)
-    const caption = shareH5Caption(data.value ?? undefined)
-    const text = `${caption}\n报价A ¥${pkQuoteA.value.toLocaleString()}\n\n👉 查看并加价回复：${link}`
+    const caption = shareH5Caption(data.value ?? undefined, 'agency')
+    const text = `${caption}\n报价 ¥${pkQuoteA.value.toLocaleString()}\n\n👉 查看路线及报价：${link}`
     pkGeneratedText.value = text
 
     // 4) 自动复制到剪贴板

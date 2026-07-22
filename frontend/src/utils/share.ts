@@ -68,18 +68,23 @@ export function provincialRouteH5Url(token: string): string {
 
 // 复制分享链接时附带的「客户/路线说明标注」（微信粘贴即带说明 + 链接）
 // 三段式标题：{客户} · {目的地} · {时间}，让 PandaKing 在微信群中一眼看清是谁、什么行程、什么时候出发
-export function shareH5Caption(route?: {
-  customerNameCn?: string | null
-  customerName?: string | null
-  destination?: string | null
-  travelDate?: string | null
-}): string {
+export function shareH5Caption(
+  route?: {
+    customerNameCn?: string | null
+    customerName?: string | null
+    destination?: string | null
+    travelDate?: string | null
+  },
+  role?: 'agency' | 'provincial' | 'pk',
+): string {
   const who = safeName(route?.customerNameCn, route?.customerName)
   const dest = safeText(route?.destination)
   const date = formatTravelDate(route?.travelDate)
   const head = [who, dest, date].filter(Boolean).join(' · ')
-  if (head) return `${head} 规划路线审核及询价`
-  return '规划路线审核及询价方案'
+  // 标题后缀按角色区分：境外旅行社为「规划路线及报价」，省地接社/默认（含一手）为「规划路线审核及询价」
+  const suffix = role === 'agency' ? '规划路线及报价' : '规划路线审核及询价'
+  if (head) return `${head} ${suffix}`
+  return `${suffix}方案`
 }
 
 // 出行日期格式化为「7月25日」等简短中文形式（兼容 ISO 与纯日期字符串）
