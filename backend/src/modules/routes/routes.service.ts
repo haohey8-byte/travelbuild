@@ -271,6 +271,20 @@ export class RoutesService {
         quote,
       },
     })
+    // 多轮协作闭环：非草稿版本即「当前对外协作上下文」，须让所有协作令牌指向此版本，
+    // 否则协作方（省地接社/旅行社/PandaKing）重开链接仍看到旧版本（反复多轮报价/行程调整不同步）。
+    // ⚠️ 对客公开链接(public=true) 不在此同步：它代表「最终确认版」，不应被中间态调整冲刷。
+    if (!draft) {
+      await this.prisma.routeShare.updateMany({
+        where: { routeId, public: false, costInquiryId: null },
+        data: { versionId: version.id },
+      })
+      // 省地接社协作令牌关联 costInquiryId（非 null），被上面的 where 排除，需独立同步
+      await this.prisma.routeShare.updateMany({
+        where: { routeId, role: 'provincial' },
+        data: { versionId: version.id },
+      })
+    }
     // 对外 H5 链接（notify=true 且非草稿时生成协作共享 token）
     // 该链接面向「客户/协作对方」公开，强制 public=true：仅暴露对客价 guestPrice，杜绝内部成本泄漏。
     let shareToken: string | null = null
@@ -377,8 +391,9 @@ export class RoutesService {
         },
       }),
     ])
+    const latest = await this.latestVersion(routeId)
     const shareRecord = await this.prisma.routeShare.create({
-      data: { token, routeId, role: 'provincial', costInquiryId: inquiry.id },
+      data: { token, routeId, role: 'provincial', costInquiryId: inquiry.id, versionId: latest?.id ?? undefined },
     })
     return { token: shareRecord.token, link: `/h5/provincial-route/${shareRecord.token}` }
   }
@@ -432,8 +447,9 @@ export class RoutesService {
         },
       }),
     ])
+    const latest = await this.latestVersion(routeId)
     const shareRecord = await this.prisma.routeShare.create({
-      data: { token, routeId, role: 'provincial', costInquiryId: inquiry.id },
+      data: { token, routeId, role: 'provincial', costInquiryId: inquiry.id, versionId: latest?.id ?? undefined },
     })
     return { token: shareRecord.token, link: `/h5/provincial-route/${shareRecord.token}` }
   }
@@ -740,6 +756,11 @@ export class RoutesService {
     })
     await this.prisma.routeShare.update({ where: { token }, data: { versionId: version.id } })
     await this.syncPeerVersion(share.routeId, 'pandaking', version.id)
+    // 行程三方共享：旅行社若改了行程，须同步省地接社令牌，否则省地接社看到旧行程（价格仍按权限隔离）
+    await this.prisma.routeShare.updateMany({
+      where: { routeId: share.routeId, role: 'provincial' },
+      data: { versionId: version.id },
+    })
     const visible = hideCostsForRole(version.quote, 'agency') as { items?: any[]; totals?: any }
     return {
       version: this.serializeVersion(version, 'agency'),
