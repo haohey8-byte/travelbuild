@@ -200,6 +200,7 @@ const agItemTypeLabels: Record<string, string> = {
 const agThBusy = ref(false)
 const agThText = ref('')
 const agThErr = ref('')
+const agThOpen = ref(false)
 const hasTranslate = translateEnabled()
 
 // —— 导出游客版 PDF（PRD 5.8：旅行社/PandaKing 在 H5 内导出游客版）——
@@ -439,6 +440,16 @@ async function onAgTranslate() {
     agThErr.value = e?.message || '翻译失败'
   } finally {
     agThBusy.value = false
+  }
+}
+
+// 泰语报价单折叠/展开：展开时若尚未翻译则自动翻译一次
+function toggleTh() {
+  if (!agThOpen.value) {
+    agThOpen.value = true
+    if (!agThText.value && !agThBusy.value) onAgTranslate()
+  } else {
+    agThOpen.value = false
   }
 }
 async function copyAgain() {
@@ -750,16 +761,16 @@ function goHome() {
           <button class="btn ghost share-btn" @click="copyPeerLink">📋 复制对 {{ ownerName }} 链接发微信</button>
           <p v-if="agPeerTip" class="share-tip">{{ agPeerTip }}</p>
 
-          <!-- AI 翻译为泰语版（行程+对客总价）—— 旅行社复制粘贴发客户 -->
+          <!-- AI 翻译为泰语版（行程+对客总价）—— 折叠面板，点击展开/收起 -->
           <div class="h5-ag-translate">
-            <button class="btn btn-primary" :disabled="agThBusy" @click="onAgTranslate">
-              {{ agThBusy ? '翻译中…' : '🌐 翻译为泰语版（行程+报价）' }}
+            <button class="btn ghost th-toggle" @click="toggleTh">
+              {{ agThOpen ? '🔼 收起泰语报价单' : (agThBusy ? '翻译中…' : '🌐 翻译为泰语版（行程+报价）▾') }}
             </button>
-            <p v-if="!hasTranslate" class="muted" style="font-size: 12px;">
+            <p v-if="!hasTranslate && agThOpen" class="muted" style="font-size: 12px;">
               ⚠️ 未配置翻译服务，将以原文显示（如需配置请联系管理员设置 VITE_TMT_ENDPOINT）
             </p>
             <p v-if="agThErr" class="err">{{ agThErr }}</p>
-            <div v-if="agThText" class="notify-box">
+            <div v-if="agThOpen" class="notify-box th-panel">
               <div class="notify-head">
                 <span>🇹🇭 泰语报价单（复制粘贴发客户）</span>
                 <button class="btn ghost sm" @click="copyText(agThText)">📋 复制</button>
@@ -864,7 +875,7 @@ function goHome() {
       </div>
       <p v-else class="muted">暂无行程详情</p>
 
-      <div class="h5-feedback">
+      <div class="h5-feedback" v-if="!isAgencyView">
         <h3>补充说明（可选）</h3>
         <input v-model="authorName" class="h5-input" placeholder="您的称呼（可选，将显示在历史记录中）" />
         <textarea v-model="feedback" class="h5-input" rows="4" placeholder="填写您对行程 / 报价的补充说明…"></textarea>
@@ -1041,6 +1052,8 @@ h3 { font-size: 15px; margin: 14px 0 0; }
 .ro { font-weight: 600; }
 .ro.total { color: var(--brand); font-size: 18px; }
 .h5-ag-translate { margin-top: 12px; }
+.th-toggle { width: 100%; text-align: left; font-weight: 600; }
+.th-panel { margin-top: 10px; }
 
 /* 离屏渲染容器：保留布局尺寸供 html2canvas 截图，并移出可视区 */
 .pdf-offscreen { position: fixed; left: -10000px; top: 0; width: 794px; background: #fff; z-index: -1; }
