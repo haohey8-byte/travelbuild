@@ -37,6 +37,9 @@ export interface SaveVersionInput {
   quote?: unknown
   draft?: boolean
   notify?: boolean
+  // 乐观锁：前端保存时携带其加载时所基于的版本 ID；
+  // 若期间协作方已生成新版本（ID 不同），后端拒绝覆盖并返回 409，避免并发编辑互相覆盖。
+  baseVersionId?: string | null
 }
 
 @Injectable()
@@ -248,11 +251,21 @@ export class RoutesService {
       return Number.isNaN(n) ? m : Math.max(m, n)
     }, 0)
     const draft = input.draft ?? false
+    // 乐观锁（并发编辑保护）：前端保存时携带其加载所基于的版本 ID；
+    // 若期间协作方已生成新版本（ID 不同），说明当前编辑基于过期数据，拒绝覆盖并返回 409，
+    // 强制前端刷新后基于最新版本再编辑，避免「控制台旧数据覆盖 H5 新修改」的静默数据丢失。
+    const latest = await this.latestVersion(routeId)
+    if (input.baseVersionId && latest && latest.id !== input.baseVersionId) {
+      throw new ConflictException({
+        code: 'VERSION_CONFLICT',
+        message: '协作方已更新行程/报价，当前页面数据已过期，请刷新查看最新内容后再保存。',
+        latestVersionId: latest.id,
+      })
+    }
     // 报价按角色隔离写入：
     //  - 一手(pandaking)：全量写入 cost1/cost2/markup
     //  - 旅行社(agency)：仅可改自身加价 markup，成本①/②取自上一版（旅行社不可见）并重算对客总价
     //  - 省地接社(provincial)：不写价，价格保留上一版（地接成本由成本询价闭环回填）
-    const latest = await this.latestVersion(routeId)
     let quote: any = null
     if (role === 'agency') {
       quote = this.mergeAgencyQuote(latest, input.quote)

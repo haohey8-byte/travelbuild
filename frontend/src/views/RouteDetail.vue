@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import {
@@ -217,6 +217,36 @@ const baselineItinerary = ref<{ days: { day: number; city: string }[] }>({ days:
 const pkSuggestion = ref('')
 // 当前角色
 const role = computed(() => auth.currentRole)
+// 乐观锁基准：加载时所基于的版本 ID，保存时回传后端做并发校验（防止控制台旧数据覆盖 H5 新修改）
+const baseVersionId = ref<string | null>(null)
+// 并发冲突提示条（后端返回 409 时置真，展示「立即刷新」按钮）
+const conflictRefresh = ref(false)
+// 检测是否并发冲突（后端返回 409）：是则展示冲突提示条并写入 actionErr
+function detectStale(e: any): boolean {
+  if (e?.response?.status === 409) {
+    conflictRefresh.value = true
+    actionErr.value = '协作方已更新行程/报价，当前页面数据已过期，请刷新后重试。'
+    return true
+  }
+  return false
+}
+// 「立即刷新」：重新加载最新版本（自动重设 baseVersionId），并收起冲突提示
+async function refreshNow() {
+  conflictRefresh.value = false
+  actionErr.value = ''
+  await load()
+}
+// 页面切回可见且距上次加载 > 30s 时自动刷新，降低基于过期数据保存的概率
+let lastLoadTs = 0
+function onVisibilityChange() {
+  if (document.visibilityState === 'visible') {
+    const now = Date.now()
+    if (now - lastLoadTs > 30000) {
+      lastLoadTs = now
+      load()
+    }
+  }
+}
 const isPk = computed(() => role.value === 'pandaking')
 const isAgency = computed(() => role.value === 'agency')
 const isProv = computed(() => role.value === 'provincial')
@@ -412,9 +442,11 @@ async function openInquireDialog() {
       quote: buildQuote(),
       draft: false,
       notify: false,
+      baseVersionId: baseVersionId.value,
     })
     await load()
   } catch (e: any) {
+    if (detectStale(e)) { savingNotify.value = false; return }
     savingNotify.value = false
     actionErr.value = e?.response?.data?.message || '保存行程失败'
     return
@@ -439,6 +471,7 @@ async function openQuoteDialog() {
       quote: buildQuote(),
       draft: false,
       notify: false, // 不在此处触发 share（链接由 shareRoute 单独生成）
+      baseVersionId: baseVersionId.value,
     })) as { shareToken?: string; shareLink?: string; version?: any }
 
     // 2) 生成 agency 分享（role='agency', public=false，让旅行社看到 quoteA + 可加利润②）
@@ -481,6 +514,7 @@ async function openQuoteDialog() {
     pkSuggestion.value = ''
     await load()
   } catch (e: any) {
+    if (detectStale(e)) { savingNotify.value = false; return }
     actionErr.value = e?.response?.data?.message || '生成报价链接失败'
   } finally {
     savingNotify.value = false
@@ -502,6 +536,7 @@ async function doInquire() {
       quote: buildQuote(),
       draft: false,
       notify: false,
+      baseVersionId: baseVersionId.value,
     })
 
     // 2) 生成 provincial 协作链接（幂等）
@@ -549,6 +584,7 @@ async function doInquire() {
     await load()
     await loadInquiries()
   } catch (e: any) {
+    if (detectStale(e)) { savingNotify.value = false; return }
     actionErr.value = e?.response?.data?.message || '生成询价链接失败'
   } finally {
     savingNotify.value = false
@@ -559,7 +595,12 @@ function displayName(r: Route): string {
   return safeName(r.customerNameCn, r.customerName)
 }
 
-onMounted(load)
+onMounted(() => {
+  lastLoadTs = Date.now()
+  load()
+  document.addEventListener('visibilitychange', onVisibilityChange)
+})
+onUnmounted(() => document.removeEventListener('visibilitychange', onVisibilityChange))
 async function load() {
   loading.value = true
   err.value = ''
@@ -568,6 +609,8 @@ async function load() {
     const r = await fetchRoute(id)
     data.value = r
     const v = pickCurrentVersion(r.versions)
+    // 记录乐观锁基准：后续保存会回传此版本 ID，若期间协作方已生成新版本则后端拒绝（409）
+    baseVersionId.value = v?.id ?? null
     if (v?.itinerary && typeof v.itinerary === 'object') {
       const it = v.itinerary as { days?: Day[] }
       itinerary.value = { days: it.days?.length ? it.days : [newDay(1)] }
@@ -639,10 +682,12 @@ async function onSaveDraft() {
       quote: buildQuote(),
       draft: true,
       notify: false,
+      baseVersionId: baseVersionId.value,
     })
     actionOk.value = '草稿已保存'
     await load()
   } catch (e: any) {
+    if (detectStale(e)) { savingDraft.value = false; return }
     actionErr.value = e?.response?.data?.message || '保存失败'
   } finally {
     savingDraft.value = false
@@ -749,9 +794,11 @@ async function onSubmitSuggestion(who: 'agency' | 'provincial') {
       quote: buildQuote(),
       draft: false,
       notify: false,
+      baseVersionId: baseVersionId.value,
     })
     savedVersion = true
   } catch (e: any) {
+    if (detectStale(e)) { savingNotify.value = false; return }
     actionErr.value = e?.response?.data?.message || '保存失败，请重试'
     savingNotify.value = false
     return
@@ -1158,7 +1205,11 @@ const collabEvents = computed<CollabEvent[]>(() => {
 
           <!-- 操作结果：紧邻保存栏，让反馈立即可见 -->
           <div class="action-feedback">
-            <p v-if="actionErr" class="err msg">{{ actionErr }}</p>
+            <div v-if="conflictRefresh" class="conflict-tip">
+              <span>⚠️ {{ actionErr }}</span>
+              <button class="d-btn mini" :disabled="loading" @click="refreshNow">立即刷新</button>
+            </div>
+            <p v-if="actionErr && !conflictRefresh" class="err msg">{{ actionErr }}</p>
             <p v-if="actionOk && !inquireDialog && !quoteDialog" class="ok msg">{{ actionOk }}</p>
           </div>
 
@@ -1520,6 +1571,9 @@ const collabEvents = computed<CollabEvent[]>(() => {
 .nd-empty { padding: 12px 14px; border: 1px dashed var(--k-line); border-radius: 8px; color: var(--k-muted); font-size: 13px; }
 .action-feedback { padding: 0 18px 8px; }
 .action-feedback .msg { margin: 0 0 6px; }
+.conflict-tip { display: flex; align-items: center; gap: 10px; background: #fff4e5; border: 1px solid #ffb74d; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; font-size: 12px; color: #8a5300; line-height: 1.5; }
+.conflict-tip .d-btn.mini { flex: 0 0 auto; padding: 4px 12px; font-size: 12px; border-radius: 6px; background: var(--teal-600); color: #fff; border: none; cursor: pointer; }
+.conflict-tip .d-btn.mini:disabled { opacity: .6; cursor: not-allowed; }
 .suggest { padding: 14px 18px 0; }
 .suggest label { display: block; font-size: 12px; color: var(--k-muted); font-weight: 600; margin-bottom: 6px; }
 .suggest textarea { width: 100%; background: #fff; border: 1px solid var(--k-line); border-radius: 8px; padding: 8px 10px; font-size: 13px; font-family: inherit; color: var(--k-ink); resize: vertical; min-height: 48px; box-sizing: border-box; }
