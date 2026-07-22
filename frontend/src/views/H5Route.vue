@@ -877,8 +877,16 @@ function goHome() {
 
       <div class="h5-feedback" v-if="!isAgencyView">
         <h3>补充说明（可选）</h3>
-        <input v-model="authorName" class="h5-input" placeholder="您的称呼（可选，将显示在历史记录中）" />
-        <textarea v-model="feedback" class="h5-input" rows="4" placeholder="填写您对行程 / 报价的补充说明…"></textarea>
+        <div class="h5-fb-field">
+          <input v-model="authorName" class="h5-input" placeholder="您的称呼（可选，将显示在历史记录中）" />
+          <textarea
+            v-model="feedback"
+            class="h5-input"
+            rows="5"
+            placeholder="填写您对行程 / 报价的补充说明…"
+            style="resize: vertical; min-height: 110px; line-height: 1.6;"
+          ></textarea>
+        </div>
         <button class="btn btn-primary" :disabled="submitting" @click="onSend">
           {{ submitting ? '提交中…' : '提交补充说明' }}
         </button>
@@ -939,7 +947,10 @@ function goHome() {
 .day { border-top: 1px solid var(--line); padding: 10px 0; }
 .line { color: var(--ink); font-size: 14px; margin: 2px 0; }
 .muted { color: var(--muted); }
-.h5-feedback { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
+.h5-feedback { margin-top: 16px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.h5-feedback h3 { margin-top: 0; color: var(--brand-600, #a60d26); }
+.h5-fb-field { margin-top: 10px; }
+.h5-fb-field label { display: block; font-size: 12px; color: var(--muted); font-weight: 500; margin-bottom: 6px; }
 .h5-input { width: 100%; margin: 8px 0; padding: 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; box-sizing: border-box; font-family: inherit; }
 .thanks { color: var(--ok); margin-top: 8px; }
 .err { color: var(--danger); margin-top: 8px; }
