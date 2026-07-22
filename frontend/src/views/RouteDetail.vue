@@ -514,11 +514,11 @@ async function doInquire() {
     const qs = params.toString()
     const link = qs ? `${base}?${qs}` : base
 
-    // 3) 构造结构化文案（需求：措辞改为「向你规划路线和询价并回传」，并带上具体省地接社机构名）
+    // 3) 构造结构化文案（措辞：PandaKing 已拟定初步行程，提交至贵社进行路线优化及报价，并带上具体省地接社机构名）
     const caption = shareH5Caption(data.value ?? undefined)
     const provAg = provincialAgencies.value.find((a) => a.id === collabProvId.value)
     const targetLabel = provAg?.name ? `（${provAg.name}）` : ''
-    const text = `${caption}\n\nPandaKing 已生成行程方案，向你${targetLabel}规划路线和询价并回传：\n\n👉 查看并回复：${link}`
+    const text = `${caption}\n\nPandaKing 已拟定初步行程，现提交至贵社${targetLabel}进行路线优化及报价，烦请查收反馈。\n\n👉 查看并回复：${link}`
 
     // 计算本轮关键变更摘要（面向省地接社：仅成本① + 行程，不含 PandaKing 内部利润①），合并为修改记录，并附到微信文案
     const changes = changesForProvincial.value

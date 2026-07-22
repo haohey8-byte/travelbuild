@@ -78,8 +78,8 @@ export function shareH5Caption(route?: {
   const dest = safeText(route?.destination)
   const date = formatTravelDate(route?.travelDate)
   const head = [who, dest, date].filter(Boolean).join(' · ')
-  if (head) return `${head} 定制行程报价`
-  return '定制行程报价方案'
+  if (head) return `${head} 规划路线审核及询价`
+  return '规划路线审核及询价方案'
 }
 
 // 出行日期格式化为「7月25日」等简短中文形式（兼容 ISO 与纯日期字符串）
@@ -353,7 +353,7 @@ export function formatQuoteChanges(ch: ProvincialChanges): string {
 }
 
 function buildNotify(tag: string, head: string, bodyLines: string[], url: string): string {
-  return ['【行程协作·' + tag + '】' + (head || '定制行程'), '', ...bodyLines, '', '👉 查看并回复：' + url].join('\n')
+  return ['【行程协作·' + tag + '】' + (head || '规划路线审核及询价'), '', ...bodyLines, '', '👉 查看并回复：' + url].join('\n')
 }
 
 export function collabNotifyText(opts: CollabNotifyOpts): string {

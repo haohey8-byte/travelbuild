@@ -496,7 +496,7 @@ onMounted(async () => {
       initialAgProfit2.value = Number(agProfit2.value) || 0
       initialAgItinerary.value = { days: itinerary.value.days.map((dd) => ({ day: dd.day, city: dd.city })) }
     }
-    const title = `${safeText(d.destination) || '定制行程'} · 定制行程方案`
+    const title = `${safeText(d.destination) || '定制行程'} · 规划路线审核及询价方案`
     document.title = title
     updateOgMeta('og:title', title)
     if (isPublicView.value) {
