@@ -844,10 +844,20 @@ function goHome() {
               <button class="btn ghost sm" @click="removeDay(di)">删除当天</button>
             </div>
           </div>
+          <!-- 只读详情（折叠徽章已含酒店+景点数+用餐数；展开后只展示"汇总看不到的细节"：景点名/餐饮名，去掉与徽章重复的"住宿"行；空数据整行隐藏） -->
           <div v-else class="day-readonly">
-            <div v-if="d.spots?.length" class="line">景点：{{ d.spots.filter(Boolean).join('、') || '—' }}</div>
-            <div v-if="d.hotel" class="line">住宿：{{ d.hotel }}</div>
-            <div v-if="d.meals?.length" class="line">餐饮：{{ d.meals.filter(Boolean).join('、') || '—' }}</div>
+            <div v-if="d.spots?.filter(Boolean).length" class="day-readonly-row">
+              <span class="day-readonly-lab">景点</span>
+              <span class="day-chips">
+                <span v-for="(s, si) in d.spots.filter(Boolean)" :key="si" class="day-chip day-chip-spot">{{ s }}</span>
+              </span>
+            </div>
+            <div v-if="d.meals?.filter(Boolean).length" class="day-readonly-row">
+              <span class="day-readonly-lab">餐饮</span>
+              <span class="day-chips">
+                <span v-for="(m, mi) in d.meals.filter(Boolean)" :key="mi" class="day-chip day-chip-meal">{{ m }}</span>
+              </span>
+            </div>
           </div>
         </div>
         <button v-if="canEditItinerary" class="btn dash" @click="addDay">+ 添加一天</button>
@@ -977,7 +987,13 @@ h3 { font-size: 15px; margin: 14px 0 0; }
 .day-inline-row { display: flex; gap: 6px; margin-bottom: 6px; }
 .day-inline-row input { flex: 1; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; font-family: inherit; }
 .day-actions { margin-top: 8px; display: flex; justify-content: flex-end; }
-.day-readonly { padding: 10px 12px; background: var(--surface-2, #fbfcfe); }
+.day-readonly { padding: 10px 12px; background: var(--surface-2, #fbfcfe); display: flex; flex-direction: column; gap: 8px; }
+.day-readonly-row { display: flex; align-items: flex-start; gap: 8px; }
+.day-readonly-lab { flex-shrink: 0; font-size: 12px; color: var(--muted); line-height: 22px; min-width: 32px; }
+.day-chips { display: flex; flex-wrap: wrap; gap: 4px; flex: 1; }
+.day-chip { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; line-height: 18px; font-weight: 500; }
+.day-chip-spot { background: var(--brand-50, #fdeef0); color: var(--brand-700, #a60d26); border: 1px solid var(--brand-100, #fbd5dc); }
+.day-chip-meal { background: #fff7e6; color: #ad6800; border: 1px solid #ffe7ba; }
 .btn { width: 100%; margin-top: 8px; padding: 10px; border: 1px solid var(--line-strong); background: var(--surface); border-radius: 10px; cursor: pointer; font-size: 14px; font-family: inherit; }
 .btn-primary { background: var(--brand); color: #fff; border: none; padding: 12px; font-weight: 700; }
 .btn-primary:disabled { opacity: 0.6; }
