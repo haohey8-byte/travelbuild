@@ -13,6 +13,9 @@ import {
 import { hideCostsForRole, maskQuotePublic, recalcQuote, Role } from './role-visibility'
 import { Prisma } from '@prisma/client'
 
+// 机构提交链接每 token 限流窗口：同一链接 10 分钟内仅允许提交一次，防滥用（合法重提交通常跨天）
+const INTAKE_RATE_LIMIT_MS = 10 * 60 * 1000
+
 // 路线操作主体（来自 JWT 守卫注入）：用于机构间物理隔绝
 type RoutePrincipal = { role: Role; agencyId: string | null }
 
@@ -497,24 +500,50 @@ export class RoutesService {
   // ===== 机构提交链接（route-intake）：PandaKing 预发常驻链接，机构免登录提交路线初稿 =====
   // 链接双向：机构可主动发起，或 PandaKing 把链接发给机构。
   // token 为 DB 常驻记录（RouteIntake），钉死 agencyId；30 天过期。
-  async createIntakeLink(agencyId: string, callerId: string) {
+  // 选项：有效期 / 备注。
+  // permanent=true → 永久（expiresAt=null）；否则 expiresInDays / customExpiresAt 二选一；都不传 → 默认 30 天。
+  async createIntakeLink(
+    agencyId: string,
+    callerId: string,
+    opts?: { permanent?: boolean; expiresInDays?: number; customExpiresAt?: string; note?: string },
+  ) {
     const agency = await this.prisma.agency.findUnique({ where: { id: agencyId } })
     if (!agency || agency.role !== 'agency') {
       throw new BadRequestException('机构不存在或不是境外旅行社（agency）')
     }
+    // 每机构单条常驻：重复预发 = 作废旧链接（旧 token 立即失效），实现「可重复生成替换」
+    await this.prisma.routeIntake.deleteMany({ where: { agencyId } })
+
+    const expiresAt = this.resolveIntakeExpiry(opts)
+    const note = opts?.note?.trim() || null
     const intake = await this.prisma.routeIntake.create({
-      data: {
-        token: genToken(),
-        agencyId,
-        createdById: callerId,
-        expiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000),
-      },
+      data: { token: genToken(), agencyId, createdById: callerId, expiresAt, note },
     })
     return {
       token: intake.token,
       link: `/h5/intake/${intake.token}`,
-      expiresAt: intake.expiresAt.toISOString(),
+      expiresAt: intake.expiresAt?.toISOString() ?? null,
+      permanent: !intake.expiresAt,
+      note: intake.note,
     }
+  }
+
+  // 计算提交链接过期时间（null = 永久有效）
+  private resolveIntakeExpiry(opts?: {
+    permanent?: boolean
+    expiresInDays?: number
+    customExpiresAt?: string
+  }): Date | null {
+    if (opts?.permanent) return null
+    if (opts?.customExpiresAt) {
+      const d = new Date(opts.customExpiresAt)
+      if (isNaN(d.getTime())) throw new BadRequestException('自定义过期时间无效')
+      return d
+    }
+    if (typeof opts?.expiresInDays === 'number' && opts.expiresInDays > 0) {
+      return new Date(Date.now() + opts.expiresInDays * 24 * 3600 * 1000)
+    }
+    return new Date(Date.now() + 30 * 24 * 3600 * 1000) // 默认 30 天
   }
 
   // 已生成机构提交链接列表（按角色裁剪：一手见全部；境外社仅见自己机构；省地接社无）
@@ -547,8 +576,10 @@ export class RoutesService {
       createdById: i.createdById,
       createdByName: creatorMap.get(i.createdById) || '未知',
       createdAt: i.createdAt.toISOString(),
-      expiresAt: i.expiresAt.toISOString(),
-      expired: i.expiresAt.getTime() < Date.now(),
+      expiresAt: i.expiresAt?.toISOString() ?? null,
+      permanent: i.expiresAt === null,
+      expired: i.expiresAt ? i.expiresAt.getTime() < Date.now() : false,
+      note: i.note ?? null,
       copies: i.copies,
       lastCopiedAt: i.lastCopiedAt?.toISOString() ?? null,
     }))
@@ -563,6 +594,79 @@ export class RoutesService {
       data: { copies: { increment: 1 }, lastCopiedAt: new Date() },
     })
     return { copies: updated.copies, lastCopiedAt: updated.lastCopiedAt?.toISOString() ?? null }
+  }
+
+  // 撤销提交链接（DELETE）：作废该 token，旧链接立即失效。
+  // 权限：一手可撤任意；境外社仅可撤自己机构的链接。
+  async deleteIntakeLink(
+    token: string,
+    principal?: { role: Role; agencyId: string | null },
+  ) {
+    const intake = await this.prisma.routeIntake.findUnique({ where: { token } })
+    if (!intake) throw new NotFoundException('提交链接不存在')
+    if (principal?.role === 'agency' && principal.agencyId !== intake.agencyId) {
+      throw new ForbiddenException('只能撤销本机构的提交链接')
+    }
+    await this.prisma.routeIntake.delete({ where: { token } })
+    return { ok: true }
+  }
+
+  // 原地编辑提交链接（PATCH）：改有效期 / 备注，但不改 token（保持链接稳定）。
+  // 仅当显式传了有效期相关字段才重算 expiresAt；否则保留原值（只改备注）。
+  async updateIntakeLink(
+    token: string,
+    principal?: { role: Role; agencyId: string | null },
+    opts?: { permanent?: boolean; expiresInDays?: number; customExpiresAt?: string; note?: string },
+  ) {
+    const intake = await this.prisma.routeIntake.findUnique({ where: { token } })
+    if (!intake) throw new NotFoundException('提交链接不存在')
+    if (principal?.role === 'agency' && principal.agencyId !== intake.agencyId) {
+      throw new ForbiddenException('只能编辑本机构的提交链接')
+    }
+    const hasValidityChange =
+      opts?.permanent !== undefined ||
+      opts?.expiresInDays !== undefined ||
+      opts?.customExpiresAt !== undefined
+    const data: { expiresAt?: Date | null; note?: string | null } = {}
+    if (hasValidityChange) data.expiresAt = this.resolveIntakeExpiry(opts)
+    if (opts?.note !== undefined) data.note = opts.note.trim() || null
+    if (Object.keys(data).length === 0) {
+      return this.toIntakeView(intake)
+    }
+    const updated = await this.prisma.routeIntake.update({ where: { token }, data })
+    return this.toIntakeView(updated)
+  }
+
+  // 序列化为列表视图（单条场景补机构名 / 创建人名）
+  private async toIntakeView(i: {
+    id: string
+    token: string
+    agencyId: string
+    createdById: string
+    createdAt: Date
+    expiresAt: Date | null
+    note: string | null
+    copies: number
+    lastCopiedAt: Date | null
+  }) {
+    const agency = await this.prisma.agency.findUnique({ where: { id: i.agencyId } })
+    const creator = await this.prisma.user.findUnique({ where: { id: i.createdById } })
+    return {
+      id: i.id,
+      token: i.token,
+      link: `/h5/intake/${i.token}`,
+      agencyId: i.agencyId,
+      agencyName: agency?.name ?? i.agencyId,
+      createdById: i.createdById,
+      createdByName: creator?.name ?? '未知',
+      createdAt: i.createdAt.toISOString(),
+      expiresAt: i.expiresAt?.toISOString() ?? null,
+      permanent: i.expiresAt === null,
+      expired: i.expiresAt ? i.expiresAt.getTime() < Date.now() : false,
+      note: i.note ?? null,
+      copies: i.copies,
+      lastCopiedAt: i.lastCopiedAt?.toISOString() ?? null,
+    }
   }
 
   // 机构凭提交链接（免登录）提交路线初稿 → 创建 Route（归属钉死 agencyId）+ 初始版本。
@@ -584,7 +688,18 @@ export class RoutesService {
     }
     const intake = await this.prisma.routeIntake.findUnique({ where: { token: body.token } })
     if (!intake) throw new NotFoundException('提交链接无效')
-    if (intake.expiresAt.getTime() < Date.now()) throw new NotFoundException('提交链接已过期')
+    if (intake.expiresAt && intake.expiresAt.getTime() < Date.now())
+      throw new NotFoundException('提交链接已过期')
+    // 每 token 限流：同一链接 10 分钟内仅允许提交一次，防滥用（合法重提交通常跨天）
+    if (
+      intake.lastSubmittedAt &&
+      Date.now() - intake.lastSubmittedAt.getTime() < INTAKE_RATE_LIMIT_MS
+    ) {
+      throw new BadRequestException({
+        code: 'INTAKE_RATE_LIMITED',
+        message: '提交过于频繁，请稍后再试（10 分钟内仅可提交一次）',
+      })
+    }
     const org = await this.prisma.agency.findUnique({ where: { id: intake.agencyId } })
     const route = await this.create(
       {
@@ -607,6 +722,11 @@ export class RoutesService {
       },
       { role: 'agency', agencyId: intake.agencyId },
     )
+    // 记录提交次数与时间（限流用）
+    await this.prisma.routeIntake.update({
+      where: { token: body.token },
+      data: { submitCount: { increment: 1 }, lastSubmittedAt: new Date() },
+    })
     return { routeId: route.id, success: true }
   }
 

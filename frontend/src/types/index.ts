@@ -320,7 +320,9 @@ export interface IntakeResult {
 export interface IntakeLink {
   token: string
   link: string
-  expiresAt?: string
+  expiresAt?: string | null
+  permanent?: boolean
+  note?: string | null
 }
 
 // 已生成机构提交链接（列表 / 复制历史）
@@ -333,8 +335,19 @@ export interface IntakeLinkView {
   createdById: string
   createdByName: string
   createdAt: string
-  expiresAt: string
+  expiresAt: string | null
+  permanent?: boolean
   expired: boolean
+  note?: string | null
   copies: number
   lastCopiedAt: string | null
+}
+
+// 预发 / 编辑提交链接的有效期选项
+// permanent=true → 永久；expiresInDays 天数；customExpiresAt ISO 字符串；都不传 → 默认 30 天
+export interface IntakeLinkOpts {
+  permanent?: boolean
+  expiresInDays?: number
+  customExpiresAt?: string
+  note?: string
 }

@@ -10,6 +10,7 @@ import type {
   IntakeResult,
   IntakeLink,
   IntakeLinkView,
+  IntakeLinkOpts,
 } from '@/types'
 
 // 一手查看已删除路线的归档快照（列表 / 详情）
@@ -46,9 +47,9 @@ export async function deleteRoute(id: string): Promise<{ id: string; archived: b
 }
 
 // ===== 机构提交链接（route-intake）=====
-// PandaKing 预发常驻提交链接（钉死 agencyId，30 天过期）
-export async function createIntakeLink(agencyId: string): Promise<IntakeLink> {
-  const { data } = await client.post('/routes/intake-link', { agencyId })
+// PandaKing 预发常驻提交链接（钉死 agencyId；支持永久/自定义有效期 + 备注；每机构单条常驻）
+export async function createIntakeLink(agencyId: string, opts?: IntakeLinkOpts): Promise<IntakeLink> {
+  const { data } = await client.post('/routes/intake-link', { agencyId, ...(opts || {}) })
   return data
 }
 
@@ -67,6 +68,18 @@ export async function listIntakeLinks(): Promise<IntakeLinkView[]> {
 // 复制计数（复制历史）：自增 copies + 写最近复制时间
 export async function copyIntakeLink(token: string): Promise<{ copies: number; lastCopiedAt: string | null }> {
   const { data } = await client.post(`/routes/intake-link/${token}/copy`)
+  return data
+}
+
+// 原地编辑提交链接（PATCH）：改有效期 / 备注，不改 token
+export async function updateIntakeLink(token: string, opts: IntakeLinkOpts): Promise<IntakeLinkView> {
+  const { data } = await client.patch(`/routes/intake-link/${token}`, opts)
+  return data
+}
+
+// 撤销提交链接（DELETE）：作废 token，旧链接立即失效
+export async function deleteIntakeLink(token: string): Promise<{ ok: boolean }> {
+  const { data } = await client.delete(`/routes/intake-link/${token}`)
   return data
 }
 

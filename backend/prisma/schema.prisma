@@ -180,15 +180,19 @@ model RouteShare {
 }
 
 // 机构提交链接（PandaKing 预发常驻，机构免登录提交路线初稿）
+// expiresAt 为 null = 永久有效（显式开关，非默认）；note 备注用途/联系人
 model RouteIntake {
-  id           String    @id @default(uuid())
-  token        String    @unique
-  agencyId     String                 // 归属机构 org id（钉死，提交时作 Route.agencyId）
-  createdById  String                 // 发链接的 PandaKing 管理员 id
-  expiresAt    DateTime               // 30 天过期
-  copies       Int       @default(0)  // 复制次数（复制历史）
-  lastCopiedAt DateTime?              // 最近一次复制时间
-  createdAt    DateTime  @default(now())
+  id             String    @id @default(uuid())
+  token          String    @unique
+  agencyId       String                 // 归属机构 org id（钉死，提交时作 Route.agencyId）
+  createdById    String                 // 发链接的 PandaKing 管理员 id
+  expiresAt      DateTime?              // null = 永久有效；否则绝对过期时间
+  note           String?                // 备注（如机构联系人 / 用途说明）
+  copies         Int       @default(0)  // 复制次数（复制历史）
+  lastCopiedAt   DateTime?              // 最近一次复制时间
+  submitCount    Int       @default(0)  // 提交次数（每 token 限流用）
+  lastSubmittedAt DateTime?             // 最近一次提交时间（每 token 限流用）
+  createdAt      DateTime  @default(now())
   @@index([agencyId])
 }
 

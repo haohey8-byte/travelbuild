@@ -542,8 +542,9 @@ export class AuthService {
         message: '该机构仍有进行中路线，暂不能删除',
       })
     }
+    // 未过期链接（含永久有效 expiresAt=null）都算活跃，阻止删除
     const activeLink = await this.prisma.routeIntake.findFirst({
-      where: { agencyId: id, expiresAt: { gt: new Date() } },
+      where: { agencyId: id, OR: [{ expiresAt: { gt: new Date() } }, { expiresAt: null }] },
     })
     if (activeLink) {
       throw new BadRequestException({

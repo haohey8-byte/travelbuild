@@ -26,7 +26,8 @@ export class ShareTokenGuard implements CanActivate {
     if (!intake) {
       throw new NotFoundException({ code: 'INTAKE_INVALID', message: '提交链接无效' })
     }
-    if (intake.expiresAt.getTime() < Date.now()) {
+    // expiresAt 为 null = 永久有效，直接放行；否则校验绝对过期时间
+    if (intake.expiresAt && intake.expiresAt.getTime() < Date.now()) {
       throw new NotFoundException({ code: 'INTAKE_EXPIRED', message: '提交链接已过期' })
     }
     req.intake = {
