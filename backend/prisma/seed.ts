@@ -6,6 +6,9 @@ const prisma = new PrismaClient()
 // 种子管理员登录凭据（覆盖：环境变量 > 默认值）。固定弱密码 + 首次强制改密兜底。
 const SEED_ADMIN_PHONE = process.env.SEED_ADMIN_PHONE || '13800000000'
 const SEED_ADMIN_PWD = process.env.SEED_ADMIN_PWD || 'Pandaking@2026'
+// 种子协作者手机号（必须 unique 且非空，故为每条预置独立号码；与 seed-pk 不冲突）
+const SEED_AGENCY_PHONE = process.env.SEED_AGENCY_PHONE || '13800000001'
+const SEED_PROVINCIAL_PHONE = process.env.SEED_PROVINCIAL_PHONE || '13800000002'
 
 // 幂等种子：以固定 id upsert，重复执行安全
 async function main() {
@@ -65,24 +68,26 @@ async function main() {
   }
   const agency = await prisma.user.upsert({
     where: { id: 'seed-agency' },
-    update: { agencyId: agencyOrg.id, level: 'admin' },
+    update: { agencyId: agencyOrg.id, level: 'admin', phone: SEED_AGENCY_PHONE },
     create: {
       id: 'seed-agency',
       name: '环球旅行社',
       role: 'agency',
       agencyId: agencyOrg.id,
       level: 'admin',
+      phone: SEED_AGENCY_PHONE,
     },
   })
   const provincial = await prisma.user.upsert({
     where: { id: 'seed-provincial' },
-    update: { agencyId: provincialOrg.id, level: 'admin' },
+    update: { agencyId: provincialOrg.id, level: 'admin', phone: SEED_PROVINCIAL_PHONE },
     create: {
       id: 'seed-provincial',
       name: '川内地接社',
       role: 'provincial',
       agencyId: provincialOrg.id,
       level: 'admin',
+      phone: SEED_PROVINCIAL_PHONE,
     },
   })
 
