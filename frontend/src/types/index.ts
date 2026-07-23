@@ -105,6 +105,7 @@ export interface Agency {
   name: string
   role: Role
   contact?: string | null
+  disabled?: boolean // 禁用：仅从选择下拉框移除，不阻断登录
   createdAt: string
 }
 

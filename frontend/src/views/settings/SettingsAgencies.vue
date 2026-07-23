@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { fetchAgencies } from '@/api/auth'
+import { fetchAgencies, updateAgency } from '@/api/auth'
 import { copyText } from '@/utils/share'
 import type { Agency, AgencyView, Role } from '@/types'
 
@@ -26,7 +26,60 @@ const deleteTarget = ref<Agency | null>(null)
 const deleteErr = ref('')
 const deleting = ref(false)
 
+// —— 修改旅行社（名称 / 联系方式；角色结构性锁定）——
+const editTarget = ref<Agency | null>(null)
+const editForm = ref({ name: '', contact: '' })
+const editErr = ref('')
+const editSaving = ref(false)
+
+// —— 禁用 / 启用切换（仅从下拉框移除，不阻断登录）——
+const togglingId = ref('')
+
 const ROLE_LABEL: Record<string, string> = { agency: '境外旅行社', provincial: '省地接社' }
+
+// 用后端返回的最新旅行社就地替换本地列表项（避免整表重拉闪烁）
+function replaceLocal(updated: Agency) {
+  const i = agencies.value.findIndex((a) => a.id === updated.id)
+  if (i >= 0) agencies.value[i] = updated
+  else agencies.value = [...agencies.value, updated]
+}
+
+async function onEdit(a: Agency) {
+  editTarget.value = a
+  editForm.value = { name: a.name, contact: a.contact || '' }
+  editErr.value = ''
+}
+async function onSaveEdit() {
+  if (!editTarget.value) return
+  editErr.value = ''
+  if (!editForm.value.name.trim()) return (editErr.value = '旅行社名称不能为空')
+  editSaving.value = true
+  try {
+    const updated = await updateAgency(editTarget.value.id, {
+      name: editForm.value.name.trim(),
+      contact: editForm.value.contact.trim() || undefined,
+    })
+    replaceLocal(updated)
+    editTarget.value = null
+  } catch (e: any) {
+    editErr.value = e?.response?.data?.message || '保存失败'
+  } finally {
+    editSaving.value = false
+  }
+}
+
+async function onToggle(a: Agency) {
+  if (togglingId.value) return
+  togglingId.value = a.id
+  try {
+    const updated = await updateAgency(a.id, { disabled: !a.disabled })
+    replaceLocal(updated)
+  } catch (e: any) {
+    loadErr.value = e?.response?.data?.message || '切换启用/禁用失败'
+  } finally {
+    togglingId.value = ''
+  }
+}
 
 async function load() {
   loading.value = true
@@ -105,18 +158,27 @@ onMounted(load)
     <p v-else-if="loadErr" class="err">⚠ {{ loadErr }}</p>
     <div v-else class="tbl-wrap">
       <table class="tbl">
-        <thead><tr><th>旅行社编号</th><th>名称</th><th>角色</th><th>联系方式</th><th>操作</th></tr></thead>
+        <thead><tr><th>旅行社编号</th><th>名称</th><th>角色</th><th>联系方式</th><th>状态</th><th>操作</th></tr></thead>
         <tbody>
           <tr v-for="a in agencies" :key="a.id">
             <td>{{ a.id }}</td>
             <td>{{ a.name }}</td>
             <td>{{ ROLE_LABEL[a.role] || a.role }}</td>
             <td>{{ a.contact || '-' }}</td>
+            <td>
+              <span class="badge" :class="a.disabled ? 'badge-off' : 'badge-on'">
+                {{ a.disabled ? '已禁用' : '启用中' }}
+              </span>
+            </td>
             <td class="ops">
+              <button class="btn ghost sm" type="button" @click="onEdit(a)">修改</button>
+              <button class="btn ghost sm" type="button" :disabled="togglingId === a.id" @click="onToggle(a)">
+                {{ togglingId === a.id ? '处理中…' : a.disabled ? '启用' : '禁用' }}
+              </button>
               <button class="btn ghost sm danger" type="button" @click="deleteTarget = a; deleteErr = ''">删除</button>
             </td>
           </tr>
-          <tr v-if="!agencies.length"><td colspan="5" class="muted">暂无旅行社</td></tr>
+          <tr v-if="!agencies.length"><td colspan="6" class="muted">暂无旅行社</td></tr>
         </tbody>
       </table>
     </div>
@@ -164,6 +226,25 @@ onMounted(load)
       </div>
     </div>
 
+    <!-- 修改旅行社：名称 / 联系方式（角色结构性锁定，不可改） -->
+    <div v-if="editTarget" class="modal-backdrop" @click.self="editTarget = null">
+      <div class="modal">
+        <h3>修改旅行社「{{ editTarget.name }}」</h3>
+        <div class="row"><label>旅行社编号</label><input :value="editTarget.id" class="input" disabled /></div>
+        <div class="row"><label>角色</label><input :value="ROLE_LABEL[editTarget.role] || editTarget.role" class="input" disabled /></div>
+        <div class="row"><label>名称</label><input v-model="editForm.name" class="input" placeholder="旅行社名称" /></div>
+        <div class="row"><label>联系方式</label><input v-model="editForm.contact" class="input" placeholder="邮箱 / 电话（可选）" /></div>
+        <p class="muted">角色为结构性字段（决定编号前缀语义），此处锁定不可修改。</p>
+        <p v-if="editErr" class="err">{{ editErr }}</p>
+        <div class="modal-actions">
+          <button class="btn" type="button" @click="editTarget = null">取消</button>
+          <button class="btn btn-primary" :disabled="editSaving" type="button" @click="onSaveEdit">
+            {{ editSaving ? '保存中…' : '保存' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- 删除确认 -->
     <div v-if="deleteTarget" class="modal-backdrop" @click.self="deleteTarget = null">
       <div class="modal">
@@ -190,6 +271,9 @@ onMounted(load)
 .tbl th, .tbl td { padding: 10px 14px; border-bottom: 1px solid var(--line); text-align: left; font-size: 13px; }
 .tbl th { background: var(--bg); color: var(--muted); }
 .ops { display: flex; gap: 6px; }
+.badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 1.6; }
+.badge-on { background: color-mix(in srgb, var(--brand) 16%, transparent); color: var(--brand); }
+.badge-off { background: var(--line); color: var(--muted); }
 .row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
 .row label { color: var(--muted); width: 72px; flex: none; font-size: 13px; }
 .input { flex: 1; padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); font-size: 14px; }

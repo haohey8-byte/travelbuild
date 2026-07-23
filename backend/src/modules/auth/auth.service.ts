@@ -575,6 +575,38 @@ export class AuthService {
     })
   }
 
+  // 修改旅行社档案 / 切换启用禁用（仅一手）
+  // 仅允许改 name / contact / disabled；role 为结构性字段（决定编号前缀语义）保持锁定。
+  // disabled=true 仅让该旅行社从各选择下拉框消失，不阻断其登录账号（按需求范围）。
+  async updateAgency(
+    id: string,
+    body: { name?: string; contact?: string; disabled?: boolean },
+    caller: AuthPrincipal,
+  ) {
+    if (caller.role !== 'pandaking') {
+      throw new UnauthorizedException('仅一手 PandaKing 可管理机构')
+    }
+    const agency = await this.prisma.agency.findUnique({ where: { id } })
+    if (!agency) throw new NotFoundException({ code: 'AGENCY_NOT_FOUND', message: '旅行社不存在' })
+
+    const data: { name?: string; contact?: string | null; disabled?: boolean } = {}
+    if (typeof body.name === 'string') {
+      const n = body.name.trim()
+      if (!n) throw new BadRequestException('旅行社名称不能为空')
+      data.name = n
+    }
+    if (typeof body.contact === 'string') {
+      data.contact = body.contact.trim() || null
+    }
+    if (typeof body.disabled === 'boolean') {
+      data.disabled = body.disabled
+    }
+    if (Object.keys(data).length === 0) {
+      return agency // 无可改字段，原样返回
+    }
+    return this.prisma.agency.update({ where: { id }, data })
+  }
+
   async updateMemberRole(id: string, role: Role, caller: AuthPrincipal) {
     if (caller.role !== 'pandaking') {
       throw new UnauthorizedException('仅一手 PandaKing 可调整成员角色')

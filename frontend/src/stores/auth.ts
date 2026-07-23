@@ -14,6 +14,7 @@ import {
   disableAdmin as disableAdminApi,
   createAgency as createAgencyApi,
   deleteAgency as deleteAgencyApi,
+  updateAgency as updateAgencyApi,
 } from '@/api/auth'
 
 // 鉴权与全局上下文（角色切换、语言切换、登录态）
@@ -92,6 +93,9 @@ export const useAuthStore = defineStore('auth', () => {
   }
   async function deleteAgency(id: string) {
     return await deleteAgencyApi(id)
+  }
+  async function updateAgency(id: string, body: { name?: string; contact?: string; disabled?: boolean }) {
+    return await updateAgencyApi(id, body)
   }
 
   async function loginByInvite(token: string, name: string) {

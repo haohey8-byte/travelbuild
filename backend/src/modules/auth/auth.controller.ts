@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Req, UseGuards } from '@nestjs/common'
 import { Request } from 'express'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
@@ -152,6 +152,17 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   listAgencies(@CurrentUser() user: AuthUser) {
     return this.svc.listAgencies(user as AuthPrincipal)
+  }
+
+  // 修改旅行社档案 / 切换启用禁用（name / contact / disabled 部分更新，仅一手）
+  @Patch('agencies/:id')
+  @UseGuards(JwtAuthGuard)
+  updateAgency(
+    @Param('id') id: string,
+    @Body() body: { name?: string; contact?: string; disabled?: boolean },
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.svc.updateAgency(id, body, user as AuthPrincipal)
   }
 
   // 改成员角色（仅一手）

@@ -22,7 +22,7 @@ const loadingIntakeLinks = ref(false)
 const copiedToken = ref('')
 
 // 一手可选全部境外旅行社；agency 仅自己（后端亦按 role 裁剪，前端预选并锁定）
-const agencyOptions = computed(() => agencies.value.filter((a) => a.role === 'agency'))
+const agencyOptions = computed(() => agencies.value.filter((a) => a.role === 'agency' && !a.disabled))
 
 function fullLink(link: string) {
   const base = import.meta.env.VITE_BASE || '/'

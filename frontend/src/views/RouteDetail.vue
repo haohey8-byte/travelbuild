@@ -374,7 +374,7 @@ async function loadProvincialAgencies() {
   loadingProvincialAgencies.value = true
   try {
     const all = await fetchAgencies()
-    provincialAgencies.value = all.filter((a) => a.role === 'provincial')
+    provincialAgencies.value = all.filter((a) => a.role === 'provincial' && !a.disabled)
   } catch {
     provincialAgencies.value = []
   } finally {

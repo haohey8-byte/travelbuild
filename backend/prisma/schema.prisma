@@ -30,6 +30,7 @@ model Agency {
   name       String
   role       Role          // agency | provincial
   contact    String?
+  disabled   Boolean       @default(false) // 禁用：仅从各选择下拉框中移除，不阻断登录
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
   users      User[]
