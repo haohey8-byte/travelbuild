@@ -42,6 +42,6 @@ COPY --from=build /app/backend/public ./backend/public
 COPY --from=build /app/backend/package.json ./backend/package.json
 EXPOSE 3000
 ENV PORT=3000
-# 容器启动自动执行迁移（CloudBase 内网 DATABASE_URL 可连库），再启动后端。
-# 幂等：已应用的迁移不会重跑；迁移失败则容器退出，便于快速暴露问题。
-CMD ["sh", "-c", "backend/node_modules/.bin/prisma migrate deploy --schema backend/prisma/schema.prisma && node backend/dist/main.js"]
+# 容器启动：先迁移（幂等），再幂等种子（确保初始管理员账号存在且可登录，
+# 仅当 seed-pk 缺密码时补种，已改密的不覆盖），最后启动后端。
+CMD ["sh", "-c", "backend/node_modules/.bin/prisma migrate deploy --schema backend/prisma/schema.prisma && backend/node_modules/.bin/tsx backend/prisma/seed.ts && node backend/dist/main.js"]
