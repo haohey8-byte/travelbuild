@@ -74,9 +74,9 @@ export async function fetchAgencies(): Promise<Agency[]> {
   return data
 }
 
-// D1/D4：建机构时一并建该机构控制台登录账号（phone 必填；initPwd 可选，不传则后端生成并一次性返回）
+// D1/D4：建机构时一并建该机构控制台登录账号（phone 必填；id 可选，不传则后端自动生成；initPwd 可选，不传则后端生成并一次性返回）
 export async function createAgency(body: {
-  id: string
+  id?: string
   name: string
   role: Role
   contact?: string

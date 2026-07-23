@@ -135,7 +135,7 @@ export class AuthController {
   @Post('agencies')
   @UseGuards(JwtAuthGuard)
   createAgency(
-    @Body() body: { id: string; name: string; role: Role; contact?: string; phone: string; initPwd?: string },
+    @Body() body: { id?: string; name: string; role: Role; contact?: string; phone: string; initPwd?: string },
     @CurrentUser() user: AuthUser,
   ) {
     return this.svc.createAgency(body, user as AuthPrincipal)

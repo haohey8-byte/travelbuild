@@ -9,10 +9,11 @@ const auth = useAuthStore()
 
 const agencies = ref<Agency[]>([])
 const loading = ref(false)
+const loadErr = ref('')
 
-// —— 新增机构（一并建登录账号）——
+// —— 新增旅行社（一并建登录账号，编号由系统自动生成）——
 const showCreate = ref(false)
-const newAgency = ref({ id: '', name: '', role: 'agency' as Role, contact: '', phone: '', initPwd: '' })
+const newAgency = ref({ name: '', role: 'agency' as Role, contact: '', phone: '', initPwd: '' })
 const agencyErr = ref('')
 const agencySaving = ref(false)
 
@@ -20,7 +21,7 @@ const agencySaving = ref(false)
 const createdView = ref<AgencyView | null>(null)
 const copiedPwd = ref(false)
 
-// —— 删除机构（前置校验）——
+// —— 删除旅行社（前置校验）——
 const deleteTarget = ref<Agency | null>(null)
 const deleteErr = ref('')
 const deleting = ref(false)
@@ -29,10 +30,12 @@ const ROLE_LABEL: Record<string, string> = { agency: '境外旅行社', provinci
 
 async function load() {
   loading.value = true
+  loadErr.value = ''
   try {
     agencies.value = await fetchAgencies()
-  } catch {
+  } catch (e: any) {
     agencies.value = []
+    loadErr.value = `加载旅行社失败：${e?.response?.status || ''} ${e?.response?.data?.message || e?.message || '未知错误'}（token 前缀=${(localStorage.getItem('token') || '').slice(0, 12)}…）`
   } finally {
     loading.value = false
   }
@@ -40,13 +43,12 @@ async function load() {
 
 async function onCreate() {
   agencyErr.value = ''
-  if (!newAgency.value.id.trim() || !newAgency.value.name.trim()) return (agencyErr.value = '机构编号和名称必填')
+  if (!newAgency.value.name.trim()) return (agencyErr.value = '旅行社名称必填')
   if (!/^1[3-9]\d{9}$/.test(newAgency.value.phone.trim())) return (agencyErr.value = '登录手机号格式错误（11 位）')
   if (newAgency.value.initPwd && newAgency.value.initPwd.length < 8) return (agencyErr.value = '初始密码至少 8 位（留空则由系统生成）')
   agencySaving.value = true
   try {
     const view = await auth.createAgency({
-      id: newAgency.value.id.trim(),
       name: newAgency.value.name.trim(),
       role: newAgency.value.role,
       contact: newAgency.value.contact.trim() || undefined,
@@ -54,7 +56,7 @@ async function onCreate() {
       initPwd: newAgency.value.initPwd.trim() || undefined,
     })
     showCreate.value = false
-    newAgency.value = { id: '', name: '', role: 'agency', contact: '', phone: '', initPwd: '' }
+    newAgency.value = { name: '', role: 'agency', contact: '', phone: '', initPwd: '' }
     createdView.value = view
     await load()
   } catch (e: any) {
@@ -94,15 +96,16 @@ onMounted(load)
 <template>
   <div>
     <div class="head">
-      <h2 class="section-title">机构管理</h2>
-      <button class="btn btn-primary sm" @click="showCreate = true" type="button">+ 新增机构</button>
+      <h2 class="section-title">旅行社管理</h2>
+      <button class="btn btn-primary sm" @click="showCreate = true" type="button">+ 新增旅行社</button>
     </div>
-    <p class="muted">创建机构将一并生成该机构的控制台登录账号（手机号 + 初始密码，首次登录强制改密）。删除需先清空其进行中路线与提交链接。</p>
+    <p class="muted">创建旅行社将一并生成该旅行社的控制台登录账号（手机号 + 初始密码，首次登录强制改密）。编号由系统按角色自动生成，无需手填。删除需先清空其进行中路线与提交链接。</p>
 
     <p v-if="loading">加载中…</p>
+    <p v-else-if="loadErr" class="err">⚠ {{ loadErr }}</p>
     <div v-else class="tbl-wrap">
       <table class="tbl">
-        <thead><tr><th>编号</th><th>名称</th><th>角色</th><th>联系方式</th><th>操作</th></tr></thead>
+        <thead><tr><th>旅行社编号</th><th>名称</th><th>角色</th><th>联系方式</th><th>操作</th></tr></thead>
         <tbody>
           <tr v-for="a in agencies" :key="a.id">
             <td>{{ a.id }}</td>
@@ -113,17 +116,16 @@ onMounted(load)
               <button class="btn ghost sm danger" type="button" @click="deleteTarget = a; deleteErr = ''">删除</button>
             </td>
           </tr>
-          <tr v-if="!agencies.length"><td colspan="5" class="muted">暂无机构</td></tr>
+          <tr v-if="!agencies.length"><td colspan="5" class="muted">暂无旅行社</td></tr>
         </tbody>
       </table>
     </div>
 
-    <!-- 新增机构弹窗 -->
+    <!-- 新增旅行社弹窗 -->
     <div v-if="showCreate" class="modal-backdrop" @click.self="showCreate = false">
       <div class="modal">
-        <h3>新增机构</h3>
-        <div class="row"><label>机构编号</label><input v-model="newAgency.id" class="input" placeholder="如 org-agency-abc" /></div>
-        <div class="row"><label>机构名称</label><input v-model="newAgency.name" class="input" placeholder="环球旅行社" /></div>
+        <h3>新增旅行社</h3>
+        <div class="row"><label>旅行社名称</label><input v-model="newAgency.name" class="input" placeholder="环球旅行社" /></div>
         <div class="row"><label>角色</label>
           <select v-model="newAgency.role" class="input">
             <option value="agency">境外旅行社</option>
@@ -131,7 +133,7 @@ onMounted(load)
           </select>
         </div>
         <div class="row"><label>联系方式</label><input v-model="newAgency.contact" class="input" placeholder="邮箱 / 电话（可选）" /></div>
-        <div class="row"><label>登录手机</label><input v-model="newAgency.phone" class="input" maxlength="11" placeholder="机构账号登录手机号" /></div>
+        <div class="row"><label>登录手机</label><input v-model="newAgency.phone" class="input" maxlength="11" placeholder="旅行社账号登录手机号" /></div>
         <div class="row"><label>初始密码</label><input v-model="newAgency.initPwd" class="input" type="password" placeholder="留空则系统生成强密码" /></div>
         <p v-if="agencyErr" class="err">{{ agencyErr }}</p>
         <div class="modal-actions">
@@ -146,9 +148,10 @@ onMounted(load)
     <!-- 创建成功：一次性初始密码 -->
     <div v-if="createdView" class="modal-backdrop" @click.self="createdView = null">
       <div class="modal">
-        <h3>机构已创建</h3>
+        <h3>旅行社已创建</h3>
         <p class="muted">
           已为「{{ createdView.agency.name }}」生成控制台登录账号（{{ createdView.user.phone }}）。
+          旅行社编号：<b>{{ createdView.agency.id }}</b>（系统自动生成，请留存以备对接）。
           以下初始密码<b>仅展示一次</b>，请妥善转发给协作方，其首次登录需修改密码。
         </p>
         <div class="pwd-box">
@@ -164,8 +167,8 @@ onMounted(load)
     <!-- 删除确认 -->
     <div v-if="deleteTarget" class="modal-backdrop" @click.self="deleteTarget = null">
       <div class="modal">
-        <h3>删除机构「{{ deleteTarget.name }}」？</h3>
-        <p class="muted">删除将一并清除该机构的登录账号与过期提交链接；关联路线的归属置空（数据不丢）。需先清空进行中路线与未过期提交链接。</p>
+        <h3>删除旅行社「{{ deleteTarget.name }}」？</h3>
+        <p class="muted">删除将一并清除该旅行社的登录账号与过期提交链接；关联路线的归属置空（数据不丢）。需先清空进行中路线与未过期提交链接。</p>
         <p v-if="deleteErr" class="err">{{ deleteErr }}</p>
         <div class="modal-actions">
           <button class="btn" type="button" @click="deleteTarget = null">取消</button>
@@ -193,7 +196,7 @@ onMounted(load)
 .btn-primary { background: var(--brand); color: #fff; border: none; border-radius: 10px; padding: 10px 14px; font-weight: 700; cursor: pointer; }
 .btn-primary.sm { padding: 7px 12px; font-size: 13px; }
 .btn-primary:disabled { opacity: 0.6; }
-.btn { border: 1px solid var(--line-strong); background: var(--surface); border-radius: 10px; padding: 9px 12px; cursor: pointer; font-size: 14px; }
+.btn:not(.btn-primary) { border: 1px solid var(--line-strong); background: var(--surface); border-radius: 10px; padding: 9px 12px; cursor: pointer; font-size: 14px; }
 .btn.ghost { background: transparent; color: var(--brand); border-color: var(--brand); }
 .btn.ghost.sm { padding: 7px 10px; font-size: 13px; }
 .btn.ghost.danger, .btn-primary.danger { color: #fff; background: var(--danger); border-color: var(--danger); }

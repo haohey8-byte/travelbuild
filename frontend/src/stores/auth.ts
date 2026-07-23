@@ -79,9 +79,9 @@ export const useAuthStore = defineStore('auth', () => {
     return await disableAdminApi(id)
   }
 
-  // 机构管理：建机构并一并建账号（D1/D4）、硬删机构（D5）
+  // 旅行社管理：建旅行社并一并建账号（D1/D4）、硬删机构（D5）；id 可选，不传则后端自动生成
   async function createAgency(body: {
-    id: string
+    id?: string
     name: string
     role: Role
     contact?: string

@@ -188,7 +188,7 @@ onMounted(() => {
 .btn-primary { background: var(--brand); color: #fff; border: none; border-radius: 10px; padding: 10px 14px; font-weight: 700; cursor: pointer; }
 .btn-primary.sm { padding: 7px 12px; font-size: 13px; }
 .btn-primary:disabled { opacity: 0.6; }
-.btn { border: 1px solid var(--line-strong); background: var(--surface); border-radius: 10px; padding: 9px 12px; cursor: pointer; font-size: 14px; }
+.btn:not(.btn-primary) { border: 1px solid var(--line-strong); background: var(--surface); border-radius: 10px; padding: 9px 12px; cursor: pointer; font-size: 14px; }
 .btn.ghost { background: transparent; color: var(--brand); border-color: var(--brand); }
 .btn.ghost.sm { padding: 7px 10px; font-size: 13px; }
 .btn.ghost:disabled { opacity: 0.5; cursor: not-allowed; }

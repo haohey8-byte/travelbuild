@@ -458,14 +458,14 @@ export class AuthService {
   // 一手：全部可管理；机构用户：只读本机构
   // D1/D4：建机构时一并建该机构的控制台登录账号（User），phone 为登录键、初始密码强制改密。
   async createAgency(
-    body: { id: string; name: string; role: Role; contact?: string; phone: string; initPwd?: string },
+    body: { id?: string; name: string; role: Role; contact?: string; phone: string; initPwd?: string },
     caller: AuthPrincipal,
   ) {
     if (caller.role !== 'pandaking') {
       throw new UnauthorizedException('仅一手 PandaKing 可创建机构')
     }
-    if (!body.id?.trim() || !body.name?.trim()) {
-      throw new BadRequestException('机构编号与名称必填')
+    if (!body.name?.trim()) {
+      throw new BadRequestException('机构名称必填')
     }
     if (!['agency', 'provincial'].includes(body.role)) {
       throw new BadRequestException('机构角色必须是 agency 或 provincial')
@@ -473,7 +473,9 @@ export class AuthService {
     if (!/^1[3-9]\d{9}$/.test(body.phone || '')) {
       throw new BadRequestException({ code: 'VALIDATION', message: '手机号格式错误' })
     }
-    const existing = await this.prisma.agency.findUnique({ where: { id: body.id.trim() } })
+    // 编号：调用方未传则由系统按角色前缀自动生成（agency- / provincial- + 随机串），保证唯一
+    const id = body.id?.trim() || (await this.genAgencyId(body.role))
+    const existing = await this.prisma.agency.findUnique({ where: { id } })
     if (existing) throw new ConflictException('机构编号已存在')
     const phoneTaken = await this.prisma.user.findFirst({ where: { phone: body.phone.trim() } })
     if (phoneTaken) throw new ConflictException({ code: 'AGENCY_PHONE_EXISTS', message: '该手机号已存在' })
@@ -483,7 +485,7 @@ export class AuthService {
 
     const agency = await this.prisma.agency.create({
       data: {
-        id: body.id.trim(),
+        id,
         name: body.name.trim(),
         role: body.role,
         contact: body.contact?.trim() || null,
@@ -548,6 +550,18 @@ export class AuthService {
     let s = ''
     for (let i = 0; i < 12; i++) s += chars[Math.floor(Math.random() * chars.length)]
     return s
+  }
+
+  // 按角色前缀自动生成唯一机构编号（agency- / provincial- + 8 位随机串；极端兜底用时间戳）
+  // 保留前缀语义：仍可一眼区分境外旅行社 / 省地接社，但由系统生成，调用方无需手填。
+  private async genAgencyId(role: Role): Promise<string> {
+    const prefix = role === 'provincial' ? 'provincial-' : 'agency-'
+    for (let i = 0; i < 8; i++) {
+      const candidate = prefix + Math.random().toString(36).slice(2, 10)
+      const exists = await this.prisma.agency.findUnique({ where: { id: candidate } })
+      if (!exists) return candidate
+    }
+    return prefix + Date.now().toString(36)
   }
 
   listAgencies(caller: AuthPrincipal) {

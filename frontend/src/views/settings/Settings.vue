@@ -25,7 +25,7 @@ const allSections: Section[] = [
   { key: 'routes', label: '我的路线', icon: '🗺', cmp: SettingsRoutes, roles: ['pandaking', 'agency', 'provincial'] },
   { key: 'inquiries', label: '我的询价', icon: '💬', cmp: SettingsInquiries, roles: ['provincial'] },
   { key: 'admins', label: '管理员', icon: '🛡', cmp: SettingsAdmins, roles: ['pandaking'] },
-  { key: 'agencies', label: '机构管理', icon: '🏢', cmp: SettingsAgencies, roles: ['pandaking'] },
+  { key: 'agencies', label: '旅行社管理', icon: '🏢', cmp: SettingsAgencies, roles: ['pandaking'] },
   { key: 'intakeLinks', label: '提交链接', icon: '🔗', cmp: SettingsIntakeLinks, roles: ['pandaking', 'agency'] },
 ]
 
