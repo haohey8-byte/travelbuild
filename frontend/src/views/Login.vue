@@ -53,6 +53,8 @@ async function onSubmit() {
       err.value = e?.response?.data?.message || '登录失败次数过多，请稍后再试'
     } else if (code === 'AUTH_INVALID_CREDENTIALS') {
       err.value = '手机号或密码错误'
+    } else if (code === 'AGENCY_DISABLED') {
+      err.value = e?.response?.data?.message || '该旅行社账号已被禁用，暂时无法登录'
     } else {
       err.value = e?.response?.data?.message || '登录失败，请稍后重试'
     }

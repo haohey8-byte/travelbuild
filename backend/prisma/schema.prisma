@@ -30,7 +30,7 @@ model Agency {
   name       String
   role       Role          // agency | provincial
   contact    String?
-  disabled   Boolean       @default(false) // 禁用：仅从各选择下拉框中移除，不阻断登录
+  disabled   Boolean       @default(false) // 禁用：从各选择下拉框中移除，并禁止其登录账号（友好提示），由一手 PandaKing 控制
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
   users      User[]

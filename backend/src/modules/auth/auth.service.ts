@@ -295,6 +295,16 @@ export class AuthService {
       throw new UnauthorizedException({ code: 'AUTH_INVALID_CREDENTIALS', message: '手机号或密码错误' })
     }
     this.clearFailures(key)
+    // 旅行社账号：所属机构被禁用则禁止登录（先校验密码通过，再给友好提示，避免泄露账号存在性）
+    if (user.agencyId) {
+      const agency = await this.prisma.agency.findUnique({ where: { id: user.agencyId } })
+      if (agency?.disabled) {
+        throw new UnauthorizedException({
+          code: 'AGENCY_DISABLED',
+          message: '该旅行社账号已被管理员禁用，暂时无法登录。如有疑问请联系一手 PandaKing 管理员。',
+        })
+      }
+    }
     const token = await this.signToken(user)
     return user.mustChangePwd
       ? { token, user: this.toUserView(user), requireChangePwd: true }
