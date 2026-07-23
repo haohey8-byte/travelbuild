@@ -25,7 +25,7 @@ const issueCopied = ref(false)
 
 // 有效期选项：30天 / 1年 / 自定义 / 永久
 type ValidityMode = '30d' | '1y' | 'custom' | 'permanent'
-const issueMode = ref<ValidityMode>('30d')
+const issueMode = ref<ValidityMode>('permanent')
 const issueCustomDate = ref('')
 const issueNote = ref('')
 

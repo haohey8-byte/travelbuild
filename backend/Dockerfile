@@ -26,8 +26,8 @@ RUN pnpm --filter backend build
 
 FROM node:22-bookworm-slim AS prod
 ENV NODE_ENV=production
-# 演示阶段开放 dev-login；正式上线前应移除或改为 false
-ENV DEV_BYPASS_AUTH=true
+# 生产关闭 dev-login 免密绕过；正式环境禁止以任意角色免密登录
+ENV DEV_BYPASS_AUTH=false
 # Prisma 引擎依赖 OpenSSL；Debian slim 默认可能缺，显式安装
 RUN apt-get update \
     && apt-get install -y --no-install-recommends openssl ca-certificates \
