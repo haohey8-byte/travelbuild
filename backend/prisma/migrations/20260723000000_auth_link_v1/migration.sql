@@ -26,6 +26,8 @@ CREATE TABLE "RouteIntake" (
   "agencyId" TEXT NOT NULL,
   "createdById" TEXT NOT NULL,
   "expiresAt" TIMESTAMP(3) NOT NULL,
+  "copies" INTEGER NOT NULL DEFAULT 0,
+  "lastCopiedAt" TIMESTAMP(3),
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE UNIQUE INDEX "RouteIntake_token_key" ON "RouteIntake"("token");

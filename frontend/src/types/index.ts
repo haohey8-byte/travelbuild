@@ -312,4 +312,21 @@ export interface IntakeResult {
 export interface IntakeLink {
   token: string
   link: string
+  expiresAt?: string
+}
+
+// 已生成机构提交链接（列表 / 复制历史）
+export interface IntakeLinkView {
+  id: string
+  token: string
+  link: string
+  agencyId: string
+  agencyName: string
+  createdById: string
+  createdByName: string
+  createdAt: string
+  expiresAt: string
+  expired: boolean
+  copies: number
+  lastCopiedAt: string | null
 }

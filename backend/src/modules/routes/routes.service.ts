@@ -505,7 +505,51 @@ export class RoutesService {
         expiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000),
       },
     })
-    return { token: intake.token, link: `/h5/intake/${intake.token}` }
+    return {
+      token: intake.token,
+      link: `/h5/intake/${intake.token}`,
+      expiresAt: intake.expiresAt.toISOString(),
+    }
+  }
+
+  // 已生成机构提交链接列表（PandaKing 控制台「复制历史」管理）
+  async listIntakeLinks() {
+    const intakes = await this.prisma.routeIntake.findMany({ orderBy: { createdAt: 'desc' } })
+    const agencyIds = [...new Set(intakes.map((i) => i.agencyId))]
+    const agencies = agencyIds.length
+      ? await this.prisma.agency.findMany({ where: { id: { in: agencyIds } } })
+      : []
+    const agencyMap = new Map(agencies.map((a) => [a.id, a.name]))
+    const creatorIds = [...new Set(intakes.map((i) => i.createdById))]
+    const creators = creatorIds.length
+      ? await this.prisma.user.findMany({ where: { id: { in: creatorIds } } })
+      : []
+    const creatorMap = new Map(creators.map((c) => [c.id, c.name]))
+    return intakes.map((i) => ({
+      id: i.id,
+      token: i.token,
+      link: `/h5/intake/${i.token}`,
+      agencyId: i.agencyId,
+      agencyName: agencyMap.get(i.agencyId) || i.agencyId,
+      createdById: i.createdById,
+      createdByName: creatorMap.get(i.createdById) || '未知',
+      createdAt: i.createdAt.toISOString(),
+      expiresAt: i.expiresAt.toISOString(),
+      expired: i.expiresAt.getTime() < Date.now(),
+      copies: i.copies,
+      lastCopiedAt: i.lastCopiedAt?.toISOString() ?? null,
+    }))
+  }
+
+  // 复制计数（复制历史）：自增 copies 并写最近复制时间
+  async markCopied(token: string) {
+    const intake = await this.prisma.routeIntake.findUnique({ where: { token } })
+    if (!intake) throw new NotFoundException('提交链接不存在')
+    const updated = await this.prisma.routeIntake.update({
+      where: { token },
+      data: { copies: { increment: 1 }, lastCopiedAt: new Date() },
+    })
+    return { copies: updated.copies, lastCopiedAt: updated.lastCopiedAt?.toISOString() ?? null }
   }
 
   // 机构凭提交链接（免登录）提交路线初稿 → 创建 Route（归属钉死 agencyId）+ 初始版本。

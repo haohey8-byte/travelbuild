@@ -2,9 +2,9 @@
 import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { fetchAgencies } from '@/api/auth'
-import { createIntakeLink } from '@/api/routes'
+import { createIntakeLink, listIntakeLinks, copyIntakeLink } from '@/api/routes'
 import { copyText } from '@/utils/share'
-import type { AdminView, Agency } from '@/types'
+import type { AdminView, Agency, IntakeLinkView } from '@/types'
 
 const auth = useAuthStore()
 
@@ -32,12 +32,34 @@ const disabling = ref(false)
 const agencies = ref<Agency[]>([])
 const loadingAgencies = ref(false)
 const intakeAgencyId = ref('')
-const intakeLink = ref('')
-const intakeErr = ref('')
+const issueLink = ref('')
+const issueErr = ref('')
 const issuing = ref(false)
-const copied = ref(false)
+const issueCopied = ref(false)
+
+// 已生成链接列表（复制历史）
+const intakeLinks = ref<IntakeLinkView[]>([])
+const loadingIntakeLinks = ref(false)
+const copiedToken = ref('')
 
 const agencyOptions = computed(() => agencies.value.filter((a) => a.role === 'agency'))
+
+function fullLink(link: string) {
+  const base = import.meta.env.VITE_BASE || '/'
+  return location.origin + base + '#' + link
+}
+
+function daysLeft(expiresAt: string) {
+  const ms = new Date(expiresAt).getTime() - Date.now()
+  return Math.max(0, Math.ceil(ms / (24 * 3600 * 1000)))
+}
+
+function fmt(ts: string | null) {
+  if (!ts) return '—'
+  const d = new Date(ts)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
 
 async function loadAdmins() {
   loading.value = true
@@ -59,6 +81,17 @@ async function loadAgencies() {
     agencies.value = []
   } finally {
     loadingAgencies.value = false
+  }
+}
+
+async function loadIntakeLinks() {
+  loadingIntakeLinks.value = true
+  try {
+    intakeLinks.value = await listIntakeLinks()
+  } catch {
+    intakeLinks.value = []
+  } finally {
+    loadingIntakeLinks.value = false
   }
 }
 
@@ -117,31 +150,51 @@ async function confirmDisable() {
 }
 
 async function onIssueIntake() {
-  intakeErr.value = ''
-  copied.value = false
-  if (!intakeAgencyId.value) return (intakeErr.value = '请选择机构')
+  issueErr.value = ''
+  issueCopied.value = false
+  if (!intakeAgencyId.value) return (issueErr.value = '请选择机构')
   issuing.value = true
   try {
     const res = await createIntakeLink(intakeAgencyId.value)
-    const base = import.meta.env.VITE_BASE || '/'
-    intakeLink.value = location.origin + base + '#' + res.link
+    issueLink.value = fullLink(res.link)
+    await loadIntakeLinks()
   } catch (e: any) {
-    intakeErr.value = e?.response?.data?.message || '预发链接失败'
+    issueErr.value = e?.response?.data?.message || '预发链接失败'
   } finally {
     issuing.value = false
   }
 }
 
-async function copyIntake() {
-  if (!intakeLink.value) return
-  const ok = await copyText(intakeLink.value)
-  copied.value = ok
-  setTimeout(() => (copied.value = false), 2000)
+async function copyIssue() {
+  if (!issueLink.value) return
+  issueCopied.value = await copyText(issueLink.value)
+  setTimeout(() => (issueCopied.value = false), 2000)
+}
+
+// 从列表复制某条链接：写剪贴板 + 调后端标记复制（复制历史）
+async function copyRow(item: IntakeLinkView) {
+  const ok = await copyText(fullLink(item.link))
+  if (!ok) return
+  copiedToken.value = item.token
+  setTimeout(() => {
+    if (copiedToken.value === item.token) copiedToken.value = ''
+  }, 2000)
+  try {
+    const res = await copyIntakeLink(item.token)
+    const row = intakeLinks.value.find((x) => x.token === item.token)
+    if (row) {
+      row.copies = res.copies
+      row.lastCopiedAt = res.lastCopiedAt
+    }
+  } catch {
+    /* 复制仍成功，仅计数失败不影响使用 */
+  }
 }
 
 onMounted(() => {
   loadAdmins()
   loadAgencies()
+  loadIntakeLinks()
 })
 </script>
 
@@ -184,10 +237,10 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- 机构提交链接（route-intake）-->
+    <!-- 机构提交链接（route-intake）：预发 + 已生成列表 / 复制历史 -->
     <div class="card" style="margin-top: 16px">
       <h3>机构提交链接（route-intake）</h3>
-      <p class="muted">为某家境外旅行社预发一条常驻提交链接，对方凭链接免登录提交路线初稿；链接 30 天有效，可重复生成替换。</p>
+      <p class="muted">为某家境外旅行社预发一条常驻提交链接，对方凭链接免登录提交路线初稿；链接 30 天有效，可重复生成替换。下方为已生成链接列表与复制历史。</p>
       <div class="row">
         <label>选择机构</label>
         <select v-model="intakeAgencyId" class="input" :disabled="loadingAgencies">
@@ -198,10 +251,48 @@ onMounted(() => {
           {{ issuing ? '生成中…' : '预发链接' }}
         </button>
       </div>
-      <p v-if="intakeErr" class="err">{{ intakeErr }}</p>
-      <div v-if="intakeLink" class="link-box">
-        <input :value="intakeLink" class="input" readonly />
-        <button class="btn ghost sm" @click="copyIntake" type="button">{{ copied ? '已复制 ✓' : '复制链接' }}</button>
+      <p v-if="issueErr" class="err">{{ issueErr }}</p>
+      <div v-if="issueLink" class="link-box">
+        <input :value="issueLink" class="input" readonly />
+        <button class="btn ghost sm" @click="copyIssue" type="button">{{ issueCopied ? '已复制 ✓' : '复制链接' }}</button>
+      </div>
+
+      <h4 class="sub">已生成链接（复制历史）</h4>
+      <p v-if="loadingIntakeLinks" class="muted">加载中…</p>
+      <div v-if="!loadingIntakeLinks" class="tbl-wrap">
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>机构</th>
+              <th>状态</th>
+              <th>复制次数</th>
+              <th>最近复制</th>
+              <th>创建于</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="it in intakeLinks" :key="it.id" :class="{ expired: it.expired }">
+              <td>
+                <div class="agency">{{ it.agencyName }}</div>
+                <div class="token muted">…{{ it.token.slice(-8) }}</div>
+              </td>
+              <td>
+                <span v-if="it.expired" class="badge bad">已过期</span>
+                <span v-else class="badge ok">有效 · 剩 {{ daysLeft(it.expiresAt) }} 天</span>
+              </td>
+              <td>{{ it.copies }} 次</td>
+              <td>{{ fmt(it.lastCopiedAt) }}</td>
+              <td>{{ fmt(it.createdAt) }}</td>
+              <td class="ops">
+                <button class="btn ghost sm" type="button" :disabled="it.expired" @click="copyRow(it)">
+                  {{ copiedToken === it.token ? '已复制 ✓' : '复制链接' }}
+                </button>
+              </td>
+            </tr>
+            <tr v-if="!intakeLinks.length"><td colspan="6" class="muted">暂无已生成链接</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
@@ -259,10 +350,17 @@ onMounted(() => {
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
 .card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 h3 { margin: 0 0 4px; }
+.sub { margin: 16px 0 4px; font-size: 14px; }
 .tbl { width: 100%; border-collapse: collapse; margin-top: 8px; }
-.tbl th, .tbl td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; font-size: 13px; }
+.tbl th, .tbl td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; font-size: 13px; vertical-align: middle; }
 .tbl th { background: var(--bg); color: var(--muted); }
+.tbl tr.expired { opacity: 0.55; }
 .ops { display: flex; gap: 6px; }
+.agency { font-weight: 600; }
+.token { font-size: 11px; font-family: ui-monospace, monospace; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+.badge.ok { background: rgba(34,197,94,0.15); color: #16a34a; }
+.badge.bad { background: rgba(239,68,68,0.15); color: #dc2626; }
 .row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
 .row label { color: var(--muted); width: 72px; flex: none; font-size: 13px; }
 .input { flex: 1; padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); font-size: 14px; }
@@ -272,6 +370,7 @@ h3 { margin: 0 0 4px; }
 .btn { border: 1px solid var(--line-strong); background: var(--surface); border-radius: 10px; padding: 9px 12px; cursor: pointer; font-size: 14px; }
 .btn.ghost { background: transparent; color: var(--brand); border-color: var(--brand); }
 .btn.ghost.sm { padding: 7px 10px; font-size: 13px; }
+.btn.ghost:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn.ghost.danger, .btn-primary.danger { color: #fff; background: var(--danger); border-color: var(--danger); }
 .err { color: var(--danger); margin-top: 10px; }
 .link-box { display: flex; gap: 8px; margin-top: 10px; align-items: center; }

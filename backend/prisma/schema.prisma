@@ -180,12 +180,14 @@ model RouteShare {
 
 // 机构提交链接（PandaKing 预发常驻，机构免登录提交路线初稿）
 model RouteIntake {
-  id          String   @id @default(uuid())
-  token       String   @unique
-  agencyId    String                 // 归属机构 org id（钉死，提交时作 Route.agencyId）
-  createdById String                 // 发链接的 PandaKing 管理员 id
-  expiresAt   DateTime               // 30 天过期
-  createdAt   DateTime @default(now())
+  id           String    @id @default(uuid())
+  token        String    @unique
+  agencyId     String                 // 归属机构 org id（钉死，提交时作 Route.agencyId）
+  createdById  String                 // 发链接的 PandaKing 管理员 id
+  expiresAt    DateTime               // 30 天过期
+  copies       Int       @default(0)  // 复制次数（复制历史）
+  lastCopiedAt DateTime?              // 最近一次复制时间
+  createdAt    DateTime  @default(now())
   @@index([agencyId])
 }
 

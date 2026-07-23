@@ -9,6 +9,7 @@ import type {
   IntakeDraft,
   IntakeResult,
   IntakeLink,
+  IntakeLinkView,
 } from '@/types'
 
 // 一手查看已删除路线的归档快照（列表 / 详情）
@@ -54,6 +55,18 @@ export async function createIntakeLink(agencyId: string): Promise<IntakeLink> {
 // 机构凭链接免登录提交路线初稿（ShareTokenGuard 校验 token+过期）
 export async function submitIntake(token: string, draft: IntakeDraft): Promise<IntakeResult> {
   const { data } = await client.post('/routes/intake', { token, ...draft })
+  return data
+}
+
+// 已生成提交链接列表（PandaKing 控制台「复制历史」管理）
+export async function listIntakeLinks(): Promise<IntakeLinkView[]> {
+  const { data } = await client.get('/routes/intake-links')
+  return data
+}
+
+// 复制计数（复制历史）：自增 copies + 写最近复制时间
+export async function copyIntakeLink(token: string): Promise<{ copies: number; lastCopiedAt: string | null }> {
+  const { data } = await client.post(`/routes/intake-link/${token}/copy`)
   return data
 }
 

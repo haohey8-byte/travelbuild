@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   ForbiddenException,
+  Get,
+  Param,
   Post,
   UseGuards,
 } from '@nestjs/common'
@@ -42,5 +44,25 @@ export class IntakeController {
   @UseGuards(ShareTokenGuard)
   submitIntake(@Body() body: any) {
     return this.svc.submitIntake(body)
+  }
+
+  // 已生成链接列表（PandaKing 控制台「复制历史」管理）
+  @Get('intake-links')
+  @UseGuards(JwtAuthGuard)
+  listIntakeLinks(@CurrentUser() user: AuthUser) {
+    if (user.role !== 'pandaking') {
+      throw new ForbiddenException('仅一手 PandaKing 可查看提交链接')
+    }
+    return this.svc.listIntakeLinks()
+  }
+
+  // 复制计数（复制历史）：自增 copies + 写最近复制时间
+  @Post('intake-link/:token/copy')
+  @UseGuards(JwtAuthGuard)
+  markCopied(@Param('token') token: string, @CurrentUser() user: AuthUser) {
+    if (user.role !== 'pandaking') {
+      throw new ForbiddenException('仅一手 PandaKing 可操作')
+    }
+    return this.svc.markCopied(token)
   }
 }
