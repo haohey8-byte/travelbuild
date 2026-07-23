@@ -13,6 +13,10 @@ import { genToken as genCryptoToken } from '../../common/utils/token.util'
 export type Role = 'pandaking' | 'agency' | 'provincial'
 export type RoleLevel = 'admin' | 'staff'
 
+// 新建旅行社时登录账号的默认初始密码（用户明确要求：无需手填，默认此值；可在前端覆盖）。
+// 首次登录强制改密（mustChangePwd=true），故弱默认不长期暴露。
+const DEFAULT_AGENCY_INIT_PWD = 'pandaking8888'
+
 // 当前登录主体：注入 req.user，并写入 JWT 载荷
 export interface AuthPrincipal {
   id: string
@@ -490,8 +494,8 @@ export class AuthService {
     const phoneTaken = await this.prisma.user.findFirst({ where: { phone: body.phone.trim() } })
     if (phoneTaken) throw new ConflictException({ code: 'AGENCY_PHONE_EXISTS', message: '该手机号已存在' })
 
-    // 初始密码：调用方未传则后端生成强密码，一次性返回（不落库明文）
-    const initPwd = body.initPwd && body.initPwd.length >= 8 ? body.initPwd : this.genStrongPwd()
+    // 初始密码：调用方未传 / 不足 8 位则使用默认 pandaking8888；传了则用传入值（前端已默认填充，管理员可改）
+    const initPwd = body.initPwd && body.initPwd.length >= 8 ? body.initPwd : DEFAULT_AGENCY_INIT_PWD
 
     const agency = await this.prisma.agency.create({
       data: {
@@ -552,14 +556,6 @@ export class AuthService {
     await this.prisma.user.deleteMany({ where: { agencyId: id } })
     await this.prisma.agency.delete({ where: { id } })
     return { ok: true }
-  }
-
-  // 生成 12 位强密码（用于机构账号初始密码，一次性返回）
-  private genStrongPwd(): string {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'
-    let s = ''
-    for (let i = 0; i < 12; i++) s += chars[Math.floor(Math.random() * chars.length)]
-    return s
   }
 
   // 按角色前缀自动生成唯一机构编号（agency- / provincial- + 8 位随机串；极端兜底用时间戳）

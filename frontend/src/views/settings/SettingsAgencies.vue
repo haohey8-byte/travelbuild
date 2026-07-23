@@ -13,7 +13,7 @@ const loadErr = ref('')
 
 // —— 新增旅行社（一并建登录账号，编号由系统自动生成）——
 const showCreate = ref(false)
-const newAgency = ref({ name: '', role: 'agency' as Role, contact: '', phone: '', initPwd: '' })
+const newAgency = ref({ name: '', role: 'agency' as Role, contact: '', phone: '', initPwd: 'pandaking8888' })
 const agencyErr = ref('')
 const agencySaving = ref(false)
 
@@ -109,7 +109,7 @@ async function onCreate() {
       initPwd: newAgency.value.initPwd.trim() || undefined,
     })
     showCreate.value = false
-    newAgency.value = { name: '', role: 'agency', contact: '', phone: '', initPwd: '' }
+    newAgency.value = { name: '', role: 'agency', contact: '', phone: '', initPwd: 'pandaking8888' }
     createdView.value = view
     await load()
   } catch (e: any) {
@@ -194,9 +194,20 @@ onMounted(load)
             <option value="provincial">省地接社</option>
           </select>
         </div>
-        <div class="row"><label>联系方式</label><input v-model="newAgency.contact" class="input" placeholder="邮箱 / 电话（可选）" /></div>
-        <div class="row"><label>登录手机</label><input v-model="newAgency.phone" class="input" maxlength="11" placeholder="旅行社账号登录手机号" /></div>
-        <div class="row"><label>初始密码</label><input v-model="newAgency.initPwd" class="input" type="password" placeholder="留空则系统生成强密码" /></div>
+        <div class="row"><label>联系方式</label>
+          <div class="input-wrap">
+            <input v-model="newAgency.contact" class="input" placeholder="邮箱 / 电话（可选，可留空）" />
+            <button v-if="newAgency.contact" class="clear-btn" type="button" @click="newAgency.contact = ''" aria-label="清除联系方式">×</button>
+          </div>
+        </div>
+        <div class="row"><label>登录手机</label><input v-model="newAgency.phone" class="input" type="tel" inputmode="numeric" maxlength="11" placeholder="旅行社账号登录手机号（11 位）" /></div>
+        <div class="row"><label>初始密码</label>
+          <div class="input-wrap">
+            <input v-model="newAgency.initPwd" class="input" type="text" placeholder="默认 pandaking8888" />
+            <button v-if="newAgency.initPwd" class="clear-btn" type="button" @click="newAgency.initPwd = ''" aria-label="清除密码">×</button>
+          </div>
+        </div>
+        <p class="muted small">初始密码默认 <b>pandaking8888</b>，可直接修改；留空也按此默认值。协作方首次登录需强制改密。</p>
         <p v-if="agencyErr" class="err">{{ agencyErr }}</p>
         <div class="modal-actions">
           <button class="btn" type="button" @click="showCreate = false">取消</button>
@@ -277,6 +288,11 @@ onMounted(load)
 .row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
 .row label { color: var(--muted); width: 72px; flex: none; font-size: 13px; }
 .input { flex: 1; padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); font-size: 14px; }
+.input-wrap { position: relative; flex: 1; display: flex; align-items: center; }
+.input-wrap .input { flex: 1; padding-right: 34px; }
+.clear-btn { position: absolute; right: 6px; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 50%; background: var(--line); color: var(--muted); font-size: 15px; line-height: 1; cursor: pointer; }
+.clear-btn:hover { background: var(--danger); color: #fff; }
+.small { font-size: 12px; }
 .btn-primary { background: var(--brand); color: #fff; border: none; border-radius: 10px; padding: 10px 14px; font-weight: 700; cursor: pointer; }
 .btn-primary.sm { padding: 7px 12px; font-size: 13px; }
 .btn-primary:disabled { opacity: 0.6; }
