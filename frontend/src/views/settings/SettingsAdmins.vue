@@ -15,6 +15,12 @@ const newAdmin = ref({ name: '', phone: '', initPwd: '' })
 const createErr = ref('')
 const creating = ref(false)
 
+// 手机号输入净化：仅保留数字并限制 11 位（避免移动端自动格式化占用 maxlength 额度）
+function onPhoneInput(e: Event) {
+  const el = e.target as HTMLInputElement
+  newAdmin.value.phone = el.value.replace(/\D/g, '').slice(0, 11)
+}
+
 // —— 重置密码 ——
 const resetTarget = ref<AdminView | null>(null)
 const resetPwd = ref('')
@@ -138,7 +144,7 @@ onMounted(loadAdmins)
       <div class="modal">
         <h3>新增管理员</h3>
         <div class="row"><label>名称</label><input v-model="newAdmin.name" class="input" placeholder="如 张三" /></div>
-        <div class="row"><label>手机号</label><input v-model="newAdmin.phone" class="input" maxlength="11" placeholder="11 位手机号" /></div>
+        <div class="row"><label>手机号</label><input :value="newAdmin.phone" @input="onPhoneInput" class="input" type="tel" inputmode="numeric" maxlength="11" placeholder="11 位手机号" /></div>
         <div class="row"><label>初始密码</label><input v-model="newAdmin.initPwd" class="input" type="password" placeholder="至少 8 位" /></div>
         <p v-if="createErr" class="err">{{ createErr }}</p>
         <div class="modal-actions">

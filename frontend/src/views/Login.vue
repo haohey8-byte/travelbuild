@@ -15,6 +15,12 @@ const busy = ref(false)
 const err = ref('')
 const showDev = ref(false)
 
+// 手机号输入净化：仅保留数字并限制 11 位（避免移动端 tel 自动格式化占用 maxlength 额度）
+function onPhoneInput(e: Event) {
+  const el = e.target as HTMLInputElement
+  phone.value = el.value.replace(/\D/g, '').slice(0, 11)
+}
+
 const rememberDev = computed(() => import.meta.env.DEV)
 
 const roles: { key: Role; label: string }[] = [
@@ -94,7 +100,7 @@ onMounted(() => {
       <form class="form" @submit.prevent="onSubmit">
         <label class="lbl">手机号</label>
         <input
-          v-model="phone"
+          :value="phone" @input="onPhoneInput"
           class="input"
           type="tel"
           inputmode="numeric"

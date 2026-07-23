@@ -17,6 +17,13 @@ const newAgency = ref({ name: '', role: 'agency' as Role, contact: '', phone: ''
 const agencyErr = ref('')
 const agencySaving = ref(false)
 
+// 手机号输入净化：仅保留数字并限制 11 位。避免移动端 tel 输入自动插入空格/分隔符，
+// 吃掉 maxlength 字符额度导致实际只能输入约 9 位数字。
+function onPhoneInput(e: Event) {
+  const el = e.target as HTMLInputElement
+  newAgency.value.phone = el.value.replace(/\D/g, '').slice(0, 11)
+}
+
 // 创建成功：一次性展示初始密码
 const createdView = ref<AgencyView | null>(null)
 const copiedPwd = ref(false)
@@ -200,7 +207,7 @@ onMounted(load)
             <button v-if="newAgency.contact" class="clear-btn" type="button" @click="newAgency.contact = ''" aria-label="清除联系方式">×</button>
           </div>
         </div>
-        <div class="row"><label>登录手机</label><input v-model="newAgency.phone" class="input" type="tel" inputmode="numeric" maxlength="11" placeholder="旅行社账号登录手机号（11 位）" /></div>
+        <div class="row"><label>登录手机</label><input :value="newAgency.phone" @input="onPhoneInput" class="input" type="tel" inputmode="numeric" maxlength="11" placeholder="旅行社账号登录手机号（11 位）" /></div>
         <div class="row"><label>初始密码</label>
           <div class="input-wrap">
             <input v-model="newAgency.initPwd" class="input" type="text" placeholder="默认 pandaking8888" />
