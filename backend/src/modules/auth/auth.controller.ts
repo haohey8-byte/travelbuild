@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Post, Put, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Param, Post, Put, Req, UseGuards } from '@nestjs/common'
+import { Request } from 'express'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
 import { AuthService, AuthPrincipal, Role, RoleLevel } from './auth.service'
@@ -14,6 +15,12 @@ interface AuthUser {
 @Controller('auth')
 export class AuthController {
   constructor(private readonly svc: AuthService) {}
+
+  private clientIp(req: Request): string {
+    const xff = req.headers['x-forwarded-for']
+    if (typeof xff === 'string' && xff.length) return xff.split(',')[0].trim()
+    return req.ip || 'unknown'
+  }
 
   // 微信网页授权发起（占位，待接微信）
   @Get('wechat')
@@ -59,6 +66,47 @@ export class AuthController {
   @Post('dev-login')
   devLogin(@Body() body: { role: Role }) {
     return this.svc.devLogin(body.role)
+  }
+
+  // 手机号 + 密码登录（管理员）
+  @Post('login')
+  login(@Body() body: { phone: string; password: string }, @Req() req: Request) {
+    return this.svc.login(body.phone, body.password, this.clientIp(req))
+  }
+
+  // 改密（含首次强制改密，需登录态）
+  @Post('change-pwd')
+  @UseGuards(JwtAuthGuard)
+  changePwd(@Body() body: { oldPwd: string; newPwd: string }, @CurrentUser() user: AuthUser) {
+    return this.svc.changePwd(user.id, body.oldPwd, body.newPwd)
+  }
+
+  // 管理员列表（手机号脱敏）
+  @Get('admins')
+  @UseGuards(JwtAuthGuard)
+  listAdmins(@CurrentUser() user: AuthUser) {
+    return this.svc.listAdmins()
+  }
+
+  // 新增管理员
+  @Post('admins')
+  @UseGuards(JwtAuthGuard)
+  createAdmin(@Body() body: { name: string; phone: string; initPwd: string }, @CurrentUser() user: AuthUser) {
+    return this.svc.createAdmin(body, user as AuthPrincipal)
+  }
+
+  // 重置管理员密码
+  @Post('admins/:id/reset-pwd')
+  @UseGuards(JwtAuthGuard)
+  resetAdminPwd(@Param('id') id: string, @Body() body: { initPwd: string }, @CurrentUser() user: AuthUser) {
+    return this.svc.resetAdminPwd(id, body.initPwd, user as AuthPrincipal)
+  }
+
+  // 禁用管理员
+  @Post('admins/:id/disable')
+  @UseGuards(JwtAuthGuard)
+  disableAdmin(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.svc.disableAdmin(id, user as AuthPrincipal)
   }
 
   // 当前登录用户（需登录）

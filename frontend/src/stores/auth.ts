@@ -1,8 +1,18 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import i18n from '@/i18n'
-import type { Role, User } from '@/types'
-import { devLogin, acceptInvite, fetchMe } from '@/api/auth'
+import type { Role, User, AdminView } from '@/types'
+import {
+  devLogin,
+  acceptInvite,
+  fetchMe,
+  login as loginApi,
+  changePwd as changePwdApi,
+  fetchAdmins as fetchAdminsApi,
+  createAdmin as createAdminApi,
+  resetAdminPwd as resetAdminPwdApi,
+  disableAdmin as disableAdminApi,
+} from '@/api/auth'
 
 // 鉴权与全局上下文（角色切换、语言切换、登录态）
 export const useAuthStore = defineStore('auth', () => {
@@ -38,6 +48,35 @@ export const useAuthStore = defineStore('auth', () => {
     setSession(res)
   }
 
+  // 手机号 + 密码登录（管理员，真实账号）
+  // 返回后端原始结果（含 requireChangePwd），由调用方决定跳转
+  async function login(phone: string, password: string) {
+    const res = await loginApi(phone, password)
+    setSession(res)
+    return res
+  }
+
+  // 改密（含首次强制改密）
+  async function changePwd(oldPwd: string, newPwd: string) {
+    const res = await changePwdApi(oldPwd, newPwd)
+    // 改密成功后刷新本地会话（mustChangePwd 已置 false）
+    setSession({ token: token.value, user: res.user })
+  }
+
+  // 管理员管理（以下均限 pandaking）
+  async function fetchAdmins(): Promise<AdminView[]> {
+    return await fetchAdminsApi()
+  }
+  async function createAdmin(body: { name: string; phone: string; initPwd: string }) {
+    return await createAdminApi(body)
+  }
+  async function resetAdminPwd(id: string, initPwd: string) {
+    return await resetAdminPwdApi(id, initPwd)
+  }
+  async function disableAdmin(id: string) {
+    return await disableAdminApi(id)
+  }
+
   async function loginByInvite(token: string, name: string) {
     const res = await acceptInvite(token, name)
     setSession(res)
@@ -68,6 +107,12 @@ export const useAuthStore = defineStore('auth', () => {
     setLocale,
     setSession,
     loginAsRole,
+    login,
+    changePwd,
+    fetchAdmins,
+    createAdmin,
+    resetAdminPwd,
+    disableAdmin,
     loginByInvite,
     loadMe,
     logout,

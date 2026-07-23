@@ -9,7 +9,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
     JwtModule.registerAsync({
       useFactory: () => ({
         secret: process.env.JWT_SECRET || 'dev-only-change-me',
-        signOptions: { expiresIn: '7d' },
+        signOptions: { expiresIn: '30d' },
       }),
     }),
   ],

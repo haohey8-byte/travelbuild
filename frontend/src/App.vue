@@ -4,7 +4,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { roleLabel } from '@/utils/share'
-import type { Role } from '@/types'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -12,26 +11,25 @@ const router = useRouter()
 const auth = useAuthStore()
 
 const isH5 = computed(() => route.meta.h5 === true)
-const needsLogin = computed(() => !auth.token && !isH5.value)
+const isAuthPage = computed(() => route.meta.authPage === true)
+const needsLogin = computed(() => !auth.token && !isH5.value && !isAuthPage.value)
 
 const nav = computed(() => {
   const base = [{ to: '/account', label: t('nav.account'), icon: '👤' }]
   // 按 PRD 权限矩阵：省地接社无控制台路线视图，仅通过 H5 成本询价交互
   if (auth.user?.role === 'provincial') return base
-  return [
+  const items = [
     { to: '/routes/kanban', label: t('nav.routes'), icon: '🗺' },
     { to: '/kb', label: t('nav.kb'), icon: '📚' },
     { to: '/cases', label: t('nav.cases'), icon: '🏆' },
     ...base,
   ]
+  // 仅一手 PandaKing 可见：管理员管理
+  if (auth.user?.role === 'pandaking') {
+    items.push({ to: '/admin/admins', label: '管理员', icon: '🛡' })
+  }
+  return items
 })
-
-
-const roles: { key: Role; label: string }[] = [
-  { key: 'pandaking', label: 'PandaKing' },
-  { key: 'agency', label: '境外旅行社' },
-  { key: 'provincial', label: '省地接社' },
-]
 
 const menuOpen = ref(false)
 function toggleMenu() {
@@ -44,28 +42,19 @@ function closeMenu() {
 function onNav(to: string) {
   closeMenu()
   router.push(to)
-}
-
-async function onDevLogin(r: Role) {
-  await auth.loginAsRole(r)
-}
-</script>
+}</script>
 
 <template>
-  <!-- 公开 H5：独立移动页，无主导航 -->
-  <RouterView v-if="isH5" :key="route.path" />
+  <!-- 公开 H5 与认证页（login/change-pwd）：独立渲染，无主导航 -->
+  <RouterView v-if="isH5 || isAuthPage" :key="route.path" />
 
-  <!-- 未登录：开发登录入口 -->
+  <!-- 未登录兜底：理论上守卫已重定向到 /login，这里仅作安全兜底 -->
   <div v-else-if="needsLogin" class="login-gate">
     <div class="login-card card">
       <div class="brand">PandaKing9</div>
       <div class="brand-sub">入境游定制协作工作台</div>
-      <p class="muted">请选择角色登录（演示环境，走 dev-login）</p>
-      <div class="role-btns">
-        <button v-for="r in roles" :key="r.key" class="btn btn-primary" @click="onDevLogin(r.key)">
-          {{ r.label }}
-        </button>
-      </div>
+      <p class="muted">请先登录后访问控制台</p>
+      <button class="btn btn-primary" @click="onNav('/login')">去登录</button>
     </div>
   </div>
 

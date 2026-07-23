@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../../prisma/prisma.service'
+import { genToken } from '../../common/utils/token.util'
 import {
   ACTION,
   ActionKey,
@@ -329,9 +330,16 @@ export class RoutesService {
       }
       vid = vers[0].id
     }
-    const token = Math.random().toString(36).slice(2) + Date.now().toString(36)
+    const token = genToken()
     const share = await this.prisma.routeShare.create({
-      data: { token, routeId, versionId: vid, role, public: isPublic },
+      data: {
+        token,
+        routeId,
+        versionId: vid,
+        role,
+        public: isPublic,
+        expiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000),
+      },
     })
     return { token: share.token, link: `/share/route/${share.token}` }
   }
@@ -389,7 +397,7 @@ export class RoutesService {
       throw new BadRequestException('省地接社机构不存在或角色不是省地接社')
     }
 
-    const token = Math.random().toString(36).slice(2) + Date.now().toString(36)
+    const token = genToken()
     const [, inquiry] = await this.prisma.$transaction([
       this.prisma.route.update({
         where: { id: routeId },
@@ -399,14 +407,21 @@ export class RoutesService {
         data: {
           routeId,
           provincialId: effectiveProvincialId,
-          token: Math.random().toString(36).slice(2) + Date.now().toString(36),
+          token: genToken(),
           status: 'pending',
         },
       }),
     ])
     const latest = await this.latestVersion(routeId)
     const shareRecord = await this.prisma.routeShare.create({
-      data: { token, routeId, role: 'provincial', costInquiryId: inquiry.id, versionId: latest?.id ?? undefined },
+      data: {
+        token,
+        routeId,
+        role: 'provincial',
+        costInquiryId: inquiry.id,
+        versionId: latest?.id ?? undefined,
+        expiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000),
+      },
     })
     return { token: shareRecord.token, link: `/h5/provincial-route/${shareRecord.token}` }
   }
@@ -445,7 +460,7 @@ export class RoutesService {
     }
 
     // 不存在则新建（与原 createProvincialShare 逻辑一致）
-    const token = Math.random().toString(36).slice(2) + Date.now().toString(36)
+    const token = genToken()
     const [, inquiry] = await this.prisma.$transaction([
       this.prisma.route.update({
         where: { id: routeId },
@@ -455,16 +470,87 @@ export class RoutesService {
         data: {
           routeId,
           provincialId: effectiveProvincialId,
-          token: Math.random().toString(36).slice(2) + Date.now().toString(36),
+          token: genToken(),
           status: 'pending',
         },
       }),
     ])
     const latest = await this.latestVersion(routeId)
     const shareRecord = await this.prisma.routeShare.create({
-      data: { token, routeId, role: 'provincial', costInquiryId: inquiry.id, versionId: latest?.id ?? undefined },
+      data: {
+        token,
+        routeId,
+        role: 'provincial',
+        costInquiryId: inquiry.id,
+        versionId: latest?.id ?? undefined,
+        expiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000),
+      },
     })
     return { token: shareRecord.token, link: `/h5/provincial-route/${shareRecord.token}` }
+  }
+
+  // ===== 机构提交链接（route-intake）：PandaKing 预发常驻链接，机构免登录提交路线初稿 =====
+  // 链接双向：机构可主动发起，或 PandaKing 把链接发给机构。
+  // token 为 DB 常驻记录（RouteIntake），钉死 agencyId；30 天过期。
+  async createIntakeLink(agencyId: string, callerId: string) {
+    const agency = await this.prisma.agency.findUnique({ where: { id: agencyId } })
+    if (!agency || agency.role !== 'agency') {
+      throw new BadRequestException('机构不存在或不是境外旅行社（agency）')
+    }
+    const intake = await this.prisma.routeIntake.create({
+      data: {
+        token: genToken(),
+        agencyId,
+        createdById: callerId,
+        expiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000),
+      },
+    })
+    return { token: intake.token, link: `/h5/intake/${intake.token}` }
+  }
+
+  // 机构凭提交链接（免登录）提交路线初稿 → 创建 Route（归属钉死 agencyId）+ 初始版本。
+  // createdById 记为发链接的 PandaKing（机构无账号）；modeKey=collab → 状态「咨询中（待一手确认）」。
+  async submitIntake(body: {
+    token: string
+    customerName: string
+    customerNameCn?: string
+    country: string
+    destination: string
+    groupSize?: number
+    travelDate?: string
+    itinerary?: unknown
+    quote?: unknown
+  }) {
+    if (!body.token) throw new BadRequestException('缺少提交凭证')
+    if (!body.customerName?.trim() || !body.country?.trim() || !body.destination?.trim()) {
+      throw new BadRequestException('客户名称 / 国家 / 目的地必填')
+    }
+    const intake = await this.prisma.routeIntake.findUnique({ where: { token: body.token } })
+    if (!intake) throw new NotFoundException('提交链接无效')
+    if (intake.expiresAt.getTime() < Date.now()) throw new NotFoundException('提交链接已过期')
+    const org = await this.prisma.agency.findUnique({ where: { id: intake.agencyId } })
+    const route = await this.create(
+      {
+        customerName: body.customerName.trim(),
+        customerNameCn: body.customerNameCn?.trim() || undefined,
+        country: body.country.trim(),
+        destination: body.destination.trim(),
+        agency: org?.name || '',
+        groupSize: body.groupSize,
+        travelDate: body.travelDate,
+        agencyId: intake.agencyId,
+        modeKey: 'collab',
+        createdById: intake.createdById,
+        creatorRole: 'agency',
+        creatorAgencyId: intake.agencyId,
+        initialDraft:
+          body.itinerary || body.quote
+            ? { itinerary: body.itinerary ?? null, quote: body.quote ?? null }
+            : undefined,
+      },
+      { role: 'agency', agencyId: intake.agencyId },
+    )
+    return { routeId: route.id, success: true }
   }
 
   // 省地接社凭令牌在协作页编辑行程并填写成本①（利润默认0）；
@@ -1169,7 +1255,7 @@ export class RoutesService {
   // 按角色序列化（字段级可见性 + 机构物理隔绝）
   // 视线剥离：境外旅行社不返回 provincialId；省地接社不返回 agencyId 与 agency(旅行社名称)，
   // 确保双方互不知道对方的存在与机构标识（一手保留全部）。
-  private serialize(route: any, role: Role) {
+  private serialize(route: any, role: Role): any {
     const { versions, createdBy, ...rest } = route
     const safe: Record<string, unknown> = { ...rest }
     if (role === 'agency') {

@@ -16,8 +16,13 @@ client.interceptors.response.use(
   (err) => {
     console.error('[API error]', err.config?.method?.toUpperCase?.(), err.config?.url, err.message, err.response?.status, err.response?.data)
     if (err.response?.status === 401) {
-      localStorage.removeItem('token')
-      // 未登录跳转微信授权（后续接 auth 模块）
+      const url = err.config?.url || ''
+      // 登录 / 改密 端点自身返回 401（凭证错误）时不清除已有会话，交给页面处理错误提示
+      const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/change-pwd')
+      if (!isAuthEndpoint && !localStorage.getItem('token')) {
+        // 仅当确实无 token 时清理（防止遗留脏 token）；有 token 的会话过期由路由守卫统一处理
+      }
+      if (!isAuthEndpoint) localStorage.removeItem('token')
     }
     return Promise.reject(err)
   },

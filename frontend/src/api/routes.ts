@@ -1,5 +1,15 @@
 import client from './client'
-import type { Route, RouteVersion, RouteFeedbackItem, CostInquiry, ProvincialShare, RouteArchive } from '@/types'
+import type {
+  Route,
+  RouteVersion,
+  RouteFeedbackItem,
+  CostInquiry,
+  ProvincialShare,
+  RouteArchive,
+  IntakeDraft,
+  IntakeResult,
+  IntakeLink,
+} from '@/types'
 
 // 一手查看已删除路线的归档快照（列表 / 详情）
 export async function listRouteArchives(): Promise<RouteArchive[]> {
@@ -31,6 +41,19 @@ export async function createRoute(payload: unknown): Promise<Route> {
 // 一手删除路线：后端先归档快照到 RouteArchive 备份历史库，再硬删（仅一手 PandaKing 可操作）
 export async function deleteRoute(id: string): Promise<{ id: string; archived: boolean }> {
   const { data } = await client.delete(`/routes/${id}`)
+  return data
+}
+
+// ===== 机构提交链接（route-intake）=====
+// PandaKing 预发常驻提交链接（钉死 agencyId，30 天过期）
+export async function createIntakeLink(agencyId: string): Promise<IntakeLink> {
+  const { data } = await client.post('/routes/intake-link', { agencyId })
+  return data
+}
+
+// 机构凭链接免登录提交路线初稿（ShareTokenGuard 校验 token+过期）
+export async function submitIntake(token: string, draft: IntakeDraft): Promise<IntakeResult> {
+  const { data } = await client.post('/routes/intake', { token, ...draft })
   return data
 }
 

@@ -1,6 +1,11 @@
 import { PrismaClient } from '@prisma/client'
+import * as bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
+
+// 种子管理员登录凭据（覆盖：环境变量 > 默认值）。固定弱密码 + 首次强制改密兜底。
+const SEED_ADMIN_PHONE = process.env.SEED_ADMIN_PHONE || '13800000000'
+const SEED_ADMIN_PWD = process.env.SEED_ADMIN_PWD || 'Pandaking@2026'
 
 // 幂等种子：以固定 id upsert，重复执行安全
 async function main() {
@@ -37,8 +42,27 @@ async function main() {
   const pandaking = await prisma.user.upsert({
     where: { id: 'seed-pk' },
     update: { level: 'admin' },
-    create: { id: 'seed-pk', name: 'PandaKing 一手', role: 'pandaking', level: 'admin' },
+    create: {
+      id: 'seed-pk',
+      name: 'PandaKing 一手',
+      role: 'pandaking',
+      level: 'admin',
+      phone: SEED_ADMIN_PHONE,
+      password: await bcrypt.hash(SEED_ADMIN_PWD, 12),
+      mustChangePwd: true,
+    },
   })
+  // 幂等兜底：若旧种子用户缺少密码（迁移前创建的账号），补种密码 + 强制改密
+  if (!pandaking.password) {
+    await prisma.user.update({
+      where: { id: 'seed-pk' },
+      data: {
+        phone: SEED_ADMIN_PHONE,
+        password: await bcrypt.hash(SEED_ADMIN_PWD, 12),
+        mustChangePwd: true,
+      },
+    })
+  }
   const agency = await prisma.user.upsert({
     where: { id: 'seed-agency' },
     update: { agencyId: agencyOrg.id, level: 'admin' },

@@ -1,10 +1,56 @@
 import client from './client'
-import type { LoginResult, User, Role, Invite, PermissionMatrix, Agency } from '@/types'
+import type {
+  LoginResult,
+  User,
+  Role,
+  Invite,
+  PermissionMatrix,
+  Agency,
+  AdminView,
+} from '@/types'
 
 // 认证 —— 对应 doc/04-接口契约/账号与认证.md
 export async function devLogin(role: Role): Promise<LoginResult> {
   const { data } = await client.post('/auth/dev-login', { role })
   return data
+}
+
+// 手机号 + 密码登录（管理员）
+export async function login(phone: string, password: string): Promise<LoginResult> {
+  const { data } = await client.post('/auth/login', { phone, password })
+  return data
+}
+
+// 改密（含首次强制改密，需登录态）
+export async function changePwd(oldPwd: string, newPwd: string): Promise<{ ok: boolean; user: User }> {
+  const { data } = await client.post('/auth/change-pwd', { oldPwd, newPwd })
+  return data
+}
+
+// 管理员列表（手机号脱敏，限 pandaking）
+export async function fetchAdmins(): Promise<AdminView[]> {
+  const { data } = await client.get('/auth/admins')
+  return data
+}
+
+// 新增管理员
+export async function createAdmin(body: {
+  name: string
+  phone: string
+  initPwd: string
+}): Promise<AdminView> {
+  const { data } = await client.post('/auth/admins', body)
+  return data
+}
+
+// 重置管理员密码
+export async function resetAdminPwd(id: string, initPwd: string): Promise<void> {
+  await client.post(`/auth/admins/${id}/reset-pwd`, { initPwd })
+}
+
+// 禁用 / 启用管理员
+export async function disableAdmin(id: string): Promise<void> {
+  await client.post(`/auth/admins/${id}/disable`)
 }
 
 export async function acceptInvite(token: string, name: string): Promise<LoginResult> {

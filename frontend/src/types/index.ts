@@ -84,8 +84,20 @@ export interface User {
   role: Role
   agencyId?: string | null
   level?: 'admin' | 'staff'
+  phone?: string | null
   email?: string | null
   disabled?: boolean
+  mustChangePwd?: boolean
+}
+
+// 管理员视图（手机号脱敏，仅 pandaking 可见）
+export interface AdminView {
+  id: string
+  name: string
+  phone: string
+  disabled: boolean
+  mustChangePwd: boolean
+  createdAt: string
 }
 
 export interface Agency {
@@ -111,6 +123,8 @@ export interface Invite {
 export interface LoginResult {
   token: string
   user: User
+  // 首次强制改密：登录成功但 requireChangePwd=true 时必须跳转到 /change-pwd
+  requireChangePwd?: boolean
 }
 
 export interface CaseItem {
@@ -275,4 +289,27 @@ export interface KbEntry {
   routeId?: string | null
   createdAt: string
   updatedAt: string
+}
+
+// —— 机构提交链接（route-intake）：外部旅行社免登录提交路线初稿 ——
+export interface IntakeDraft {
+  customerName: string
+  customerNameCn?: string
+  country: string
+  destination: string
+  groupSize: number
+  travelDate?: string | null
+  itinerary?: Record<string, unknown> | null
+  quote?: Quote | null
+}
+
+export interface IntakeResult {
+  routeId: string
+  success: boolean
+}
+
+// 预发提交链接返回（PandaKing 控制台调用）
+export interface IntakeLink {
+  token: string
+  link: string
 }

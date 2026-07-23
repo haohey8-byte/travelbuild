@@ -44,20 +44,24 @@ enum CaseStatus {
   offline
 }
 
-// 用户（微信 OAuth2 + 邀请制）
+// 用户：管理员=手机号+密码（bcrypt）；协作者=链接即凭证（零账号，不在此表）
 model User {
-  id         String    @id @default(uuid())
-  name       String
-  role       Role      @default(agency)
-  agencyId   String? // 归属机构 ID（境外旅行社 / 省地接社的 org id；一手为 null）
-  agency     Agency?   @relation(fields: [agencyId], references: [id], onDelete: SetNull)
-  level      RoleLevel @default(staff) // 组织内层级：admin 可邀请员工
-  parentId   String? // 邀请人（上级），用于层级与审计
-  openid     String?  @unique
-  email      String?
-  disabled   Boolean   @default(false)
-  createdAt  DateTime  @default(now())
-  invites    Invite[]
+  id            String    @id @default(uuid())
+  name          String                  // 显示名称（必填；多管理员靠此区分）
+  phone         String   @unique        // 登录键（手机号，必填唯一）；存量行回填 legacy_<id>
+  email         String?                 // 可选联系邮箱（非登录键，保持可空、非唯一）
+  password      String?                 // bcrypt 哈希；仅 pandaking 管理员持有
+  mustChangePwd Boolean   @default(true) // 种子/重置后强制改密
+  role          Role      @default(pandaking)
+  agencyId      String? // 归属机构 ID（境外旅行社 / 省地接社的 org id；一手为 null）
+  agency        Agency?   @relation(fields: [agencyId], references: [id], onDelete: SetNull)
+  level         RoleLevel @default(admin) // pandaking 默认 admin
+  parentId      String? // 邀请人（上级），用于层级与审计
+  openid        String?  @unique         // 保留 nullable，Phase 2 回填
+  disabled      Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  invites       Invite[]
   createdRoutes Route[] @relation("RouteCreatedBy")
 }
 
@@ -174,6 +178,16 @@ model RouteShare {
   expiresAt      DateTime?
 }
 
+// 机构提交链接（PandaKing 预发常驻，机构免登录提交路线初稿）
+model RouteIntake {
+  id          String   @id @default(uuid())
+  token       String   @unique
+  agencyId    String                 // 归属机构 org id（钉死，提交时作 Route.agencyId）
+  createdById String                 // 发链接的 PandaKing 管理员 id
+  expiresAt   DateTime               // 30 天过期
+  createdAt   DateTime @default(now())
+  @@index([agencyId])
+}
 
 // 协作 H5 反馈（客户/对方在链接内提交的修改意见）
 model RouteFeedback {

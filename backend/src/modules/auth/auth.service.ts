@@ -6,7 +6,9 @@ import {
   UnauthorizedException,
 } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
+import * as bcrypt from 'bcryptjs'
 import { PrismaService } from '../../prisma/prisma.service'
+import { genToken as genCryptoToken } from '../../common/utils/token.util'
 
 export type Role = 'pandaking' | 'agency' | 'provincial'
 export type RoleLevel = 'admin' | 'staff'
@@ -26,8 +28,19 @@ export interface AuthUserView {
   agencyId: string | null
   level: RoleLevel
   parentId: string | null
+  phone: string | null
   email: string | null
   disabled: boolean
+  mustChangePwd: boolean
+}
+
+export interface AdminView {
+  id: string
+  name: string
+  phone: string
+  disabled: boolean
+  mustChangePwd: boolean
+  createdAt: Date
 }
 
 @Injectable()
@@ -36,6 +49,10 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
   ) {}
+
+  // 登录失败限流（进程内；key = phone+IP，5 次/10 分钟锁定；多实例需 Redis 列 Phase 2）
+  private readonly failMap = new Map<string, { count: number; first: number }>()
+  private readonly lockMap = new Map<string, number>()
 
   /** 签发 JWT：payload 携带 sub/role/name/agencyId/level，守卫据此注入 req.user */
   private signToken(user: {
@@ -173,6 +190,7 @@ export class AuthService {
     const user = await this.prisma.user.create({
       data: {
         name: input.name,
+        phone: `invite_${invite.id}`,
         role: invite.role,
         agencyId: invite.agencyId,
         level: invite.level,
@@ -197,7 +215,7 @@ export class AuthService {
   }
 
   private genToken() {
-    return Math.random().toString(36).slice(2) + Date.now().toString(36)
+    return genCryptoToken()
   }
 
   private expiry() {
@@ -220,6 +238,169 @@ export class AuthService {
     return { token: await this.signToken(user), user: this.toUserView(user) }
   }
 
+  // ===== 账号密码登录（管理员 = 手机号 + 密码，bcrypt cost 12） =====
+  private checkLock(key: string): { locked: boolean; retryAfter?: number } {
+    const until = this.lockMap.get(key)
+    if (until && until > Date.now()) {
+      return { locked: true, retryAfter: Math.ceil((until - Date.now()) / 1000) }
+    }
+    if (until) this.lockMap.delete(key)
+    return { locked: false }
+  }
+
+  private registerFailure(key: string) {
+    const now = Date.now()
+    const rec = this.failMap.get(key)
+    if (!rec || now - rec.first > 10 * 60 * 1000) {
+      this.failMap.set(key, { count: 1, first: now })
+    } else {
+      rec.count += 1
+      this.failMap.set(key, rec)
+    }
+    const cur = this.failMap.get(key)!
+    if (cur.count >= 5) {
+      this.lockMap.set(key, now + 10 * 60 * 1000)
+      this.failMap.delete(key)
+    }
+  }
+
+  private clearFailures(key: string) {
+    this.failMap.delete(key)
+    this.lockMap.delete(key)
+  }
+
+  async login(phone: string, password: string, clientIp: string) {
+    if (!/^1[3-9]\d{9}$/.test(phone) || !password) {
+      throw new BadRequestException({ code: 'VALIDATION', message: '手机号格式错误或密码为空' })
+    }
+    const key = `${phone}@${clientIp}`
+    const lock = this.checkLock(key)
+    if (lock.locked) {
+      throw new UnauthorizedException({
+        code: 'AUTH_LOCKED',
+        message: '登录失败次数过多，请稍后再试',
+        retryAfter: lock.retryAfter,
+      })
+    }
+    const user = await this.prisma.user.findFirst({
+      where: { phone, role: 'pandaking', disabled: false },
+    })
+    if (!user || !user.password) {
+      this.registerFailure(key)
+      throw new UnauthorizedException({ code: 'AUTH_INVALID_CREDENTIALS', message: '手机号或密码错误' })
+    }
+    const ok = await bcrypt.compare(password, user.password)
+    if (!ok) {
+      this.registerFailure(key)
+      throw new UnauthorizedException({ code: 'AUTH_INVALID_CREDENTIALS', message: '手机号或密码错误' })
+    }
+    this.clearFailures(key)
+    const token = await this.signToken(user)
+    return user.mustChangePwd
+      ? { token, user: this.toUserView(user), requireChangePwd: true }
+      : { token, user: this.toUserView(user) }
+  }
+
+  async changePwd(userId: string, oldPwd: string, newPwd: string) {
+    if (!newPwd || newPwd.length < 8) {
+      throw new BadRequestException({ code: 'VALIDATION', message: '新密码至少 8 位' })
+    }
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } })
+    if (!user.password || !(await bcrypt.compare(oldPwd, user.password))) {
+      throw new UnauthorizedException({ code: 'AUTH_INVALID_CREDENTIALS', message: '原密码错误' })
+    }
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: { password: await bcrypt.hash(newPwd, 12), mustChangePwd: false },
+    })
+    return { ok: true, user: this.toUserView(updated) }
+  }
+
+  // ===== 管理员管理（均限 pandaking 调用） =====
+  async listAdmins(): Promise<AdminView[]> {
+    const users = await this.prisma.user.findMany({
+      where: { role: 'pandaking' },
+      orderBy: { createdAt: 'asc' },
+    })
+    return users.map((u) => this.toAdminView(u))
+  }
+
+  async createAdmin(input: { name: string; phone: string; initPwd: string }, caller: AuthPrincipal) {
+    if (caller.role !== 'pandaking') {
+      throw new UnauthorizedException('仅一手 PandaKing 可管理管理员')
+    }
+    if (!input.name?.trim()) throw new BadRequestException({ code: 'VALIDATION', message: '名称必填' })
+    if (!/^1[3-9]\d{9}$/.test(input.phone || '')) {
+      throw new BadRequestException({ code: 'VALIDATION', message: '手机号格式错误' })
+    }
+    if (!input.initPwd || input.initPwd.length < 8) {
+      throw new BadRequestException({ code: 'VALIDATION', message: '初始密码至少 8 位' })
+    }
+    const exists = await this.prisma.user.findFirst({ where: { phone: input.phone.trim() } })
+    if (exists) throw new ConflictException({ code: 'ADMIN_PHONE_EXISTS', message: '该手机号已存在' })
+    const user = await this.prisma.user.create({
+      data: {
+        name: input.name.trim(),
+        phone: input.phone.trim(),
+        role: 'pandaking',
+        level: 'admin',
+        password: await bcrypt.hash(input.initPwd, 12),
+        mustChangePwd: true,
+        disabled: false,
+      },
+    })
+    return this.toAdminView(user)
+  }
+
+  async resetAdminPwd(id: string, initPwd: string, caller: AuthPrincipal) {
+    if (caller.role !== 'pandaking') {
+      throw new UnauthorizedException('仅一手 PandaKing 可管理管理员')
+    }
+    if (!initPwd || initPwd.length < 8) {
+      throw new BadRequestException({ code: 'VALIDATION', message: '新密码至少 8 位' })
+    }
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id } })
+    if (user.role !== 'pandaking') throw new BadRequestException('只能重置管理员密码')
+    await this.prisma.user.update({
+      where: { id },
+      data: { password: await bcrypt.hash(initPwd, 12), mustChangePwd: true },
+    })
+    return { ok: true }
+  }
+
+  async disableAdmin(id: string, caller: AuthPrincipal) {
+    if (caller.role !== 'pandaking') {
+      throw new UnauthorizedException('仅一手 PandaKing 可管理管理员')
+    }
+    if (id === caller.id) throw new BadRequestException('不可禁用当前账号自身')
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id } })
+    if (user.role !== 'pandaking') throw new BadRequestException('只能禁用管理员')
+    const enabled = await this.prisma.user.count({
+      where: { role: 'pandaking', disabled: false, NOT: { id } },
+    })
+    if (enabled < 1) throw new BadRequestException({ code: 'ADMIN_LAST_ONE', message: '至少保留一个可用管理员' })
+    const updated = await this.prisma.user.update({ where: { id }, data: { disabled: true } })
+    return this.toAdminView(updated)
+  }
+
+  private toAdminView(u: {
+    id: string
+    name: string
+    phone?: string | null
+    disabled: boolean
+    mustChangePwd?: boolean
+    createdAt: Date
+  }): AdminView {
+    return {
+      id: u.id,
+      name: u.name,
+      phone: u.phone ? this.maskPhone(u.phone) : '',
+      disabled: u.disabled,
+      mustChangePwd: u.mustChangePwd ?? false,
+      createdAt: u.createdAt,
+    }
+  }
+
   async me(userId: string) {
     if (userId === 'dev') {
       return {
@@ -229,8 +410,10 @@ export class AuthService {
         agencyId: null,
         level: 'admin' as RoleLevel,
         parentId: null,
+        phone: null,
         email: null,
         disabled: false,
+        mustChangePwd: false,
       }
     }
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } })
@@ -341,8 +524,10 @@ export class AuthService {
     agencyId: string | null
     level?: RoleLevel
     parentId?: string | null
+    phone?: string | null
     email: string | null
     disabled: boolean
+    mustChangePwd?: boolean
   }): AuthUserView {
     return {
       id: u.id,
@@ -351,8 +536,15 @@ export class AuthService {
       agencyId: u.agencyId,
       level: u.level ?? 'staff',
       parentId: u.parentId ?? null,
+      phone: u.phone ? this.maskPhone(u.phone) : null,
       email: u.email,
       disabled: u.disabled,
+      mustChangePwd: u.mustChangePwd ?? false,
     }
+  }
+
+  private maskPhone(phone?: string | null): string {
+    if (!phone) return ''
+    return phone.replace(/^(\d{3})\d{4}(\d{4})$/, '$1****$2')
   }
 }
