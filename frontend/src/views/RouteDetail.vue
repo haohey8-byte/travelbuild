@@ -250,6 +250,8 @@ function onVisibilityChange() {
 const isPk = computed(() => role.value === 'pandaking')
 const isAgency = computed(() => role.value === 'agency')
 const isProv = computed(() => role.value === 'provincial')
+// 只读态：从「系统设置 → 我的路线」打开时为 true，隐藏保存/提交/协作按钮（agency/provincial 概览）
+const readonly = computed(() => route.query.ro === '1')
 // 路线归属账号名（创建者 = PandaKing 平台方），用于替代「一手」字眼，显示具体注册名
 const ownerName = computed(() => data.value?.ownerName || 'PandaKing')
 
@@ -1131,7 +1133,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
             </div>
           </div>
 
-          <div class="add-day">
+          <div class="add-day" v-if="!readonly">
             <button class="d-btn dash" @click="addDayOpen">＋ 新增一天</button>
           </div>
         </div>
@@ -1142,6 +1144,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
             <h2>报价明细</h2>
             <span class="pill st-role">报价方 · {{ roleLabel(role) }}</span>
           </div>
+          <div v-if="readonly" class="ro-banner">🔒 只读模式：本路线从「系统设置 → 我的路线」打开，仅作概览，不可编辑或提交。</div>
 
           <div class="panel-body">
             <p v-if="isProv" class="hint">
@@ -1150,14 +1153,14 @@ const collabEvents = computed<CollabEvent[]>(() => {
             <p v-else-if="isAgency" class="hint">
               您看到的「报价A」是 {{ ownerName }} 的报价（即您的成本），在此加上<b>利润</b>即生成对客价。填好后点击下方「提交建议并通知 {{ ownerName }}」，即可把报价与修改建议一并发送给 {{ ownerName }}。
             </p>
-            <QuoteTable v-model:items="quoteItems" v-model:profit2Mode="profit2Mode" v-model:profit2="profit2" :role="role" />
+            <QuoteTable v-model:items="quoteItems" v-model:profit2Mode="profit2Mode" v-model:profit2="profit2" :role="role" :read-only="readonly" />
             <p v-if="isPk" class="tip">
               境外旅行社打开同一页面（角色=旅行社）时，报价A 即为其成本，加利润生成对客价。agency 与 provincial 价格彼此不可见。
             </p>
           </div>
 
           <!-- 一手：本轮变更摘要 + 补充说明（可选） -->
-          <div v-if="isPk" class="pk-extra">
+          <div v-if="isPk && !readonly" class="pk-extra">
             <div v-if="hasAnyChange" class="ch-summary">
               <h4>📋 本轮变更摘要</h4>
               <pre>{{ formatQuoteChanges(currentChanges) }}</pre>
@@ -1169,7 +1172,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
           </div>
 
           <!-- 一手：发起询价 + 保存并报价（双主操作，弹 NotifyDialog 统一弹结构化文案+URL） -->
-          <div v-if="isPk" class="pk-actions">
+          <div v-if="isPk && !readonly" class="pk-actions">
             <button class="d-btn primary block" :disabled="savingDraft || savingNotify" @click="openInquireDialog">
               🤝 发起询价（{{ inquireTargetLabel }}）
             </button>
@@ -1182,19 +1185,19 @@ const collabEvents = computed<CollabEvent[]>(() => {
           </div>
 
           <!-- 非一手：反馈建议输入框（提交给一手 PandaKing） -->
-          <div v-if="isAgency || isProv" class="suggest">
+          <div v-if="(isAgency || isProv) && !readonly" class="suggest">
             <label>补充说明（可选）</label>
             <textarea v-model="consSuggestion" rows="2" :placeholder="isAgency ? ('填写对报价 / 行程的补充说明，将随报价一并通知 ' + ownerName) : ('填写成本补充说明，将通知 ' + ownerName)"></textarea>
           </div>
 
           <!-- 非一手：本轮变更摘要（旅行社加价 / 行程调整后实时展示） -->
-          <div v-if="isAgency && hasAnyChange" class="ch-summary">
+          <div v-if="isAgency && hasAnyChange && !readonly" class="ch-summary">
             <h4>📋 本轮变更摘要</h4>
             <pre>{{ formatQuoteChanges(currentChanges) }}</pre>
           </div>
 
           <!-- 非一手：保存栏（与一手对称：仅保存 + 提交建议并通知） -->
-          <div v-if="!isPk" class="savebar">
+          <div v-if="!isPk && !readonly" class="savebar">
             <button class="d-btn ghost" :disabled="savingDraft || savingNotify" @click="onSaveDraft">
               {{ savingDraft ? '保存中…' : '仅保存' }}
             </button>
@@ -1259,7 +1262,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
           </div>
           <div class="panel-body">
             <p class="hint">状态流转由后端状态机强制校验，非法操作会被拒绝。</p>
-            <div class="flow-actions">
+            <div class="flow-actions" v-if="!readonly">
               <button
                 v-for="a in availableActions"
                 :key="a.key"
@@ -1271,7 +1274,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
                 {{ doing === a.key ? '处理中…' : a.label }}
               </button>
             </div>
-            <div v-if="availableActions.find((a) => a.needNote)" class="field full" style="margin-top: 14px">
+            <div v-if="availableActions.find((a) => a.needNote) && !readonly" class="field full" style="margin-top: 14px">
             <label>补充说明（可选）</label>
             <textarea v-model="feedbackNote" rows="3" placeholder="填写要回传给对方 / 旅行社的补充说明"></textarea>
             </div>

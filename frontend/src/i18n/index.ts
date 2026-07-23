@@ -3,7 +3,7 @@ import { createI18n } from 'vue-i18n'
 // 四语最小字典（EN/ZH/TH/RU），后续按 doc 扩字段
 const messages = {
   zh: {
-    nav: { routes: '路线管理', kb: '知识库', account: '账号', cases: '案例展示' },
+    nav: { routes: '路线管理', kb: '知识库', account: '账号', settings: '系统设置', cases: '案例展示' },
     common: { role: '角色', loading: '加载中…', empty: '暂无数据', error: '加载失败', submit: '提交' },
     account: {
       loggedInAs: '当前登录',
@@ -31,7 +31,7 @@ const messages = {
     },
   },
   en: {
-    nav: { routes: 'Routes', kb: 'Knowledge', account: 'Account', cases: 'Cases' },
+    nav: { routes: 'Routes', kb: 'Knowledge', account: 'Account', settings: 'Settings', cases: 'Cases' },
     common: { role: 'Role', loading: 'Loading…', empty: 'No data', error: 'Failed to load', submit: 'Submit' },
     account: {
       loggedInAs: 'Logged in as',
@@ -59,7 +59,7 @@ const messages = {
     },
   },
   th: {
-    nav: { routes: 'เส้นทาง', kb: 'ความรู้', account: 'บัญชี', cases: 'เคส' },
+    nav: { routes: 'เส้นทาง', kb: 'ความรู้', account: 'บัญชี', settings: 'การตั้งค่า', cases: 'เคส' },
     common: { role: 'บทบาท', loading: 'กำลังโหลด…', empty: 'ไม่มีข้อมูล', error: 'โหลดล้มเหลว', submit: 'ส่ง' },
     account: {
       loggedInAs: 'เข้าสู่ระบบในฐานะ',
@@ -87,7 +87,7 @@ const messages = {
     },
   },
   ru: {
-    nav: { routes: 'Маршруты', kb: 'База', account: 'Аккаунт', cases: 'Кейсы' },
+    nav: { routes: 'Маршруты', kb: 'База', account: 'Аккаунт', settings: 'Настройки', cases: 'Кейсы' },
     common: { role: 'Роль', loading: 'Загрузка…', empty: 'Нет данных', error: 'Ошибка загрузки', submit: 'Отправить' },
     account: {
       loggedInAs: 'Вы вошли как',

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Param, Post, Put, Req, UseGuards } from '@nestjs/common'
 import { Request } from 'express'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
@@ -131,13 +131,21 @@ export class AuthController {
   }
 
   // 机构管理（Agency）：替换裸 agencyId，支持真实机构档案
+  // D1/D4：建机构时一并建该机构控制台登录账号（需 phone；initPwd 可选，不传则后端生成并一次性返回）
   @Post('agencies')
   @UseGuards(JwtAuthGuard)
   createAgency(
-    @Body() body: { id: string; name: string; role: Role; contact?: string },
+    @Body() body: { id: string; name: string; role: Role; contact?: string; phone: string; initPwd?: string },
     @CurrentUser() user: AuthUser,
   ) {
     return this.svc.createAgency(body, user as AuthPrincipal)
+  }
+
+  // 删除机构：硬删 + 前置校验（仅一手）
+  @Delete('agencies/:id')
+  @UseGuards(JwtAuthGuard)
+  deleteAgency(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.svc.deleteAgency(id, user as AuthPrincipal)
   }
 
   @Get('agencies')

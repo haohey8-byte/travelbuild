@@ -51,18 +51,19 @@ export class RoutesService {
   }
 
   // 列表（按角色字段级过滤 + 机构物理隔绝）
-  // 物理隔绝：一手见全部；境外旅行社仅见「本机构(agencyId)」路线；省地接社**无控制台路线视图**（按 PRD 权限矩阵）。
+  // 物理隔绝：一手见全部；境外旅行社仅见「本机构(agencyId)」路线；省地接社见「被分配(provincialId)」路线。
   async findAll(status?: string, principal?: RoutePrincipal) {
     const role = principal?.role ?? 'agency'
-    // 省地接社没有控制台路线列表权限（仅通过 H5 成本询价 / 协作 H5 交互）
-    if (role === 'provincial') return []
-    const where: { statusKey?: string; agencyId?: string } = status
+    const where: { statusKey?: string; agencyId?: string; provincialId?: string } = status
       ? { statusKey: status }
       : {}
     // 旧 token 可能缺少 agencyId（DEV_BYPASS_AUTH 或历史 token），降级为 pandaking 视角避免看板空白
     const effectiveRole = role === 'agency' && !principal?.agencyId ? 'pandaking' : role
     if (effectiveRole === 'agency') {
       where.agencyId = principal!.agencyId!
+    } else if (role === 'provincial') {
+      // D3：省地接社见「被分配」的路线（provincialId 命中自身机构）
+      where.provincialId = principal!.agencyId!
     }
     const routes = await this.prisma.route.findMany({
       where,
@@ -82,15 +83,19 @@ export class RoutesService {
         throw new NotFoundException('路线不存在')
       })
     const role = principal?.role ?? 'agency'
-    // 省地接社没有控制台路线详情权限（按 PRD 权限矩阵）
-    if (role === 'provincial') {
-      throw new NotFoundException('路线不存在')
-    }
     // 旧 token 降级：agency 缺 agencyId 时视为 pandaking，避免误报「路线不存在」
     const effectiveRole = role === 'agency' && !principal?.agencyId ? 'pandaking' : role
-    // 物理隔绝校验：境外旅行社仅见本机构路线
-    if (effectiveRole === 'agency' && (!principal?.agencyId || route.agencyId !== principal.agencyId)) {
-      throw new NotFoundException('路线不存在')
+    // 物理隔绝校验
+    if (effectiveRole === 'agency') {
+      // 境外旅行社仅见本机构路线
+      if (!principal?.agencyId || route.agencyId !== principal.agencyId) {
+        throw new NotFoundException('路线不存在')
+      }
+    } else if (role === 'provincial') {
+      // D3：省地接社见「被分配」的路线（provincialId 命中自身机构）
+      if (!principal?.agencyId || route.provincialId !== principal.agencyId) {
+        throw new NotFoundException('路线不存在')
+      }
     }
     return this.serialize(route, effectiveRole)
   }
@@ -512,9 +517,17 @@ export class RoutesService {
     }
   }
 
-  // 已生成机构提交链接列表（PandaKing 控制台「复制历史」管理）
-  async listIntakeLinks() {
-    const intakes = await this.prisma.routeIntake.findMany({ orderBy: { createdAt: 'desc' } })
+  // 已生成机构提交链接列表（按角色裁剪：一手见全部；境外社仅见自己机构；省地接社无）
+  async listIntakeLinks(principal?: { role: Role; agencyId: string | null }) {
+    // 省地接社无提交链接视角（提交链接仅境外社），返回空
+    if (principal?.role === 'provincial') return []
+    // 境外社仅见自己机构的链接
+    const agencyIdFilter =
+      principal?.role === 'agency' && principal.agencyId ? principal.agencyId : undefined
+    const intakes = await this.prisma.routeIntake.findMany({
+      where: agencyIdFilter ? { agencyId: agencyIdFilter } : {},
+      orderBy: { createdAt: 'desc' },
+    })
     const agencyIds = [...new Set(intakes.map((i) => i.agencyId))]
     const agencies = agencyIds.length
       ? await this.prisma.agency.findMany({ where: { id: { in: agencyIds } } })
@@ -1067,7 +1080,7 @@ export class RoutesService {
     return {}
   }
   async getFeedback(routeId: string, principal?: RoutePrincipal) {
-    if (principal) await this.assertVisible(routeId, principal)
+    if (principal) await this.assertReadable(routeId, principal)
     const fb = await this.prisma.routeFeedback.findMany({
       where: { routeId, ...this.feedbackRoleWhere(principal?.role) },
       orderBy: { createdAt: 'asc' },
@@ -1172,7 +1185,7 @@ export class RoutesService {
 
   // 版本历史
   async getVersions(routeId: string, principal?: RoutePrincipal) {
-    if (principal) await this.assertVisible(routeId, principal)
+    if (principal) await this.assertReadable(routeId, principal)
     const versions = await this.prisma.routeVersion.findMany({
       where: { routeId },
       orderBy: { createdAt: 'desc' },
@@ -1181,7 +1194,7 @@ export class RoutesService {
   }
 
   async getVersion(routeId: string, versionId: string, principal?: RoutePrincipal) {
-    if (principal) await this.assertVisible(routeId, principal)
+    if (principal) await this.assertReadable(routeId, principal)
     const v = await this.prisma.routeVersion
       .findFirstOrThrow({ where: { routeId, id: versionId } })
       .catch(() => {
@@ -1190,12 +1203,13 @@ export class RoutesService {
     return this.serializeVersion(v, principal?.role ?? 'agency')
   }
 
-  // 物理隔绝断言：境外旅行社仅可见本机构路线；省地接社仅可见被分配的路线
+  // 物理隔绝断言（写操作守卫）：境外旅行社仅可见本机构路线；省地接社不参与控制台写操作
+  // （所有交互均通过 H5 token 完成，故此处阻断 provincial 写权限，保证「我的路线」只读）。
   private async assertVisible(routeId: string, principal?: RoutePrincipal) {
     if (!principal) return
     const route = await this.prisma.route.findUnique({ where: { id: routeId } })
     if (!route) throw new NotFoundException('路线不存在')
-    // 省地接社没有控制台路线操作权限（按 PRD 权限矩阵），所有交互均通过 H5 token 完成
+    // 省地接社没有控制台路线写操作权限（按 PRD 权限矩阵），所有交互均通过 H5 token 完成
     if (principal.role === 'provincial') {
       throw new NotFoundException('路线不存在')
     }
@@ -1203,6 +1217,28 @@ export class RoutesService {
     if (principal.role === 'agency' && !principal.agencyId) return
     if (principal.role === 'agency' && route.agencyId !== principal.agencyId) {
       throw new NotFoundException('路线不存在')
+    }
+  }
+
+  // 只读可见性断言（读接口：详情/版本/反馈）：境外旅行社见本机构路线；
+  // 省地接社见「被分配」路线（provincialId 命中自身机构）；一手全见。
+  // 与 assertVisible（写操作守卫）区分——本方法放开省地接社只读，以支撑「我的路线」。
+  private async assertReadable(routeId: string, principal?: RoutePrincipal) {
+    if (!principal) return
+    const route = await this.prisma.route.findUnique({ where: { id: routeId } })
+    if (!route) throw new NotFoundException('路线不存在')
+    if (principal.role === 'pandaking') return
+    if (principal.role === 'agency') {
+      // 旧 token 降级：缺 agencyId 视为一手，跳过隔离校验
+      if (!principal.agencyId) return
+      if (route.agencyId !== principal.agencyId) throw new NotFoundException('路线不存在')
+      return
+    }
+    if (principal.role === 'provincial') {
+      if (!principal.agencyId || route.provincialId !== principal.agencyId) {
+        throw new NotFoundException('路线不存在')
+      }
+      return
     }
   }
 

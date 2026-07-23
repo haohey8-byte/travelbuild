@@ -4,8 +4,8 @@ import type {
   User,
   Role,
   Invite,
-  PermissionMatrix,
   Agency,
+  AgencyView,
   AdminView,
 } from '@/types'
 
@@ -68,55 +68,28 @@ export async function fetchInvite(token: string): Promise<Invite> {
   return data
 }
 
-// 创建邀请（两层级：一手邀请机构管理员 → 管理员/一手邀请机构员工）
-export async function createInvite(body: {
-  role: Role
-  agencyId?: string
-  level?: 'admin' | 'staff'
-  email?: string
-}): Promise<Invite> {
-  const { data } = await client.post('/auth/invites', body)
-  return data
-}
-
-// 邀请列表（按权限隔离）
-export async function listInvites(): Promise<Invite[]> {
-  const { data } = await client.get('/auth/invites')
-  return data
-}
-
-// 成员列表（需登录）
-export async function fetchMembers(): Promise<User[]> {
-  const { data } = await client.get('/auth/members')
-  return data
-}
-
-// 权限矩阵（字段级 + 物理隔绝）
-export async function fetchPermissionMatrix(): Promise<PermissionMatrix> {
-  const { data } = await client.get('/auth/permissions/matrix')
-  return data
-}
-
-// 改成员角色（仅一手）
-export async function updateMemberRole(id: string, role: Role): Promise<User> {
-  const { data } = await client.put(`/auth/members/${id}/role`, { role })
-  return data
-}
-
-// 停用成员（仅一手）
 // 机构管理（Agency）：替换裸 agencyId，支持真实机构档案
 export async function fetchAgencies(): Promise<Agency[]> {
   const { data } = await client.get('/auth/agencies')
   return data
 }
 
+// D1/D4：建机构时一并建该机构控制台登录账号（phone 必填；initPwd 可选，不传则后端生成并一次性返回）
 export async function createAgency(body: {
   id: string
   name: string
   role: Role
   contact?: string
-}): Promise<Agency> {
+  phone: string
+  initPwd?: string
+}): Promise<AgencyView> {
   const { data } = await client.post('/auth/agencies', body)
+  return data
+}
+
+// D5：硬删机构（前置校验：无进行中路线、无未过期提交链接），仅一手
+export async function deleteAgency(id: string): Promise<{ ok: boolean }> {
+  const { data } = await client.delete(`/auth/agencies/${id}`)
   return data
 }
 

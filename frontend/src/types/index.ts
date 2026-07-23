@@ -108,6 +108,13 @@ export interface Agency {
   createdAt: string
 }
 
+// 创建机构返回：机构 + 一并创建的登录账号（手机号脱敏）+ 一次性初始密码
+export interface AgencyView {
+  agency: Agency
+  user: User // 脱敏后的账号视图
+  initPwd?: string // 仅创建时返回一次，不落库明文
+}
+
 // 邀请（两层级邀请模型）
 export interface Invite {
   id: string

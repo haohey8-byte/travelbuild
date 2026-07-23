@@ -283,7 +283,7 @@ export class AuthService {
       })
     }
     const user = await this.prisma.user.findFirst({
-      where: { phone, role: 'pandaking', disabled: false },
+      where: { phone, disabled: false },
     })
     if (!user || !user.password) {
       this.registerFailure(key)
@@ -456,8 +456,9 @@ export class AuthService {
 
   // 机构管理（Agency）：替换裸 agencyId 字符串，支持真实机构档案
   // 一手：全部可管理；机构用户：只读本机构
+  // D1/D4：建机构时一并建该机构的控制台登录账号（User），phone 为登录键、初始密码强制改密。
   async createAgency(
-    body: { id: string; name: string; role: Role; contact?: string },
+    body: { id: string; name: string; role: Role; contact?: string; phone: string; initPwd?: string },
     caller: AuthPrincipal,
   ) {
     if (caller.role !== 'pandaking') {
@@ -469,9 +470,18 @@ export class AuthService {
     if (!['agency', 'provincial'].includes(body.role)) {
       throw new BadRequestException('机构角色必须是 agency 或 provincial')
     }
+    if (!/^1[3-9]\d{9}$/.test(body.phone || '')) {
+      throw new BadRequestException({ code: 'VALIDATION', message: '手机号格式错误' })
+    }
     const existing = await this.prisma.agency.findUnique({ where: { id: body.id.trim() } })
     if (existing) throw new ConflictException('机构编号已存在')
-    return this.prisma.agency.create({
+    const phoneTaken = await this.prisma.user.findFirst({ where: { phone: body.phone.trim() } })
+    if (phoneTaken) throw new ConflictException({ code: 'AGENCY_PHONE_EXISTS', message: '该手机号已存在' })
+
+    // 初始密码：调用方未传则后端生成强密码，一次性返回（不落库明文）
+    const initPwd = body.initPwd && body.initPwd.length >= 8 ? body.initPwd : this.genStrongPwd()
+
+    const agency = await this.prisma.agency.create({
       data: {
         id: body.id.trim(),
         name: body.name.trim(),
@@ -479,6 +489,65 @@ export class AuthService {
         contact: body.contact?.trim() || null,
       },
     })
+    const user = await this.prisma.user.create({
+      data: {
+        name: body.name.trim(),
+        phone: body.phone.trim(),
+        role: body.role,
+        agencyId: agency.id,
+        level: 'admin',
+        password: await bcrypt.hash(initPwd, 12),
+        mustChangePwd: true,
+        disabled: false,
+      },
+    })
+    return { agency, user: this.toUserView(user), initPwd }
+  }
+
+  // 删除机构：硬删 + 前置校验（无进行中路线、无未过期提交链接才允许）
+  async deleteAgency(id: string, caller: AuthPrincipal) {
+    if (caller.role !== 'pandaking') {
+      throw new UnauthorizedException('仅一手 PandaKing 可删除机构')
+    }
+    const agency = await this.prisma.agency.findUnique({ where: { id } })
+    if (!agency) throw new NotFoundException({ code: 'AGENCY_NOT_FOUND', message: '机构不存在' })
+
+    // 终态集合：处于这些状态的路线视为已结束，不阻碍删除
+    const TERMINAL = ['completed', 'cancelled', 'archived', 'done', 'offline']
+    const activeRoute = await this.prisma.route.findFirst({
+      where: {
+        OR: [{ agencyId: id }, { provincialId: id }],
+        NOT: { statusKey: { in: TERMINAL } },
+      },
+    })
+    if (activeRoute) {
+      throw new BadRequestException({
+        code: 'AGENCY_HAS_ACTIVE_ROUTES',
+        message: '该机构仍有进行中路线，暂不能删除',
+      })
+    }
+    const activeLink = await this.prisma.routeIntake.findFirst({
+      where: { agencyId: id, expiresAt: { gt: new Date() } },
+    })
+    if (activeLink) {
+      throw new BadRequestException({
+        code: 'AGENCY_HAS_ACTIVE_LINK',
+        message: '该机构仍有未过期提交链接，暂不能删除',
+      })
+    }
+    // 级联清理：过期链接 + 关联账号 + 机构本身（Route 外键 SetNull 保底不丢）
+    await this.prisma.routeIntake.deleteMany({ where: { agencyId: id } })
+    await this.prisma.user.deleteMany({ where: { agencyId: id } })
+    await this.prisma.agency.delete({ where: { id } })
+    return { ok: true }
+  }
+
+  // 生成 12 位强密码（用于机构账号初始密码，一次性返回）
+  private genStrongPwd(): string {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'
+    let s = ''
+    for (let i = 0; i < 12; i++) s += chars[Math.floor(Math.random() * chars.length)]
+    return s
   }
 
   listAgencies(caller: AuthPrincipal) {

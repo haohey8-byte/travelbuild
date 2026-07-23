@@ -12,6 +12,8 @@ import {
   createAdmin as createAdminApi,
   resetAdminPwd as resetAdminPwdApi,
   disableAdmin as disableAdminApi,
+  createAgency as createAgencyApi,
+  deleteAgency as deleteAgencyApi,
 } from '@/api/auth'
 
 // 鉴权与全局上下文（角色切换、语言切换、登录态）
@@ -77,6 +79,21 @@ export const useAuthStore = defineStore('auth', () => {
     return await disableAdminApi(id)
   }
 
+  // 机构管理：建机构并一并建账号（D1/D4）、硬删机构（D5）
+  async function createAgency(body: {
+    id: string
+    name: string
+    role: Role
+    contact?: string
+    phone: string
+    initPwd?: string
+  }) {
+    return await createAgencyApi(body)
+  }
+  async function deleteAgency(id: string) {
+    return await deleteAgencyApi(id)
+  }
+
   async function loginByInvite(token: string, name: string) {
     const res = await acceptInvite(token, name)
     setSession(res)
@@ -113,6 +130,8 @@ export const useAuthStore = defineStore('auth', () => {
     createAdmin,
     resetAdminPwd,
     disableAdmin,
+    createAgency,
+    deleteAgency,
     loginByInvite,
     loadMe,
     logout,

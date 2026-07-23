@@ -9,6 +9,9 @@ const SEED_ADMIN_PWD = process.env.SEED_ADMIN_PWD || 'Pandaking@2026'
 // 种子协作者手机号（必须 unique 且非空，故为每条预置独立号码；与 seed-pk 不冲突）
 const SEED_AGENCY_PHONE = process.env.SEED_AGENCY_PHONE || '13800000001'
 const SEED_PROVINCIAL_PHONE = process.env.SEED_PROVINCIAL_PHONE || '13800000002'
+// 种子协作者初始密码（D1：协作方也有控制台账号，需可登录）
+const SEED_AGENCY_PWD = process.env.SEED_AGENCY_PWD || 'Agency@2026'
+const SEED_PROVINCIAL_PWD = process.env.SEED_PROVINCIAL_PWD || 'Provincial@2026'
 
 // 幂等种子：以固定 id upsert，重复执行安全
 async function main() {
@@ -76,8 +79,17 @@ async function main() {
       agencyId: agencyOrg.id,
       level: 'admin',
       phone: SEED_AGENCY_PHONE,
+      password: await bcrypt.hash(SEED_AGENCY_PWD, 12),
+      mustChangePwd: true,
     },
   })
+  // 幂等兜底：若旧种子用户缺少密码（迁移前创建的账号），补种密码 + 强制改密
+  if (!agency.password) {
+    await prisma.user.update({
+      where: { id: 'seed-agency' },
+      data: { password: await bcrypt.hash(SEED_AGENCY_PWD, 12), mustChangePwd: true },
+    })
+  }
   const provincial = await prisma.user.upsert({
     where: { id: 'seed-provincial' },
     update: { agencyId: provincialOrg.id, level: 'admin', phone: SEED_PROVINCIAL_PHONE },
@@ -88,8 +100,17 @@ async function main() {
       agencyId: provincialOrg.id,
       level: 'admin',
       phone: SEED_PROVINCIAL_PHONE,
+      password: await bcrypt.hash(SEED_PROVINCIAL_PWD, 12),
+      mustChangePwd: true,
     },
   })
+  // 幂等兜底：同上
+  if (!provincial.password) {
+    await prisma.user.update({
+      where: { id: 'seed-provincial' },
+      data: { password: await bcrypt.hash(SEED_PROVINCIAL_PWD, 12), mustChangePwd: true },
+    })
+  }
 
   // 一条演示邀请（机构管理员，7 天有效），用于 accept-invite 联调
   await prisma.invite.upsert({

@@ -15,7 +15,8 @@ const isAuthPage = computed(() => route.meta.authPage === true)
 const needsLogin = computed(() => !auth.token && !isH5.value && !isAuthPage.value)
 
 const nav = computed(() => {
-  const base = [{ to: '/account', label: t('nav.account'), icon: '👤' }]
+  // 所有登录角色可见「系统设置」单一入口；内部子组件按 role 门控
+  const base = [{ to: '/settings', label: t('nav.settings'), icon: '⚙' }]
   // 按 PRD 权限矩阵：省地接社无控制台路线视图，仅通过 H5 成本询价交互
   if (auth.user?.role === 'provincial') return base
   const items = [
@@ -24,10 +25,6 @@ const nav = computed(() => {
     { to: '/cases', label: t('nav.cases'), icon: '🏆' },
     ...base,
   ]
-  // 仅一手 PandaKing 可见：管理员管理
-  if (auth.user?.role === 'pandaking') {
-    items.push({ to: '/admin/admins', label: '管理员', icon: '🛡' })
-  }
   return items
 })
 
@@ -63,7 +60,7 @@ function onNav(to: string) {
       <button class="hamburger" :class="{ open: menuOpen }" @click="toggleMenu" aria-label="菜单" :aria-expanded="menuOpen">
         <span></span><span></span><span></span>
       </button>
-      <div class="brand" @click="onNav(auth.user?.role === 'provincial' ? '/account' : '/routes/kanban')">PandaKing9<span class="brand-sub">协作工作台</span></div>
+      <div class="brand" @click="onNav(auth.user?.role === 'provincial' ? '/settings' : '/routes/kanban')">PandaKing9<span class="brand-sub">协作工作台</span></div>
 
       <!-- 桌面端内联导航 -->
       <nav class="app-nav">

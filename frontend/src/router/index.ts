@@ -16,12 +16,10 @@ const router = createRouter({
     { path: '/routes/list', name: 'route-list', component: () => import('@/views/RouteList.vue') },
     { path: '/routes/:id', name: 'route-detail', component: () => import('@/views/RouteDetail.vue'), props: true },
     { path: '/kb', name: 'kb', component: () => import('@/views/KnowledgeBase.vue') },
-    { path: '/account', name: 'account', component: () => import('@/views/Account.vue') },
+    { path: '/settings', name: 'settings', component: () => import('@/views/settings/Settings.vue') },
     { path: '/cases', name: 'cases', component: () => import('@/views/Cases.vue') },
     { path: '/route-archives', name: 'route-archives', component: () => import('@/views/RouteArchives.vue') },
     { path: '/route-archives/:id', name: 'route-archive-detail', component: () => import('@/views/RouteArchiveDetail.vue'), props: true },
-    // 仅一手 PandaKing 可见：管理员管理
-    { path: '/admin/admins', name: 'admin-admins', component: () => import('@/views/AdminAdmins.vue'), meta: { requiresPandaking: true } },
     // 协作 H5（公开，免登录，隐藏主导航）
     { path: '/h5/route/:token', name: 'h5-route', component: () => import('@/views/H5Route.vue'), meta: { h5: true } },
     // 邀请接受 H5（一手/管理员复制链接发到微信群，受邀者打开后接受）
@@ -49,10 +47,6 @@ router.beforeEach((to) => {
   // 控制台页：未登录 → 跳登录（带重定向目标）
   if (!auth.token) {
     return { path: '/login', query: { redirect: to.fullPath } }
-  }
-  // 管理员页限 pandaking
-  if (to.meta.requiresPandaking && auth.user?.role !== 'pandaking') {
-    return { path: '/routes/kanban' }
   }
   return true
 })

@@ -46,22 +46,19 @@ export class IntakeController {
     return this.svc.submitIntake(body)
   }
 
-  // 已生成链接列表（PandaKing 控制台「复制历史」管理）
+  // 已生成链接列表：一手见全部；境外社仅见自己机构的链接；省地接社无
   @Get('intake-links')
   @UseGuards(JwtAuthGuard)
   listIntakeLinks(@CurrentUser() user: AuthUser) {
-    if (user.role !== 'pandaking') {
-      throw new ForbiddenException('仅一手 PandaKing 可查看提交链接')
-    }
-    return this.svc.listIntakeLinks()
+    return this.svc.listIntakeLinks(user)
   }
 
-  // 复制计数（复制历史）：自增 copies + 写最近复制时间
+  // 复制计数（复制历史）：一手与境外社可操作（境外社仅见自己链接，但允许复制）
   @Post('intake-link/:token/copy')
   @UseGuards(JwtAuthGuard)
   markCopied(@Param('token') token: string, @CurrentUser() user: AuthUser) {
-    if (user.role !== 'pandaking') {
-      throw new ForbiddenException('仅一手 PandaKing 可操作')
+    if (user.role !== 'pandaking' && user.role !== 'agency') {
+      throw new ForbiddenException('无权限操作')
     }
     return this.svc.markCopied(token)
   }
