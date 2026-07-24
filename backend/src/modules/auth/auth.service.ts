@@ -565,14 +565,29 @@ export class AuthService {
   }
 
   listAgencies(caller: AuthPrincipal) {
-    if (caller.role === 'pandaking') {
-      return this.prisma.agency.findMany({ orderBy: { createdAt: 'asc' } })
-    }
-    if (!caller.agencyId) return []
-    return this.prisma.agency.findMany({
-      where: { id: caller.agencyId },
-      orderBy: { createdAt: 'asc' },
-    })
+    const where =
+      caller.role === 'pandaking'
+        ? {}
+        : caller.agencyId
+          ? { id: caller.agencyId }
+          : { id: '__none__' }
+    return this.prisma.agency
+      .findMany({
+        where,
+        orderBy: { createdAt: 'asc' },
+        // 关联登录账号（agency 与 user 一对多，取首个）：登录键为手机号，即后台登录账号名
+        include: { users: { select: { phone: true, name: true, disabled: true } } },
+      })
+      .then((agencies) =>
+        agencies.map((a) => {
+          const { users, ...rest } = a
+          return {
+            ...rest,
+            loginAccount: users[0]?.phone ?? null,
+            accountName: users[0]?.name ?? null,
+          }
+        }),
+      )
   }
 
   // 修改旅行社档案 / 切换启用禁用（仅一手）

@@ -177,13 +177,14 @@ onMounted(load)
     <p v-else-if="loadErr" class="err">⚠ {{ loadErr }}</p>
     <div v-else class="tbl-wrap">
       <table class="tbl">
-        <thead><tr><th>旅行社编号</th><th>名称</th><th>角色</th><th>联系方式</th><th>状态</th><th>操作</th></tr></thead>
+        <thead><tr><th>旅行社编号</th><th>名称</th><th>角色</th><th>联系方式</th><th>登录账号名</th><th>状态</th><th>操作</th></tr></thead>
         <tbody>
           <tr v-for="a in agencies" :key="a.id">
             <td>{{ a.id }}</td>
             <td>{{ a.name }}</td>
             <td>{{ ROLE_LABEL[a.role] || a.role }}</td>
             <td>{{ a.contact || '-' }}</td>
+            <td>{{ a.loginAccount || '-' }}</td>
             <td>
               <span class="badge" :class="a.disabled ? 'badge-off' : 'badge-on'">
                 {{ a.disabled ? '已禁用' : '启用中' }}
@@ -197,7 +198,7 @@ onMounted(load)
               <button class="btn ghost sm danger" type="button" @click="deleteTarget = a; deleteErr = ''">删除</button>
             </td>
           </tr>
-          <tr v-if="!agencies.length"><td colspan="6" class="muted">暂无旅行社</td></tr>
+          <tr v-if="!agencies.length"><td colspan="7" class="muted">暂无旅行社</td></tr>
         </tbody>
       </table>
     </div>

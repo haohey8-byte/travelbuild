@@ -107,6 +107,8 @@ export interface Agency {
   contact?: string | null
   disabled?: boolean // 禁用：仅从选择下拉框移除，不阻断登录
   createdAt: string
+  loginAccount?: string | null // 关联登录账号的手机号（后台登录键）；无账号则 null
+  accountName?: string | null // 关联登录账号的显示名（通常等于机构名）
 }
 
 // 创建机构返回：机构 + 一并创建的登录账号（手机号脱敏）+ 一次性初始密码

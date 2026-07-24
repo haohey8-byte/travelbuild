@@ -25,7 +25,10 @@ interface AuthUser {
 
 // 机构提交链接（route-intake）：免登录提交，仅 PandaKing 可预发链接。
 // 独立于 RoutesController（后者类级挂 JwtAuthGuard），避免提交端点被强制走登录态。
-@Controller('routes')
+// 路径前缀用 'intake' 而非 'routes'：RoutesController 上有 @Get(':id') 通配，会抢先
+// 匹配 /routes/intake-links 当成 id='intake-links' 查 Route 表 → 抛"路线不存在"。
+// 独立前缀彻底避免通配路径污染。
+@Controller('intake')
 export class IntakeController {
   constructor(private readonly svc: RoutesService) {}
 
