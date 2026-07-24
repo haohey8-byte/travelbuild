@@ -32,6 +32,7 @@ const copiedPwd = ref(false)
 const deleteTarget = ref<Agency | null>(null)
 const deleteErr = ref('')
 const deleting = ref(false)
+const lastDeleted = ref<{ name: string; id: string } | null>(null)
 
 // —— 修改旅行社（名称 / 联系方式；角色结构性锁定）——
 const editTarget = ref<Agency | null>(null)
@@ -135,15 +136,24 @@ async function copyPwd() {
 async function confirmDelete() {
   if (!deleteTarget.value) return
   deleteErr.value = ''
+  const targetId = deleteTarget.value.id
+  const targetName = deleteTarget.value.name
   deleting.value = true
+  // 乐观更新：立刻从本地列表剔除行，让用户直观看到删除生效
+  agencies.value = agencies.value.filter((a) => a.id !== targetId)
   try {
-    await auth.deleteAgency(deleteTarget.value.id)
+    await auth.deleteAgency(targetId)
     deleteTarget.value = null
+    // 用后端真实最新数据兜底（防止 seed 复活时立刻被乐观更新欺骗——但 root cause 是 seed，
+    // 这里只是双保险；重部署后 seed 改法生效，乐观更新看到的就是真相）
     await load()
+    lastDeleted.value = { name: targetName, id: targetId }
+    setTimeout(() => (lastDeleted.value = null), 4000)
   } catch (e: any) {
+    // 失败时回滚（重新插入行 + 重新拉数据）
+    await load()
     const code = e?.response?.data?.code
     if (code === 'AGENCY_HAS_ACTIVE_ROUTES') deleteErr.value = '该机构仍有进行中路线，暂不能删除'
-    else if (code === 'AGENCY_HAS_ACTIVE_LINK') deleteErr.value = '该机构仍有未过期提交链接，暂不能删除'
     else deleteErr.value = e?.response?.data?.message || '删除失败'
   } finally {
     deleting.value = false
@@ -159,7 +169,9 @@ onMounted(load)
       <h2 class="section-title">旅行社管理</h2>
       <button class="btn btn-primary sm" @click="showCreate = true" type="button">+ 新增旅行社</button>
     </div>
-    <p class="muted">创建旅行社将一并生成该旅行社的控制台登录账号（手机号 + 初始密码，首次登录强制改密）。编号由系统按角色自动生成，无需手填。删除需先清空其进行中路线与提交链接。</p>
+    <p class="muted">创建旅行社将一并生成该旅行社的控制台登录账号（手机号 + 初始密码，首次登录强制改密）。编号由系统按角色自动生成，无需手填。删除将一并清空其账号与所有提交链接；仅进行中的路线（非终态）会阻止删除。</p>
+
+    <p v-if="lastDeleted" class="ok" role="status">✓ 已删除「{{ lastDeleted.name }}」（{{ lastDeleted.id }}）</p>
 
     <p v-if="loading">加载中…</p>
     <p v-else-if="loadErr" class="err">⚠ {{ loadErr }}</p>
@@ -308,6 +320,7 @@ onMounted(load)
 .btn.ghost.sm { padding: 7px 10px; font-size: 13px; }
 .btn.ghost.danger, .btn-primary.danger { color: #fff; background: var(--danger); border-color: var(--danger); }
 .err { color: var(--danger); margin-top: 10px; }
+.ok { color: #16a34a; margin-top: 10px; font-weight: 600; }
 .pwd-box { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
 .pwd-box .input { font-family: ui-monospace, monospace; letter-spacing: 1px; }
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 100; }
