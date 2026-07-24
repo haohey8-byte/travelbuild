@@ -32,6 +32,11 @@ const loadingIntakeLinks = ref(false)
 const listErr = ref('')
 const copiedToken = ref('')
 
+// 「复制给旅行社」成功后的友好引导弹窗：告诉用户下一步去微信粘贴给合作旅行社
+const showCopiedDialog = ref(false)
+const copiedDialogUrl = ref('')
+const copiedDialogAgency = ref('')
+
 const today = new Date().toISOString().slice(0, 10)
 
 const agencyOptions = computed(() => agencies.value.filter((a) => a.role === 'agency' && !a.disabled))
@@ -110,8 +115,15 @@ async function onIssueIntake() {
 }
 
 async function copyToAgency(item: IntakeLinkView) {
-  const ok = await copyText(fullLink(item.link))
-  if (!ok) return
+  const url = fullLink(item.link)
+  const ok = await copyText(url)
+  if (!ok) {
+    // 剪贴板不可用（如微信非安全上下文）→ 仍弹出友好提示，引导用户长按手动复制
+    copiedDialogUrl.value = url
+    copiedDialogAgency.value = item.agencyName
+    showCopiedDialog.value = true
+    return
+  }
   copiedToken.value = item.token
   setTimeout(() => {
     if (copiedToken.value === item.token) copiedToken.value = ''
@@ -126,6 +138,19 @@ async function copyToAgency(item: IntakeLinkView) {
   } catch {
     /* 复制仍成功，仅计数失败不影响使用 */
   }
+  // 复制成功 → 弹出友好引导，告诉用户下一步去微信粘贴给合作旅行社
+  copiedDialogUrl.value = url
+  copiedDialogAgency.value = item.agencyName
+  showCopiedDialog.value = true
+}
+
+// 弹窗内「再复制一次」：纯复制，不重复计数
+async function copyAgain() {
+  await copyText(copiedDialogUrl.value)
+}
+
+function closeCopiedDialog() {
+  showCopiedDialog.value = false
 }
 
 async function deleteLink(item: IntakeLinkView) {
@@ -214,6 +239,7 @@ onMounted(() => {
               <th>机构</th>
               <th>有效期</th>
               <th>备注</th>
+              <th>提交链接</th>
               <th>复制次数</th>
               <th>最近复制</th>
               <th>创建于</th>
@@ -232,6 +258,9 @@ onMounted(() => {
                 <span v-else class="badge ok">剩 {{ daysLeft(it.expiresAt!) }} 天</span>
               </td>
               <td class="note">{{ it.note || '—' }}</td>
+              <td class="url">
+                <code class="url-box" :title="fullLink(it.link)">{{ fullLink(it.link) }}</code>
+              </td>
               <td>{{ it.copies }} 次</td>
               <td>{{ fmt(it.lastCopiedAt) }}</td>
               <td>{{ fmt(it.createdAt) }}</td>
@@ -242,11 +271,36 @@ onMounted(() => {
                 <button class="btn danger sm" type="button" @click="deleteLink(it)">删除</button>
               </td>
             </tr>
-            <tr v-if="!intakeLinks.length"><td colspan="7" class="muted">暂无已生成链接</td></tr>
+            <tr v-if="!intakeLinks.length"><td colspan="8" class="muted">暂无已生成链接</td></tr>
           </tbody>
         </table>
       </div>
     </div>
+
+    <!-- 复制成功友好引导：告诉用户下一步去微信粘贴给合作旅行社 -->
+    <transition name="fade">
+      <div v-if="showCopiedDialog" class="modal-backdrop" @click.self="closeCopiedDialog">
+        <div class="modal copy-modal" role="dialog" aria-modal="true" aria-labelledby="copyDlgTitle">
+          <div class="copy-modal-icon">✓</div>
+          <h2 id="copyDlgTitle" class="copy-modal-title">链接已复制成功</h2>
+          <p class="copy-modal-sub">
+            已为「{{ copiedDialogAgency }}」复制免登录提交链接，下一步请把链接粘贴到微信，发给对应的合作旅行社联系人。
+          </p>
+          <div class="copy-modal-url">
+            <code>{{ copiedDialogUrl }}</code>
+            <button class="btn ghost sm" type="button" @click="copyAgain">再复制一次</button>
+          </div>
+          <ol class="copy-modal-steps">
+            <li><b>打开微信</b>，进入与该旅行社联系人的聊天窗口</li>
+            <li>长按输入框 <b>粘贴</b> 刚才复制的链接并发送</li>
+            <li>对方点开链接即可 <b>免登录</b> 提交路线初稿，自动进入协作流程</li>
+          </ol>
+          <div class="modal-actions">
+            <button class="btn btn-primary" type="button" @click="closeCopiedDialog">我知道了</button>
+          </div>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -282,4 +336,72 @@ onMounted(() => {
 .btn.danger.sm { padding: 7px 10px; font-size: 13px; }
 .err { color: var(--danger); margin-top: 10px; }
 .ok { color: #16a34a; margin-top: 10px; }
+
+/* 行内 URL 展示：允许换行并约束宽度，避免撑破表格 */
+.tbl td.url { white-space: normal; vertical-align: top; }
+.url-box {
+  display: block;
+  max-width: 320px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-all;
+  white-space: normal;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 9px;
+}
+
+/* —— 复制成功友好引导弹窗 —— */
+.copy-modal { max-width: 440px; text-align: center; }
+.copy-modal-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 12px;
+  border-radius: 50%;
+  background: var(--ok-50);
+  color: var(--ok);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: 700;
+}
+.copy-modal-title { margin: 0 0 8px; font-size: 18px; font-weight: 700; }
+.copy-modal-sub { margin: 0 0 14px; font-size: 13px; line-height: 1.6; color: var(--muted); }
+.copy-modal-url {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  text-align: left;
+}
+.copy-modal-url code {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-all;
+  color: var(--ink);
+}
+.copy-modal-steps {
+  margin: 0 0 18px;
+  padding-left: 20px;
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--muted);
+}
+.copy-modal-steps b { color: var(--ink); }
+.copy-modal .modal-actions { justify-content: center; }
+
+/* 弹窗淡入淡出（premium 微交互） */
+.fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>
