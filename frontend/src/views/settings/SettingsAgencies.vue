@@ -267,7 +267,7 @@ onMounted(load)
     <div v-if="deleteTarget" class="modal-backdrop" @click.self="deleteTarget = null">
       <div class="modal">
         <h3>删除旅行社「{{ deleteTarget.name }}」？</h3>
-        <p class="muted">删除将一并清除该旅行社的登录账号与过期提交链接；关联路线的归属置空（数据不丢）。需先清空进行中路线与未过期提交链接。</p>
+        <p class="muted">删除将一并清除该旅行社的登录账号与所有提交链接（含永久有效）；关联路线的归属置空（数据不丢）。仅进行中的路线（非终态）会阻止删除。</p>
         <p v-if="deleteErr" class="err">{{ deleteErr }}</p>
         <div class="modal-actions">
           <button class="btn" type="button" @click="deleteTarget = null">取消</button>

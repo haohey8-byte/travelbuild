@@ -520,7 +520,9 @@ export class AuthService {
     return { agency, user: this.toUserView(user), initPwd }
   }
 
-  // 删除机构：硬删 + 前置校验（无进行中路线、无未过期提交链接才允许）
+  // 删除机构：硬删 + 前置校验（仅进行中路线阻止；提交链接随机构一并清除）。
+  // 设计理由：链接归属于机构，机构不存在则链接失去意义；一并清除避免孤儿链接。
+  // 仍在协作中的路线（非终态）由 active-routes 检查兜底，确保不会误删进行中的合作。
   async deleteAgency(id: string, caller: AuthPrincipal) {
     if (caller.role !== 'pandaking') {
       throw new UnauthorizedException('仅一手 PandaKing 可删除机构')
@@ -542,17 +544,8 @@ export class AuthService {
         message: '该机构仍有进行中路线，暂不能删除',
       })
     }
-    // 未过期链接（含永久有效 expiresAt=null）都算活跃，阻止删除
-    const activeLink = await this.prisma.routeIntake.findFirst({
-      where: { agencyId: id, OR: [{ expiresAt: { gt: new Date() } }, { expiresAt: null }] },
-    })
-    if (activeLink) {
-      throw new BadRequestException({
-        code: 'AGENCY_HAS_ACTIVE_LINK',
-        message: '该机构仍有未过期提交链接，暂不能删除',
-      })
-    }
-    // 级联清理：过期链接 + 关联账号 + 机构本身（Route 外键 SetNull 保底不丢）
+    // 级联清理：所有提交链接（含永久有效 expiresAt=null）+ 关联账号 + 机构本身
+    // （Route 外键 SetNull 保底不丢；用户如需保留链接数据，可先在「提交链接」页撤销或导出记录）
     await this.prisma.routeIntake.deleteMany({ where: { agencyId: id } })
     await this.prisma.user.deleteMany({ where: { agencyId: id } })
     await this.prisma.agency.delete({ where: { id } })
