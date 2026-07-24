@@ -6,7 +6,6 @@ import {
   createIntakeLink,
   listIntakeLinks,
   copyIntakeLink,
-  updateIntakeLink,
   deleteIntakeLink,
 } from '@/api/routes'
 import { copyText } from '@/utils/share'
@@ -18,28 +17,20 @@ const isAgency = auth.currentRole === 'agency'
 const agencies = ref<Agency[]>([])
 const loadingAgencies = ref(false)
 const intakeAgencyId = ref('')
-const issueLink = ref('')
 const issueErr = ref('')
 const issuing = ref(false)
-const issueCopied = ref(false)
+const issueNote = ref('')
+const issueSuccess = ref('')  // 最近一次生成的提示（成功 → 显示在表单下，2 秒后淡出）
 
-// 有效期选项：30天 / 1年 / 自定义 / 永久
+// 有效期选项：30天 / 1年 / 自定义 / 永久（默认永久——游客常提前一年咨询）
 type ValidityMode = '30d' | '1y' | 'custom' | 'permanent'
 const issueMode = ref<ValidityMode>('permanent')
 const issueCustomDate = ref('')
-const issueNote = ref('')
 
 const intakeLinks = ref<IntakeLinkView[]>([])
 const loadingIntakeLinks = ref(false)
+const listErr = ref('')
 const copiedToken = ref('')
-
-// 编辑弹窗
-const editing = ref<IntakeLinkView | null>(null)
-const editMode = ref<ValidityMode>('30d')
-const editCustomDate = ref('')
-const editNote = ref('')
-const savingEdit = ref(false)
-const editErr = ref('')
 
 const today = new Date().toISOString().slice(0, 10)
 
@@ -89,10 +80,12 @@ async function loadAgencies() {
 
 async function loadIntakeLinks() {
   loadingIntakeLinks.value = true
+  listErr.value = ''
   try {
     intakeLinks.value = await listIntakeLinks()
-  } catch {
+  } catch (e: any) {
     intakeLinks.value = []
+    listErr.value = e?.response?.data?.message || '加载已生成链接失败'
   } finally {
     loadingIntakeLinks.value = false
   }
@@ -100,28 +93,23 @@ async function loadIntakeLinks() {
 
 async function onIssueIntake() {
   issueErr.value = ''
-  issueCopied.value = false
+  issueSuccess.value = ''
   if (!intakeAgencyId.value) return (issueErr.value = '请选择机构')
   issuing.value = true
   try {
     const opts = buildOpts(issueMode.value, issueCustomDate.value, issueNote.value)
     const res = await createIntakeLink(intakeAgencyId.value, opts)
-    issueLink.value = fullLink(res.link)
+    issueSuccess.value = `已生成新链接（…${res.token.slice(-8)}），下方清单已更新`
+    setTimeout(() => (issueSuccess.value = ''), 3000)
     await loadIntakeLinks()
   } catch (e: any) {
-    issueErr.value = e?.response?.data?.message || '预发链接失败'
+    issueErr.value = e?.response?.data?.message || '新增提交链接失败'
   } finally {
     issuing.value = false
   }
 }
 
-async function copyIssue() {
-  if (!issueLink.value) return
-  issueCopied.value = await copyText(issueLink.value)
-  setTimeout(() => (issueCopied.value = false), 2000)
-}
-
-async function copyRow(item: IntakeLinkView) {
+async function copyToAgency(item: IntakeLinkView) {
   const ok = await copyText(fullLink(item.link))
   if (!ok) return
   copiedToken.value = item.token
@@ -140,43 +128,15 @@ async function copyRow(item: IntakeLinkView) {
   }
 }
 
-function openEdit(it: IntakeLinkView) {
-  editing.value = it
-  editErr.value = ''
-  if (it.permanent) {
-    editMode.value = 'permanent'
-    editCustomDate.value = ''
-  } else if (it.expiresAt) {
-    editMode.value = 'custom'
-    editCustomDate.value = it.expiresAt.slice(0, 10)
-  } else {
-    editMode.value = '30d'
-    editCustomDate.value = ''
-  }
-  editNote.value = it.note || ''
-}
-async function saveEdit() {
-  if (!editing.value) return
-  editErr.value = ''
-  savingEdit.value = true
+async function deleteLink(item: IntakeLinkView) {
+  if (!confirm(`确认删除「${item.agencyName}」的提交链接？删除后该链接立即失效。`)) return
   try {
-    const opts = buildOpts(editMode.value, editCustomDate.value, editNote.value)
-    await updateIntakeLink(editing.value.token, opts)
-    editing.value = null
+    await deleteIntakeLink(item.token)
+    // 乐观更新：立即从本地列表剔除，再异步刷一遍同步服务端状态
+    intakeLinks.value = intakeLinks.value.filter((x) => x.token !== item.token)
     await loadIntakeLinks()
   } catch (e: any) {
-    editErr.value = e?.response?.data?.message || '保存失败'
-  } finally {
-    savingEdit.value = false
-  }
-}
-async function revoke(it: IntakeLinkView) {
-  if (!confirm(`确认撤销「${it.agencyName}」的提交链接？撤销后该链接立即失效。`)) return
-  try {
-    await deleteIntakeLink(it.token)
-    await loadIntakeLinks()
-  } catch (e: any) {
-    alert(e?.response?.data?.message || '撤销失败')
+    alert(e?.response?.data?.message || '删除失败')
   }
 }
 
@@ -188,12 +148,12 @@ onMounted(() => {
 
 <template>
   <div>
-    <h2 class="section-title">机构提交链接（route-intake）</h2>
+    <h2 class="section-title">旅行社免登录路线提交链接（route-intake）</h2>
     <p class="muted">
       {{
         isAgency
-          ? '为本机构预发一条常驻提交链接，对方凭链接免登录提交路线初稿；可设为永久有效或自定义有效期，可随时编辑或撤销。'
-          : '为某家境外旅行社预发一条常驻提交链接，对方凭链接免登录提交路线初稿；可设为永久有效或自定义有效期（游客常提前一年咨询），可重复生成替换、随时编辑或撤销。'
+          ? '为本机构预发一条常驻提交链接，对方凭链接免登录提交路线初稿；可设为永久有效或自定义有效期，可随时复制给旅行社或删除。'
+          : '为某家境外旅行社预发一条常驻提交链接，对方凭链接免登录提交路线初稿；可设为永久有效或自定义有效期（游客常提前一年咨询），可重复生成替换、可随时复制给旅行社或删除。'
       }}
     </p>
 
@@ -237,19 +197,17 @@ onMounted(() => {
 
       <div class="row end">
         <button class="btn btn-primary sm" :disabled="issuing" @click="onIssueIntake" type="button">
-          {{ issuing ? '生成中…' : '预发链接' }}
+          {{ issuing ? '生成中…' : '新增旅行社路线提交URL链接' }}
         </button>
       </div>
 
       <p v-if="issueErr" class="err">{{ issueErr }}</p>
-      <div v-if="issueLink" class="link-box">
-        <input :value="issueLink" class="input" readonly />
-        <button class="btn ghost sm" @click="copyIssue" type="button">{{ issueCopied ? '已复制 ✓' : '复制链接' }}</button>
-      </div>
+      <p v-if="issueSuccess" class="ok">{{ issueSuccess }}</p>
 
       <h4 class="sub">已生成链接</h4>
       <p v-if="loadingIntakeLinks" class="muted">加载中…</p>
-      <div v-if="!loadingIntakeLinks" class="tbl-wrap">
+      <p v-else-if="listErr" class="err">{{ listErr }}</p>
+      <div v-else class="tbl-wrap">
         <table class="tbl">
           <thead>
             <tr>
@@ -278,62 +236,15 @@ onMounted(() => {
               <td>{{ fmt(it.lastCopiedAt) }}</td>
               <td>{{ fmt(it.createdAt) }}</td>
               <td class="ops">
-                <button class="btn ghost sm" type="button" :disabled="it.expired" @click="copyRow(it)">
-                  {{ copiedToken === it.token ? '已复制 ✓' : '复制' }}
+                <button class="btn ghost sm" type="button" :disabled="it.expired" @click="copyToAgency(it)">
+                  {{ copiedToken === it.token ? '已复制 ✓' : '复制给旅行社' }}
                 </button>
-                <button class="btn ghost sm" type="button" @click="openEdit(it)">编辑</button>
-                <button class="btn danger sm" type="button" @click="revoke(it)">撤销</button>
+                <button class="btn danger sm" type="button" @click="deleteLink(it)">删除</button>
               </td>
             </tr>
             <tr v-if="!intakeLinks.length"><td colspan="7" class="muted">暂无已生成链接</td></tr>
           </tbody>
         </table>
-      </div>
-    </div>
-
-    <!-- 编辑弹窗 -->
-    <div v-if="editing" class="overlay" @click.self="editing = null">
-      <div class="dialog">
-        <h3 class="dlg-title">编辑提交链接</h3>
-        <p class="muted">{{ editing.agencyName }} · …{{ editing.token.slice(-8) }}</p>
-
-        <div class="row">
-          <label>有效期</label>
-          <select v-model="editMode" class="input">
-            <option value="30d">30 天</option>
-            <option value="1y">1 年</option>
-            <option value="custom">自定义日期</option>
-            <option value="permanent">永久有效</option>
-          </select>
-          <input
-            v-if="editMode === 'custom'"
-            type="date"
-            class="input"
-            v-model="editCustomDate"
-            :min="today"
-            style="max-width: 180px"
-          />
-        </div>
-
-        <div class="row">
-          <label>备注</label>
-          <input
-            v-model="editNote"
-            class="input"
-            type="text"
-            maxlength="120"
-            placeholder="如机构联系人 / 用途说明（选填）"
-          />
-        </div>
-
-        <p v-if="editErr" class="err">{{ editErr }}</p>
-
-        <div class="row end">
-          <button class="btn ghost sm" type="button" @click="editing = null">取消</button>
-          <button class="btn btn-primary sm" type="button" :disabled="savingEdit" @click="saveEdit">
-            {{ savingEdit ? '保存中…' : '保存' }}
-          </button>
-        </div>
       </div>
     </div>
   </div>
@@ -370,11 +281,5 @@ onMounted(() => {
 .btn.danger { background: transparent; color: #dc2626; border-color: #dc2626; }
 .btn.danger.sm { padding: 7px 10px; font-size: 13px; }
 .err { color: var(--danger); margin-top: 10px; }
-.link-box { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
-.link-box .input { font-size: 12px; color: var(--muted); }
-
-/* 编辑弹窗 */
-.overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
-.dialog { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px; width: 100%; max-width: 460px; box-shadow: 0 20px 60px rgba(0,0,0,0.25); }
-.dlg-title { margin: 0 0 2px; font-size: 17px; }
+.ok { color: #16a34a; margin-top: 10px; }
 </style>
