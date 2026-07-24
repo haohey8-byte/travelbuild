@@ -23,6 +23,8 @@ RUN pnpm install
 RUN pnpm --filter backend exec prisma generate
 # 编译 NestJS 到 backend/dist
 RUN pnpm --filter backend build
+# 编译前端 Vue SPA 到 frontend/dist（与后端同镜像托管，自定义域名直接出网站，无需单独静态托管）
+RUN pnpm --filter frontend exec vite build
 
 FROM node:22-bookworm-slim AS prod
 ENV NODE_ENV=production
@@ -40,6 +42,8 @@ COPY --from=build /app/backend/dist ./backend/dist
 COPY --from=build /app/backend/prisma ./backend/prisma
 COPY --from=build /app/backend/public ./backend/public
 COPY --from=build /app/backend/package.json ./backend/package.json
+# 前端构建产物（SPA），运行时由 NestJS 一并托管在根路径
+COPY --from=build /app/frontend/dist ./spa
 EXPOSE 3000
 ENV PORT=3000
 # 容器启动：先迁移（幂等），再幂等种子（确保初始管理员账号存在且可登录，
