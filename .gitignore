@@ -8,6 +8,7 @@ dist/
 build/
 *.tsbuildinfo
 .vite/
+frontend/dist2/
 
 # Env / secrets（密钥绝不入库）
 .env
