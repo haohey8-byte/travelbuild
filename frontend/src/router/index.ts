@@ -7,7 +7,7 @@ import { useAuthStore } from '@/stores/auth'
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.VITE_BASE || '/'),
   routes: [
-    { path: '/', redirect: '/routes/kanban' },
+    { path: '/', name: 'home', component: () => import('@/views/Home.vue'), meta: { public: true } },
     // —— 认证页（免登录可访问，独立渲染，无主导航）——
     { path: '/login', name: 'login', component: () => import('@/views/Login.vue'), meta: { authPage: true } },
     { path: '/change-pwd', name: 'change-pwd', component: () => import('@/views/ChangePwd.vue'), meta: { authPage: true } },
@@ -37,6 +37,8 @@ const router = createRouter({
 // H5 与认证页（login/change-pwd）永远放行。
 router.beforeEach((to) => {
   const auth = useAuthStore()
+  // 公开首页（营销页）：免登录
+  if (to.meta.public) return true
   // 公开 H5：免登录
   if (to.meta.h5) return true
   // 认证页：login 可匿名访问；change-pwd 必须已登录

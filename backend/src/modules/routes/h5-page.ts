@@ -148,7 +148,7 @@ export function renderH5Page(
 </head>
 <body>
   <div class="wrap">
-    <div class="brand"><span class="dot"></span><b>PandaKing9</b> · 入境游定制协作</div>
+    <div class="brand"><span class="dot"></span><b>PandaKing9</b> · 定制旅行</div>
     <div class="card">
       <h1>${cust ? esc(cust) + ' · ' : ''}${dest}</h1>
       <div class="meta">

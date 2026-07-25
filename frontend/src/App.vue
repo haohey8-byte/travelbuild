@@ -12,7 +12,8 @@ const auth = useAuthStore()
 
 const isH5 = computed(() => route.meta.h5 === true)
 const isAuthPage = computed(() => route.meta.authPage === true)
-const needsLogin = computed(() => !auth.token && !isH5.value && !isAuthPage.value)
+const isPublic = computed(() => route.meta.public === true)
+const needsLogin = computed(() => !auth.token && !isH5.value && !isAuthPage.value && !isPublic.value)
 
 const nav = computed(() => {
   // 所有登录角色可见「系统设置」单一入口；内部子组件按 role 门控
@@ -42,14 +43,14 @@ function onNav(to: string) {
 }</script>
 
 <template>
-  <!-- 公开 H5 与认证页（login/change-pwd）：独立渲染，无主导航 -->
-  <RouterView v-if="isH5 || isAuthPage" :key="route.path" />
+  <!-- 公开 H5、认证页（login/change-pwd）、公开首页：独立渲染，无控制台外壳与登录门 -->
+  <RouterView v-if="isH5 || isAuthPage || isPublic" :key="route.path" />
 
   <!-- 未登录兜底：理论上守卫已重定向到 /login，这里仅作安全兜底 -->
   <div v-else-if="needsLogin" class="login-gate">
     <div class="login-card card">
       <div class="brand">PandaKing9</div>
-      <div class="brand-sub">入境游定制协作工作台</div>
+      <div class="brand-sub">定制旅行协作平台</div>
       <p class="muted">请先登录后访问控制台</p>
       <button class="btn btn-primary" @click="onNav('/login')">去登录</button>
     </div>

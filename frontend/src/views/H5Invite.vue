@@ -56,7 +56,7 @@ async function onAccept() {
   <div class="h5-invite">
     <div class="card">
       <div class="brand">PandaKing9</div>
-      <div class="brand-sub">入境游定制协作工作台</div>
+      <div class="brand-sub">定制旅行协作平台</div>
 
       <p v-if="loading" class="muted">邀请校验中…</p>
 
