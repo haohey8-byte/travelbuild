@@ -119,11 +119,11 @@ onMounted(loadAdmins)
           </thead>
           <tbody>
             <tr v-for="a in admins" :key="a.id">
-              <td>{{ a.name }}</td>
-              <td>{{ a.phone }}</td>
-              <td>{{ a.disabled ? '已禁用' : '启用' }}</td>
-              <td>{{ a.mustChangePwd ? '待修改' : '已设置' }}</td>
-              <td class="ops">
+              <td data-label="名称">{{ a.name }}</td>
+              <td data-label="手机号">{{ a.phone }}</td>
+              <td data-label="状态">{{ a.disabled ? '已禁用' : '启用' }}</td>
+              <td data-label="首次改密">{{ a.mustChangePwd ? '待修改' : '已设置' }}</td>
+              <td class="ops" data-label="操作">
                 <button class="btn ghost sm" type="button" @click="resetTarget = a; resetPwd = ''">重置密码</button>
                 <button
                   v-if="!a.disabled"
@@ -213,4 +213,33 @@ h3 { margin: 0 0 4px; }
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 100; }
 .modal { background: var(--card); border-radius: 14px; padding: 24px; width: 90%; max-width: 440px; box-shadow: 0 16px 40px rgba(0,0,0,0.2); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+
+/* 移动端：数据表转卡片（统一断点 ≤640） */
+@media (max-width: 640px) {
+  .tbl-wrap { overflow: visible; }
+  .tbl {
+    display: block; min-width: 0; width: 100%;
+    background: transparent; border: none; border-radius: 0; overflow: visible;
+  }
+  .tbl thead { display: none; }
+  .tbl tbody { display: block; }
+  .tbl tbody tr {
+    display: block; background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--r-md); padding: 4px 14px; margin-bottom: 12px;
+  }
+  .tbl tbody tr:hover { background: var(--card); }
+  .tbl td {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    padding: 9px 0; border-bottom: 1px solid var(--line); text-align: right; font-size: 13px;
+  }
+  .tbl td:last-child { border-bottom: none; }
+  .tbl td::before {
+    content: attr(data-label); color: var(--muted); font-size: 12px; font-weight: 600;
+    text-align: left; flex: none;
+  }
+  .tbl td.ops { flex-wrap: wrap; }
+  .tbl td.ops::before { flex: 1 0 100%; margin-bottom: 6px; }
+  .tbl td[colspan]::before { display: none; }
+  .tbl td[colspan] { justify-content: center; text-align: center; }
+}
 </style>

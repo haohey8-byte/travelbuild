@@ -1241,9 +1241,9 @@ const collabEvents = computed<CollabEvent[]>(() => {
               <thead><tr><th>版本</th><th>草稿</th><th>创建时间</th></tr></thead>
               <tbody>
                 <tr v-for="v in data.versions" :key="v.id">
-                  <td>{{ v.version }}</td>
-                  <td>{{ v.draft ? '草稿' : '正式' }}</td>
-                  <td>{{ new Date(v.createdAt).toLocaleString() }}</td>
+                  <td data-label="版本">{{ v.version }}</td>
+                  <td data-label="草稿">{{ v.draft ? '草稿' : '正式' }}</td>
+                  <td data-label="创建时间">{{ new Date(v.createdAt).toLocaleString() }}</td>
                 </tr>
                 <tr v-if="!data.versions?.length"><td colspan="3" class="muted">暂无版本</td></tr>
               </tbody>
@@ -1370,14 +1370,14 @@ const collabEvents = computed<CollabEvent[]>(() => {
                   <tbody>
                     <template v-for="ci in costInquiries" :key="ci.id">
                       <tr>
-                        <td>{{ provincialAgencies.find((a) => a.id === ci.provincialId)?.name || ci.provincialId }}</td>
-                        <td>
+                        <td data-label="省地接社">{{ provincialAgencies.find((a) => a.id === ci.provincialId)?.name || ci.provincialId }}</td>
+                        <td data-label="状态">
                           <span class="pill xs" :class="ci.status === 'submitted' ? 'st-confirmed' : 'st-awaiting_quote'">
                             {{ ci.status === 'submitted' ? '已回传' : '待回传' }}
                           </span>
                         </td>
-                        <td>{{ ci.cost1 != null ? yuan(ci.cost1) : '-' }}</td>
-                        <td>
+                        <td data-label="成本①">{{ ci.cost1 != null ? yuan(ci.cost1) : '-' }}</td>
+                        <td data-label="操作">
                           <button
                             v-if="ci.status === 'submitted'"
                             class="d-btn ghost sm"
@@ -1692,5 +1692,41 @@ const collabEvents = computed<CollabEvent[]>(() => {
   .link-box input { width: 100%; }
   .node { padding: 10px 12px; }
   .flow .arrow { padding: 8px 0; }
+}
+
+/* 移动端：内部数据表转卡片（统一断点 ≤640，含成本明细跨列行特殊处理） */
+@media (max-width: 640px) {
+  .tbl-wrap { overflow: visible; }
+  .tbl {
+    display: block; min-width: 0; width: 100%;
+    background: transparent; border: none; border-radius: 0; overflow: visible;
+  }
+  .tbl thead { display: none; }
+  .tbl tbody { display: block; }
+  .tbl tbody tr:not(.detail-row) {
+    display: block; background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--r-md); padding: 4px 14px; margin-bottom: 12px;
+  }
+  .tbl tbody tr:not(.detail-row):hover { background: var(--card); }
+  .tbl td {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    padding: 9px 0; border-bottom: 1px solid var(--k-line); text-align: right; font-size: 13px;
+  }
+  .tbl td:last-child { border-bottom: none; }
+  .tbl td::before {
+    content: attr(data-label); color: var(--muted); font-size: 12px; font-weight: 600;
+    text-align: left; flex: none;
+  }
+  .tbl td.ops { flex-wrap: wrap; }
+  .tbl td.ops::before { flex: 1 0 100%; margin-bottom: 6px; }
+  .tbl td[colspan]::before { display: none; }
+  .tbl td[colspan] { justify-content: center; text-align: center; }
+  /* 成本明细跨列行：整行作为子卡展示，不套用字段标签 */
+  .tbl tr.detail-row { display: block; margin: 0 0 12px; }
+  .tbl tr.detail-row td {
+    display: block; text-align: left; padding: 10px 12px;
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-sm);
+  }
+  .tbl tr.detail-row td::before { display: none; }
 }
 </style>

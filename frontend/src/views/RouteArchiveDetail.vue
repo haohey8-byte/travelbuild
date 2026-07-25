@@ -101,4 +101,9 @@ function fmtTime(s?: string): string {
 .kv span { color: var(--muted); width: 80px; }
 .json { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px; font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; max-height: 400px; overflow: auto; }
 .err { color: var(--danger); }
+
+/* 移动端：基本信息键值对转单列（统一断点 ≤640） */
+@media (max-width: 640px) {
+  .kv { grid-template-columns: 1fr; gap: 8px; }
+}
 </style>

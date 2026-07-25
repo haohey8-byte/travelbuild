@@ -248,23 +248,23 @@ onMounted(() => {
           </thead>
           <tbody>
             <tr v-for="it in intakeLinks" :key="it.id" :class="{ expired: it.expired }">
-              <td>
+              <td data-label="机构">
                 <div class="agency">{{ it.agencyName }}</div>
                 <div class="token muted">…{{ it.token.slice(-8) }}</div>
               </td>
-              <td>
+              <td data-label="有效期">
                 <span v-if="it.permanent" class="badge perm">永久有效</span>
                 <span v-else-if="it.expired" class="badge bad">已过期</span>
                 <span v-else class="badge ok">剩 {{ daysLeft(it.expiresAt!) }} 天</span>
               </td>
-              <td class="note">{{ it.note || '—' }}</td>
-              <td class="url">
+              <td data-label="备注" class="note">{{ it.note || '—' }}</td>
+              <td data-label="提交链接" class="url">
                 <code class="url-box" :title="fullLink(it.link)">{{ fullLink(it.link) }}</code>
               </td>
-              <td>{{ it.copies }} 次</td>
-              <td>{{ fmt(it.lastCopiedAt) }}</td>
-              <td>{{ fmt(it.createdAt) }}</td>
-              <td class="ops">
+              <td data-label="复制次数">{{ it.copies }} 次</td>
+              <td data-label="最近复制">{{ fmt(it.lastCopiedAt) }}</td>
+              <td data-label="创建于">{{ fmt(it.createdAt) }}</td>
+              <td data-label="操作" class="ops">
                 <button class="btn ghost sm" type="button" :disabled="it.expired" @click="copyToAgency(it)">
                   {{ copiedToken === it.token ? '已复制 ✓' : '复制给旅行社' }}
                 </button>
@@ -404,4 +404,33 @@ onMounted(() => {
 /* 弹窗淡入淡出（premium 微交互） */
 .fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
+
+/* 移动端：数据表转卡片（统一断点 ≤640） */
+@media (max-width: 640px) {
+  .tbl-wrap { overflow: visible; }
+  .tbl {
+    display: block; min-width: 0; width: 100%;
+    background: transparent; border: none; border-radius: 0; overflow: visible;
+  }
+  .tbl thead { display: none; }
+  .tbl tbody { display: block; }
+  .tbl tbody tr {
+    display: block; background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--r-md); padding: 4px 14px; margin-bottom: 12px;
+  }
+  .tbl tbody tr:hover { background: var(--card); }
+  .tbl td {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    padding: 9px 0; border-bottom: 1px solid var(--line); text-align: right; font-size: 13px;
+  }
+  .tbl td:last-child { border-bottom: none; }
+  .tbl td::before {
+    content: attr(data-label); color: var(--muted); font-size: 12px; font-weight: 600;
+    text-align: left; flex: none;
+  }
+  .tbl td.ops { flex-wrap: wrap; }
+  .tbl td.ops::before { flex: 1 0 100%; margin-bottom: 6px; }
+  .tbl td[colspan]::before { display: none; }
+  .tbl td[colspan] { justify-content: center; text-align: center; }
+}
 </style>

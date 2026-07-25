@@ -64,12 +64,12 @@ function verLabel(r: Route) {
         </thead>
         <tbody>
           <tr v-for="r in routes" :key="r.id" class="row" @click="open(r)">
-            <td>{{ r.customerNameCn || r.customerName }}</td>
-            <td>{{ r.destination }}</td>
-            <td>{{ verLabel(r) }}</td>
-            <td>{{ r.modeKey === 'collab' ? '协作' : '自营' }}</td>
-            <td>{{ r.groupSize }}</td>
-            <td><span class="badge" :class="r.statusKey">{{ STATUS_LABEL[r.statusKey] }}</span></td>
+            <td data-label="客户">{{ r.customerNameCn || r.customerName }}</td>
+            <td data-label="目的地">{{ r.destination }}</td>
+            <td data-label="版本">{{ verLabel(r) }}</td>
+            <td data-label="模式">{{ r.modeKey === 'collab' ? '协作' : '自营' }}</td>
+            <td data-label="人数">{{ r.groupSize }}</td>
+            <td data-label="状态"><span class="badge" :class="r.statusKey">{{ STATUS_LABEL[r.statusKey] }}</span></td>
           </tr>
           <tr v-if="!routes.length"><td colspan="6" class="muted">暂无路线</td></tr>
         </tbody>
@@ -94,4 +94,31 @@ function verLabel(r: Route) {
 .badge.awaiting_quote { background: var(--info-50); color: var(--info); border-color: #cfe0fc; }
 .badge.awaiting_confirm, .badge.confirmed { background: var(--ok-50); color: var(--ok); border-color: #bfead8; }
 .badge.lost { background: var(--danger-50); color: var(--danger); border-color: #f6c9c5; }
+
+/* 移动端：数据表转卡片（统一断点 ≤640） */
+@media (max-width: 640px) {
+  .tbl-wrap { overflow: visible; }
+  .list-table {
+    display: block; min-width: 0; width: 100%;
+    background: transparent; border: none; border-radius: 0; overflow: visible;
+  }
+  .list-table thead { display: none; }
+  .list-table tbody { display: block; }
+  .list-table tbody tr {
+    display: block; background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--r-md); padding: 4px 14px; margin-bottom: 12px;
+  }
+  .list-table tbody tr:hover { background: var(--card); }
+  .list-table td {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    padding: 9px 0; border-bottom: 1px solid var(--line); text-align: right; font-size: 13px;
+  }
+  .list-table td:last-child { border-bottom: none; }
+  .list-table td::before {
+    content: attr(data-label); color: var(--muted); font-size: 12px; font-weight: 600;
+    text-align: left; flex: none;
+  }
+  .list-table td[colspan]::before { display: none; }
+  .list-table td[colspan] { justify-content: center; text-align: center; }
+}
 </style>
