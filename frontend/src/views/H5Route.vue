@@ -1035,7 +1035,7 @@ h3 { font-size: 15px; margin: 14px 0 0; }
 .guest-row.total .guest-label { color: var(--ink); font-weight: 600; }
 .guest-box .mode { width: auto; min-width: 56px; }
 .guest-box input[type=number] { width: 140px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 14px; box-sizing: border-box; }
-.h5-quotea-card { margin: 14px 0; padding: 14px 16px; background: #fdeef0; border-radius: 12px; display: flex; align-items: baseline; justify-content: space-between; border: 1px solid var(--brand); }
+.h5-quotea-card { margin: 14px 0; padding: 14px 16px; background: var(--brand-50); border-radius: 12px; display: flex; align-items: baseline; justify-content: space-between; border: 1px solid var(--brand); }
 .h5-quotea-lab { color: var(--brand-600, #a60d26); font-size: 13px; font-weight: 600; }
 .h5-quotea-val { color: var(--brand); font-size: 24px; font-weight: 800; }
 
