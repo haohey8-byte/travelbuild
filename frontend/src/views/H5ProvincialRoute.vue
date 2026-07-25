@@ -1045,25 +1045,25 @@ function goRouteDetail() {
 .pill { display: inline-flex; align-items: center; border-radius: 999px; font-size: 12px; white-space: nowrap; }
 .pill.sm { padding: 3px 10px; }
 .pill.xs { padding: 2px 8px; font-size: 11px; }
-.pill.st-neutral { background: var(--gray-50, #f4f6fa); border: 1px solid var(--gray-200, #e8edf4); color: var(--ink-2, #3c4655); }
-.pill.st-role { background: var(--purple-50, #f3ecfe); border: 1px solid var(--purple-200, #d9c9fa); color: var(--purple-800, #5b21b6); }
-.pill.st-awaiting_quote { background: var(--blue-50, #e9f1fe); border: 1px solid var(--blue-200, #c2dafe); color: var(--blue-800, #1e40af); }
-.pill.st-pending_followup { background: var(--red-50, #fdecea); border: 1px solid var(--red-200, #f9c7c2); color: var(--red-800, #991b1b); }
+.pill.st-neutral { background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-2); }
+.pill.st-role { background: var(--role-agency-50); border: 1px solid var(--role-agency-200); color: var(--role-agency); }
+.pill.st-awaiting_quote { background: var(--role-provincial-50); border: 1px solid var(--role-provincial-200); color: var(--role-provincial-600); }
+.pill.st-pending_followup { background: var(--warn-50); border: 1px solid #f6d9a8; color: var(--warn); }
 
 /* ── 行程日 ── */
 .day-card { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; overflow: hidden; }
 .day-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; cursor: pointer; user-select: none; }
-.day-row:hover { background: var(--surface-2, #fbfcfe); }
-.day-badge { width: 32px; height: 32px; border-radius: 8px; background: var(--brand-50, #fdeef0); color: var(--brand); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; flex-shrink: 0; }
+.day-row:hover { background: var(--surface-2); }
+.day-badge { width: 32px; height: 32px; border-radius: 8px; background: var(--brand-50); color: var(--brand); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; flex-shrink: 0; }
 .day-summary { flex: 1; min-width: 0; }
 .day-city { display: block; font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: 2px; }
 .day-meta { display: flex; flex-wrap: wrap; gap: 6px; }
-.day-tag { background: var(--bg, #f4f6fa); border-radius: 4px; padding: 1px 6px; font-size: 11px; color: var(--muted); }
+.day-tag { background: var(--bg); border-radius: 4px; padding: 1px 6px; font-size: 11px; color: var(--muted); }
 .day-chev { font-size: 14px; color: var(--muted); transition: transform .2s; flex-shrink: 0; }
 .day-chev.open { transform: rotate(180deg); color: var(--brand); }
 
 /* 展开编辑区 */
-.day-edit { border-top: 1px solid var(--line); padding: 12px; background: var(--surface-2, #fbfcfe); }
+.day-edit { border-top: 1px solid var(--line); padding: 12px; background: var(--surface-2); }
 .day-field-row { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
 .day-field { display: flex; flex-direction: column; gap: 4px; }
 .day-field label { font-size: 12px; color: var(--muted); font-weight: 500; }
@@ -1092,7 +1092,7 @@ function goRouteDetail() {
 .btn.ghost { background: transparent; border: none; margin-top: 0; }
 .btn.ghost.xs { padding: 2px 6px; font-size: 12px; width: auto; }
 .btn.ghost.sm { padding: 4px 10px; font-size: 12px; width: auto; }
-.btn.dash { background: var(--teal-50, #e6f7f0); color: var(--teal-600, #0f9d6f); border: 1px dashed var(--teal-200, #b8ead8); width: 100%; }
+.btn.dash { background: var(--role-pk-50); color: var(--role-pk); border: 1px dashed var(--role-pk-200); width: 100%; }
 
 /* ── 输入框 ── */
 textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; font-family: inherit; box-sizing: border-box; resize: vertical; }
@@ -1120,7 +1120,7 @@ textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border
    PC 端 (≥768px) — 两栏 + 系统品牌色
    ============================================================ */
 @media (min-width: 768px) {
-  .prov-page { padding: 24px 32px; background: var(--bg, #f4f6fa); min-height: 100vh; }
+  .prov-page { padding: 24px 32px; background: var(--bg); min-height: 100vh; }
   .prov-content { max-width: 1200px; margin: 0 auto; }
   .prov-title { font-size: 24px; }
   .prov-columns { display: flex; gap: 24px; align-items: flex-start; }
@@ -1141,21 +1141,21 @@ textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border
 }
 
 /* ── PandaKing 回传确认视图 ── */
-.pk-view .pk-chip { background: var(--brand-50, #fdeef0); border-color: var(--brand); color: var(--brand); font-weight: 600; }
+.pk-view .pk-chip { background: var(--brand-50); border-color: var(--brand); color: var(--brand); font-weight: 600; }
 .pk-view .hint { font-size: 14px; line-height: 1.6; margin: 0 0 16px; }
 
 /* 成本只读表 */
 .pk-cost-tbl { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
 .pk-cost-head, .pk-cost-row, .pk-cost-total { display: flex; justify-content: space-between; padding: 8px 12px; font-size: 14px; }
-.pk-cost-head { background: var(--gray-50, #f4f6fa); font-weight: 600; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
-.pk-cost-row { border-bottom: 1px solid var(--line-weak, #f0f0f0); }
+.pk-cost-head { background: var(--surface-2); font-weight: 600; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+.pk-cost-row { border-bottom: 1px solid var(--line); }
 .pk-cost-row:last-child { border-bottom: none; }
-.pk-cost-total { background: var(--brand-50, #fdeef0); font-weight: 700; color: var(--brand); padding: 10px 12px; font-size: 15px; }
+.pk-cost-total { background: var(--brand-50); font-weight: 700; color: var(--brand); padding: 10px 12px; font-size: 15px; }
 .pk-cost-amt { font-size: 17px; }
 
 /* 利润设置 */
-.pk-profit-section { background: var(--brand-50, #fdeef0); border-color: var(--brand-100, #f9c7c2); }
-.pk-profit-section h3 { color: var(--brand-600, #b91c1c); }
+.pk-profit-section { background: var(--brand-50); border-color: var(--brand-100); }
+.pk-profit-section h3 { color: var(--brand-600); }
 .pk-profit-form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
 .pk-profit-mode { display: flex; gap: 16px; }
 .pk-radio { display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 14px; color: var(--ink); }
@@ -1163,17 +1163,17 @@ textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border
 .pk-profit-input { display: flex; align-items: center; gap: 6px; }
 .pk-profit-input input { flex: 1; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 16px; font-weight: 600; color: var(--brand); font-family: inherit; }
 .pk-profit-unit { font-size: 16px; font-weight: 600; color: var(--brand); min-width: 24px; }
-.pk-quote-preview { border-top: 1px solid var(--brand-100, #f9c7c2); padding-top: 10px; }
+.pk-quote-preview { border-top: 1px solid var(--brand-100); padding-top: 10px; }
 .pk-qp-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 14px; color: var(--ink); }
 .pk-qp-profit { color: var(--brand); }
-.pk-qp-divider { border-top: 1px dashed var(--brand-200, #e5a5a0); margin: 6px 0; }
+.pk-qp-divider { border-top: 1px dashed var(--brand-100); margin: 6px 0; }
 .pk-qp-total { font-weight: 700; font-size: 16px; }
 .pk-quote-amt { font-size: 20px; color: var(--brand); }
 .pk-gen-btn { margin-top: 0; padding: 14px; font-size: 16px; }
 
 /* 跳转链接 */
 .pk-nav-hint { margin-top: 16px; font-size: 13px; text-align: center; }
-.pk-nav-hint a { color: var(--teal-600, #0f9d6f); text-decoration: none; }
+.pk-nav-hint a { color: var(--role-pk); text-decoration: none; }
 .pk-nav-hint a:hover { text-decoration: underline; }
 
 /* PandaKing 等待回传视图：醒目提示框 */
@@ -1187,5 +1187,5 @@ textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border
   line-height: 1.8;
   margin: 0 0 20px;
 }
-.pk-pending-tip b { color: var(--brand, #c8102e); }
+.pk-pending-tip b { color: var(--brand); }
 </style>

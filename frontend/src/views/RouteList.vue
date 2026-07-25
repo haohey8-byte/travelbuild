@@ -56,26 +56,28 @@ function verLabel(r: Route) {
       <span class="count">共 {{ routes.length }} 条</span>
     </div>
     <p v-if="loading">加载中…</p>
-    <table v-else class="list-table">
-      <thead>
-        <tr>
-          <th>客户</th><th>目的地</th><th>版本</th><th>模式</th>
-          <th>旅行社</th><th>人数</th><th>状态</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="r in routes" :key="r.id" class="row" @click="open(r)">
-          <td>{{ r.customerNameCn || r.customerName }}</td>
-          <td>{{ r.destination }}</td>
-          <td>{{ verLabel(r) }}</td>
-          <td>{{ r.modeKey === 'collab' ? '协作' : '自营' }}</td>
-          <td>{{ r.agency || '-' }}</td>
-          <td>{{ r.groupSize }}</td>
-          <td><span class="badge" :class="r.statusKey">{{ STATUS_LABEL[r.statusKey] }}</span></td>
-        </tr>
-        <tr v-if="!routes.length"><td colspan="7" class="muted">暂无路线</td></tr>
-      </tbody>
-    </table>
+    <div v-else class="tbl-wrap">
+      <table class="list-table">
+        <thead>
+          <tr>
+            <th>客户</th><th>目的地</th><th>版本</th><th>模式</th>
+            <th>旅行社</th><th>人数</th><th>状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="r in routes" :key="r.id" class="row" @click="open(r)">
+            <td>{{ r.customerNameCn || r.customerName }}</td>
+            <td>{{ r.destination }}</td>
+            <td>{{ verLabel(r) }}</td>
+            <td>{{ r.modeKey === 'collab' ? '协作' : '自营' }}</td>
+            <td>{{ r.agency || '-' }}</td>
+            <td>{{ r.groupSize }}</td>
+            <td><span class="badge" :class="r.statusKey">{{ STATUS_LABEL[r.statusKey] }}</span></td>
+          </tr>
+          <tr v-if="!routes.length"><td colspan="7" class="muted">暂无路线</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </template>
 
@@ -83,15 +85,15 @@ function verLabel(r: Route) {
 .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .filter { padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; }
 .count { color: var(--muted); font-size: 13px; }
-.list-table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 12px; overflow: hidden; }
+.list-table { width: 100%; min-width: 680px; border-collapse: collapse; background: var(--card); border-radius: var(--r-md); overflow: hidden; }
 .list-table th, .list-table td { padding: 10px 14px; border-bottom: 1px solid var(--line); text-align: left; }
 .list-table th { background: var(--bg); font-size: 13px; color: var(--muted); }
 .row { cursor: pointer; }
-.row:hover { background: var(--brand-soft); }
-.badge { font-size: 12px; padding: 2px 8px; border-radius: 6px; background: var(--bg); color: var(--muted); }
-.badge.awaiting_pk_confirm { background: #fff4e5; color: #b76e00; }
-.badge.awaiting_quote { background: #e8f0fe; color: #2f80ed; }
-.badge.awaiting_confirm, .badge.confirmed { background: #e6f7ef; color: #1aab8a; }
-.badge.lost { background: #fdeaea; color: #e2483d; }
+.row:hover { background: var(--brand-50); }
+.badge { font-size: 12px; padding: 2px 8px; border-radius: var(--r-pill); background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+.badge.awaiting_pk_confirm { background: var(--warn-50); color: var(--warn); border-color: #f6d9a8; }
+.badge.awaiting_quote { background: var(--info-50); color: var(--info); border-color: #cfe0fc; }
+.badge.awaiting_confirm, .badge.confirmed { background: var(--ok-50); color: var(--ok); border-color: #bfead8; }
+.badge.lost { background: var(--danger-50); color: var(--danger); border-color: #f6c9c5; }
 .muted { color: var(--muted); }
 </style>

@@ -7,8 +7,10 @@
   /* 品牌与语义色 — 全站统一蓝色系列 */
   --brand: #185FA5;
   --brand-600: #0C447C;
+  --brand-700: #0A3A6B; /* 最深蓝，用于 H5 重点字/描边 */
   --brand-50: #E6F1FB;
   --brand-100: #B5D4F4;
+  --brand-soft: var(--brand-50); /* 浅蓝底，用于 hover/高亮背景 */
 
   /* 中性墨色阶 */
   --ink: #1c2430;
@@ -32,6 +34,18 @@
   --danger-50: #fdecea;
   --info: #2f6feb;
   --info-50: #e9f1fe;
+
+  /* 三角色语义色（协作可视化：PandaKing / 旅行社 / 省地接社）— 全局单一来源 */
+  --role-pk: #0f6e56;
+  --role-pk-50: #e6f7f1;
+  --role-pk-200: #5dcaa5;
+  --role-agency: #534ab7;
+  --role-agency-50: #f1effc;
+  --role-agency-200: #afa9ec;
+  --role-provincial: #185fa5;
+  --role-provincial-50: #eaf4fc;
+  --role-provincial-200: #85b7eb;
+  --role-provincial-600: #0e3f73;
 
   /* 圆角 / 阴影 / 间距尺度 */
   --r-lg: 16px;
@@ -62,6 +76,13 @@
   --content-max: 1200px;
   --font: "PingFang SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+
+  /* 响应式断点（文档参考）
+     注意：@media 条件内无法使用 CSS 变量，各页面媒体查询统一使用下列字面量，
+     禁止再出现 480/560/900/960 等零散值，确保全站断点一致。 */
+  --bp-sm: 480px;     /* 超小屏（小手机） */
+  --bp-mobile: 640px; /* 移动端 */
+  --bp-tablet: 860px; /* 平板/抽屉导航切换 */
 }
 
 * { box-sizing: border-box; }
@@ -196,6 +217,13 @@ input:focus, select:focus, textarea:focus {
 .badge.awaiting_confirm { background: var(--ok-50); color: var(--ok); border-color: #bfead8; }
 .badge.confirmed { background: var(--ok-50); color: var(--ok); border-color: #bfead8; }
 .badge.lost { background: var(--danger-50); color: var(--danger); border-color: #f6c9c5; }
+.badge.booked { background: var(--ok-50); color: var(--ok); border-color: #bfead8; }
+.badge.pending_followup { background: var(--warn-50); color: var(--warn); border-color: #f6d9a8; }
+.badge.neutral { background: var(--surface-2); color: var(--muted); border-color: var(--line); }
+
+/* 尺寸变体 */
+.badge.sm { padding: 2px 8px; font-size: 11px; }
+.badge.xs { padding: 1px 6px; font-size: 10px; }
 
 /* ---------- 键值表 / 数据表（移动端可横滑） ---------- */
 .kv { display: grid; grid-template-columns: 1fr 1fr; gap: 8px var(--sp-4); }

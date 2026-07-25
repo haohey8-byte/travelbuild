@@ -1445,15 +1445,16 @@ const collabEvents = computed<CollabEvent[]>(() => {
 <style scoped>
 /* ===== 9 色阶设计系统（路线详情 v2 + 协作记录区 v1 高保真）===== */
 .detail-v2 {
-  --k-card: #ffffff; --k-line: #e6e8eb; --k-ink: #1f2329; --k-muted: #8a9099; --k-bg: #f4f5f7;
-  --teal-50:#e6f7f1; --teal-200:#5dcaa5; --teal-600:#0f6e56;
-  --blue-50:#eaf4fc; --blue-200:#85b7eb; --blue-600:#185fa5; --blue-800:#0e3f73;
-  --purple-50:#f1effc; --purple-200:#afa9ec; --purple-600:#534ab7; --purple-800:#3a338a;
-  --amber-50:#fef6e7; --amber-200:#fac775; --amber-600:#c8881a; --amber-800:#633806;
-  --green-50:#f1f8e8; --green-200:#97c459; --green-600:#3b6d11; --green-800:#27490b;
-  --red-50:#fcebeb; --red-200:#f09595; --red-600:#a32d2d; --red-800:#7a1f1f;
-  --gray-50:#f4f4f2; --gray-200:#b4b2a9; --gray-800:#444441;
-  color: var(--k-ink);
+  --k-card: var(--surface); --k-line: var(--line); --k-ink: var(--ink); --k-muted: var(--muted); --k-bg: var(--bg);
+  /* 私有色阶改为全局 token 别名（角色色见 style.css --role-*，状态/中性色见全局语义色） */
+  --teal-50: var(--role-pk-50); --teal-200: var(--role-pk-200); --teal-600: var(--role-pk);
+  --blue-50: var(--role-provincial-50); --blue-200: var(--role-provincial-200); --blue-600: var(--role-provincial); --blue-800: var(--role-provincial-600);
+  --purple-50: var(--role-agency-50); --purple-200: var(--role-agency-200); --purple-600: var(--role-agency); --purple-800: var(--role-agency);
+  --amber-50: var(--warn-50); --amber-200: var(--warn); --amber-600: var(--warn); --amber-800: #633806;
+  --green-50: var(--ok-50); --green-200: var(--ok); --green-600: var(--ok); --green-800: var(--ok);
+  --red-50: var(--danger-50); --red-200: var(--danger); --red-600: var(--danger); --red-800: var(--danger);
+  --gray-50: var(--surface-2); --gray-200: var(--line-strong); --gray-800: var(--muted);
+  color: var(--ink);
 }
 .loading { color: var(--k-muted); }
 
@@ -1472,24 +1473,24 @@ const collabEvents = computed<CollabEvent[]>(() => {
 .pill { display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; border: 1px solid transparent; white-space: nowrap; }
 .pill.sm { font-size: 11px; padding: 3px 10px; }
 .pill.xs { font-size: 10px; padding: 2px 8px; font-weight: 600; }
-.st-neutral { background: var(--gray-50); border-color: var(--gray-200); color: var(--gray-800); }
-.st-role { background: var(--purple-50); border-color: var(--purple-200); color: var(--purple-800); }
-.st-lock { background: var(--purple-50); border-color: var(--purple-200); color: var(--purple-800); }
-.st-consulting { background: var(--gray-50); border-color: var(--gray-200); color: var(--gray-800); }
-.st-awaiting_pk_confirm, .st-awaiting_agency_revision { background: var(--amber-50); border-color: var(--amber-200); color: var(--amber-800); }
-.st-awaiting_quote { background: var(--blue-50); border-color: var(--blue-200); color: var(--blue-800); }
-.st-awaiting_feedback { background: var(--purple-50); border-color: var(--purple-200); color: var(--purple-800); }
-.st-awaiting_confirm, .st-booked { background: var(--teal-50); border-color: var(--teal-200); color: var(--teal-600); }
-.st-confirmed { background: var(--green-50); border-color: var(--green-200); color: var(--green-800); }
-.st-pending_followup { background: var(--red-50); border-color: var(--red-200); color: var(--red-800); }
-.st-lost { background: var(--gray-50); border-color: var(--gray-200); color: var(--gray-800); }
+.st-neutral { background: var(--surface-2); border-color: var(--line); color: var(--muted); }
+.st-role { background: var(--role-agency-50); border-color: var(--role-agency-200); color: var(--role-agency); }
+.st-lock { background: var(--role-agency-50); border-color: var(--role-agency-200); color: var(--role-agency); }
+.st-consulting { background: var(--brand-50); border-color: var(--brand-100); color: var(--brand-600); }
+.st-awaiting_pk_confirm, .st-awaiting_agency_revision { background: var(--warn-50); border-color: #f6d9a8; color: var(--warn); }
+.st-awaiting_quote { background: var(--info-50); border-color: #cfe0fc; color: var(--info); }
+.st-awaiting_feedback { background: var(--info-50); border-color: #cfe0fc; color: var(--info); }
+.st-awaiting_confirm, .st-booked { background: var(--ok-50); border-color: #bfead8; color: var(--ok); }
+.st-confirmed { background: var(--ok-50); border-color: #bfead8; color: var(--ok); }
+.st-pending_followup { background: var(--warn-50); border-color: #f6d9a8; color: var(--warn); }
+.st-lost { background: var(--danger-50); border-color: #f6c9c5; color: var(--danger); }
 
 /* ===== 按钮 ===== */
 .d-btn { border-radius: 8px; padding: 9px 15px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid transparent; font-family: inherit; }
 .d-btn.ghost { background: #fff; border-color: var(--k-line); color: var(--k-ink); }
 .d-btn.ghost:hover { background: #fafbfc; }
-.d-btn.primary { background: var(--teal-600); color: #fff; }
-.d-btn.primary:hover { filter: brightness(1.06); }
+.d-btn.primary { background: var(--brand); color: #fff; }
+.d-btn.primary:hover { background: var(--brand-600); }
 .d-btn.danger { background: var(--red-50); border-color: var(--red-200); color: var(--red-600); }
 .d-btn.danger:hover { filter: brightness(0.98); }
 .d-btn.dash { background: var(--teal-50); color: var(--teal-600); border: 1px dashed var(--teal-200); width: 100%; }
@@ -1498,10 +1499,10 @@ const collabEvents = computed<CollabEvent[]>(() => {
 
 /* ===== 消息条 ===== */
 .msg { margin: 8px 0; font-size: 13px; }
-.err { color: var(--red-600); font-size: 13px; }
-.ok { color: var(--teal-600); font-size: 13px; }
-.muted { color: var(--k-muted); font-size: 13px; }
-.link { color: var(--blue-600); text-decoration: none; font-size: 13px; font-weight: 600; }
+.err { color: var(--danger); font-size: 13px; }
+.ok { color: var(--ok); font-size: 13px; }
+.muted { color: var(--muted); font-size: 13px; }
+.link { color: var(--info); text-decoration: none; font-size: 13px; font-weight: 600; }
 
 .fb-notify { margin: 10px 18px; border: 1px solid var(--teal-200); border-radius: 10px; padding: 10px 12px; background: var(--teal-50); }
 .fb-notify-head { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--teal-600); font-weight: 600; }
@@ -1511,7 +1512,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
 /* ===== 分段切换 ===== */
 .seg { display: inline-flex; gap: 4px; background: #eef0f3; border: 1px solid var(--k-line); border-radius: 10px; padding: 4px; margin-bottom: 16px; flex-wrap: wrap; }
 .seg-btn { padding: 7px 16px; border: none; background: transparent; border-radius: 7px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--k-muted); font-family: inherit; }
-.seg-btn.on { background: #fff; color: var(--teal-600); box-shadow: 0 1px 3px rgba(20,32,51,.1); }
+.seg-btn.on { background: #fff; color: var(--brand); box-shadow: 0 1px 3px rgba(20,32,51,.1); }
 
 /* ===== 两栏 & 面板 ===== */
 .cols { display: grid; grid-template-columns: 1.25fr 1fr; gap: 18px; align-items: start; }
@@ -1553,7 +1554,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
 .mini-add { margin-top: 4px; align-self: flex-start; background: var(--teal-50); color: var(--teal-600); border: 1px dashed var(--teal-200); border-radius: 7px; padding: 6px 12px; font-size: 12px; cursor: pointer; }
 .edit-bar { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; }
 .edit-bar .del { background: var(--red-50); border: 1px solid var(--red-200); color: var(--red-600); border-radius: 7px; padding: 6px 12px; font-size: 12px; cursor: pointer; }
-.edit-bar .ok { background: var(--teal-600); color: #fff; border: none; border-radius: 7px; padding: 6px 14px; font-size: 12px; cursor: pointer; }
+.edit-bar .ok { background: var(--brand); color: #fff; border: none; border-radius: 7px; padding: 6px 14px; font-size: 12px; cursor: pointer; }
 .add-day { display: flex; padding: 14px 18px; border-top: 1px solid var(--k-line); background: #fbfcfd; }
 
 /* ===== 报价面板：协作卡 / 保存栏 / 公式 ===== */
@@ -1575,7 +1576,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
 .action-feedback { padding: 0 18px 8px; }
 .action-feedback .msg { margin: 0 0 6px; }
 .conflict-tip { display: flex; align-items: center; gap: 10px; background: #fff4e5; border: 1px solid #ffb74d; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; font-size: 12px; color: #8a5300; line-height: 1.5; }
-.conflict-tip .d-btn.mini { flex: 0 0 auto; padding: 4px 12px; font-size: 12px; border-radius: 6px; background: var(--teal-600); color: #fff; border: none; cursor: pointer; }
+.conflict-tip .d-btn.mini { flex: 0 0 auto; padding: 4px 12px; font-size: 12px; border-radius: 6px; background: var(--brand); color: #fff; border: none; cursor: pointer; }
 .conflict-tip .d-btn.mini:disabled { opacity: .6; cursor: not-allowed; }
 .suggest { padding: 14px 18px 0; }
 .suggest label { display: block; font-size: 12px; color: var(--k-muted); font-weight: 600; margin-bottom: 6px; }
@@ -1659,7 +1660,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
 .pdf-offscreen { position: fixed; left: -10000px; top: 0; width: 794px; background: #fff; z-index: -1; }
 
 /* ===== 响应式 ===== */
-@media (max-width: 960px) {
+@media (max-width: 860px) {
   .cols { grid-template-columns: 1fr; }
   .day-edit { padding-left: 18px; }
 }

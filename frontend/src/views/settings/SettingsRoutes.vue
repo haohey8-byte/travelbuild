@@ -84,14 +84,14 @@ function verLabel(r: Route) {
 .muted { color: var(--muted); font-size: 13px; }
 .badge.ro { background: var(--brand-50); color: var(--brand); font-size: 12px; padding: 2px 8px; border-radius: 999px; }
 .tbl-wrap { margin-top: 12px; }
-.list-table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 12px; overflow: hidden; }
+.list-table { width: 100%; min-width: 600px; border-collapse: collapse; background: var(--card); border-radius: var(--r-md); overflow: hidden; }
 .list-table th, .list-table td { padding: 10px 14px; border-bottom: 1px solid var(--line); text-align: left; }
 .list-table th { background: var(--bg); font-size: 13px; color: var(--muted); }
 .row { cursor: pointer; }
-.row:hover { background: var(--brand-soft); }
-.badge { font-size: 12px; padding: 2px 8px; border-radius: 6px; background: var(--bg); color: var(--muted); }
-.badge.awaiting_pk_confirm { background: #fff4e5; color: #b76e00; }
-.badge.awaiting_quote { background: #e8f0fe; color: #2f80ed; }
-.badge.awaiting_confirm, .badge.confirmed { background: #e6f7ef; color: #1aab8a; }
-.badge.lost { background: #fdeaea; color: #e2483d; }
+.row:hover { background: var(--brand-50); }
+.badge { font-size: 12px; padding: 2px 8px; border-radius: var(--r-pill); background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+.badge.awaiting_pk_confirm { background: var(--warn-50); color: var(--warn); border-color: #f6d9a8; }
+.badge.awaiting_quote { background: var(--info-50); color: var(--info); border-color: #cfe0fc; }
+.badge.awaiting_confirm, .badge.confirmed { background: var(--ok-50); color: var(--ok); border-color: #bfead8; }
+.badge.lost { background: var(--danger-50); color: var(--danger); border-color: #f6c9c5; }
 </style>

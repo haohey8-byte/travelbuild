@@ -79,8 +79,8 @@ onMounted(() => {
             <pre class="nd-text">{{ text }}</pre>
           </div>
           <div class="nd-actions">
-            <button v-if="!text && generateLabel" class="nd-btn primary" @click="emit('generate')">{{ generateLabel }}</button>
-            <button class="nd-btn ghost" @click="close">关闭</button>
+            <button v-if="!text && generateLabel" class="btn btn-primary" @click="emit('generate')">{{ generateLabel }}</button>
+            <button class="btn btn-ghost" @click="close">关闭</button>
           </div>
         </div>
       </div>
@@ -92,7 +92,8 @@ onMounted(() => {
 .nd-mask {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(18, 26, 41, 0.5);
+  backdrop-filter: blur(2px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -100,13 +101,13 @@ onMounted(() => {
   padding: 16px;
 }
 .nd-modal {
-  background: var(--card, #fff);
-  border-radius: 14px;
+  background: var(--surface);
+  border-radius: var(--r-lg);
   width: 100%;
-  max-width: 560px;
-  max-height: 90vh;
+  max-width: 460px;
+  max-height: 92vh;
   overflow: auto;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--sh-lg);
   font-family: -apple-system, 'PingFang SC', sans-serif;
 }
 .nd-head {
@@ -143,8 +144,8 @@ onMounted(() => {
 }
 .nd-text-box {
   border: 1px solid var(--line, #e8edf4);
-  border-radius: 10px;
-  background: #fbfcfe;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
   padding: 12px 14px;
   margin-top: 12px;
 }
@@ -153,7 +154,7 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: var(--brand, #c8102e);
+  color: var(--brand);
   margin-bottom: 8px;
 }
 .nd-text-lab { font-weight: 600; }
@@ -171,29 +172,9 @@ onMounted(() => {
 }
 .nd-actions {
   display: flex;
+  justify-content: flex-end;
   gap: 10px;
   margin-top: 14px;
 }
-.nd-btn {
-  flex: 1;
-  padding: 10px 14px;
-  border: 1px solid var(--line, #e8edf4);
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  font-family: inherit;
-  background: var(--surface, #fff);
-  color: var(--ink, #1c2430);
-}
-.nd-btn.primary {
-  background: var(--brand, #c8102e);
-  color: #fff;
-  border-color: var(--brand, #c8102e);
-  font-weight: 700;
-}
-.nd-btn.ghost {
-  background: transparent;
-  color: var(--muted, #76819a);
-}
-.nd-btn:hover { opacity: 0.92; }
+/* 按钮复用全局 .btn 体系（btn / btn-primary / btn-ghost），已在模板中改用全局 class */
 </style>

@@ -161,7 +161,7 @@ function caseTitle(c: CaseItem): string {
 .btn.ghost.sm { padding: 2px 8px; font-size: 12px; }
 .btn.ghost.danger { color: var(--danger); border-color: var(--danger); }
 
-@media (max-width: 560px) {
+@media (max-width: 640px) {
   .case-grid { grid-template-columns: 1fr; }
   .derive { flex-direction: column; align-items: stretch; }
   .detail .kv { grid-template-columns: 1fr; }

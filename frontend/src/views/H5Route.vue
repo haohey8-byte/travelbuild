@@ -936,7 +936,7 @@ function goHome() {
 
 /* 角色标识条 */
 .role-badge { margin: 10px 0 4px; display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
-.rb-pk { background: var(--brand-50, #fdeef0); color: var(--brand); border: 1px solid var(--brand); }
+.rb-pk { background: var(--brand-50); color: var(--brand); border: 1px solid var(--brand); }
 .rb-ag { background: #e9f1fe; color: #1e40af; border: 1px solid #c2dafe; }
 .rb-pub { background: #f4f6fa; color: #3c4655; border: 1px solid #e6e8eb; }
 
@@ -948,7 +948,7 @@ function goHome() {
 .line { color: var(--ink); font-size: 14px; margin: 2px 0; }
 .muted { color: var(--muted); }
 .h5-feedback { margin-top: 16px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
-.h5-feedback h3 { margin-top: 0; color: var(--brand-600, #a60d26); }
+.h5-feedback h3 { margin-top: 0; color: var(--brand-600); }
 .h5-fb-field { margin-top: 10px; }
 .h5-fb-field label { display: block; font-size: 12px; color: var(--muted); font-weight: 500; margin-bottom: 6px; }
 .h5-input { width: 100%; margin: 8px 0; padding: 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; box-sizing: border-box; font-family: inherit; }
@@ -973,9 +973,9 @@ h3 { font-size: 15px; margin: 14px 0 0; }
 
 /* —— PandaKing / agency 编辑区 —— */
 .h5-edit-section { margin-top: 14px; padding: 14px; border: 1px solid var(--brand); border-radius: 12px; background: #fff; }
-.h5-edit-section h3 { margin-top: 0; color: var(--brand-600, #a60d26); }
+.h5-edit-section h3 { margin-top: 0; color: var(--brand-600); }
 .h5-ag-section { margin-top: 16px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
-.h5-ag-section h3 { margin-top: 0; color: var(--brand-600, #a60d26); }
+.h5-ag-section h3 { margin-top: 0; color: var(--brand-600); }
 .h5-ag-mode { display: flex; gap: 18px; margin: 8px 0 10px; }
 .h5-ag-radio { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; font-size: 14px; color: var(--ink); }
 .h5-ag-input { font-size: 16px; font-weight: 600; color: var(--brand); margin-top: 0; }
@@ -993,7 +993,7 @@ h3 { font-size: 15px; margin: 14px 0 0; }
 .day-row[role="button"] { cursor: pointer; user-select: none; }
 .day-row[role="button"]:hover { background: var(--surface-2, #fbfcfe); }
 .day-row.static { cursor: default; }
-.day-badge { width: 32px; height: 32px; border-radius: 8px; background: var(--brand-50, #fdeef0); color: var(--brand); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; flex-shrink: 0; }
+.day-badge { width: 32px; height: 32px; border-radius: 8px; background: var(--brand-50); color: var(--brand); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; flex-shrink: 0; }
 .day-summary { flex: 1; min-width: 0; }
 .day-city { display: block; font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: 2px; }
 .day-meta { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -1014,7 +1014,7 @@ h3 { font-size: 15px; margin: 14px 0 0; }
 .day-readonly-lab { flex-shrink: 0; font-size: 12px; color: var(--muted); line-height: 22px; min-width: 32px; }
 .day-chips { display: flex; flex-wrap: wrap; gap: 4px; flex: 1; }
 .day-chip { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; line-height: 18px; font-weight: 500; }
-.day-chip-spot { background: var(--brand-50, #fdeef0); color: var(--brand-700, #a60d26); border: 1px solid var(--brand-100, #fbd5dc); }
+.day-chip-spot { background: var(--brand-50); color: var(--brand-700); border: 1px solid var(--brand-100); }
 .day-chip-meal { background: #fff7e6; color: #ad6800; border: 1px solid #ffe7ba; }
 .btn { width: 100%; margin-top: 8px; padding: 10px; border: 1px solid var(--line-strong); background: var(--surface); border-radius: 10px; cursor: pointer; font-size: 14px; font-family: inherit; }
 .btn-primary { background: var(--brand); color: #fff; border: none; padding: 12px; font-weight: 700; }
@@ -1022,7 +1022,7 @@ h3 { font-size: 15px; margin: 14px 0 0; }
 .btn.ghost { background: transparent; border: none; margin-top: 0; }
 .btn.ghost.xs { padding: 2px 6px; font-size: 12px; width: auto; }
 .btn.ghost.sm { padding: 4px 10px; font-size: 12px; width: auto; }
-.btn.dash { background: var(--teal-50, #e6f7f0); color: var(--teal-600, #0f9d6f); border: 1px dashed var(--teal-200, #b8ead8); width: 100%; }
+.btn.dash { background: var(--role-pk-50); color: var(--role-pk); border: 1px dashed var(--role-pk-200); width: 100%; }
 
 /* 报价表内嵌间距微调 */
 .h5-edit-section :deep(.quote) { margin-top: 8px; }
@@ -1036,12 +1036,12 @@ h3 { font-size: 15px; margin: 14px 0 0; }
 .guest-box .mode { width: auto; min-width: 56px; }
 .guest-box input[type=number] { width: 140px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 14px; box-sizing: border-box; }
 .h5-quotea-card { margin: 14px 0; padding: 14px 16px; background: var(--brand-50); border-radius: 12px; display: flex; align-items: baseline; justify-content: space-between; border: 1px solid var(--brand); }
-.h5-quotea-lab { color: var(--brand-600, #a60d26); font-size: 13px; font-weight: 600; }
+.h5-quotea-lab { color: var(--brand-600); font-size: 13px; font-weight: 600; }
 .h5-quotea-val { color: var(--brand); font-size: 24px; font-weight: 800; }
 
 /* —— 旅行社视角：顶部成本大额卡（方案A：去"您的成本基线"副标，纯从旅行社视角） —— */
-.h5-ag-cost-hero { margin: 14px 0 12px; padding: 16px 18px; background: var(--brand-50, #fdeef0); border: 1px solid var(--brand); border-radius: 12px; display: flex; flex-direction: column; gap: 4px; }
-.h5-ag-cost-lab { color: var(--brand-600, #a60d26); font-size: 13px; font-weight: 600; }
+.h5-ag-cost-hero { margin: 14px 0 12px; padding: 16px 18px; background: var(--brand-50); border: 1px solid var(--brand); border-radius: 12px; display: flex; flex-direction: column; gap: 4px; }
+.h5-ag-cost-lab { color: var(--brand-600); font-size: 13px; font-weight: 600; }
 .h5-ag-cost-val { color: var(--brand); font-size: 30px; font-weight: 800; line-height: 1.1; }
 .h5-ag-cost-sub { color: var(--muted); font-size: 11px; margin-top: 2px; }
 
@@ -1070,8 +1070,8 @@ h3 { font-size: 15px; margin: 14px 0 0; }
 .pdf-offscreen { position: fixed; left: -10000px; top: 0; width: 794px; background: #fff; z-index: -1; }
 
 /* —— 本轮变更摘要（agency 视角，#229 新增；需显式样式，否则 <pre> 在窄屏横向溢出）—— */
-.ch-summary { margin: 12px 0 0; border: 1px solid var(--brand-100, #f9c7c2); border-radius: 10px; padding: 10px 12px; background: var(--brand-50, #fdeef0); }
-.ch-summary h4 { margin: 0 0 6px; font-size: 13px; color: var(--brand-600, #a60d26); }
+.ch-summary { margin: 12px 0 0; border: 1px solid var(--brand-100); border-radius: 10px; padding: 10px 12px; background: var(--brand-50); }
+.ch-summary h4 { margin: 0 0 6px; font-size: 13px; color: var(--brand-600); }
 .ch-summary pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.6; color: var(--ink); font-family: inherit; }
 
 /* —— 桌面端适配（H5 在 PC 上呈现为舒适的居中宽栏 + 整页柔和背景，而非窄手机条）—— */
