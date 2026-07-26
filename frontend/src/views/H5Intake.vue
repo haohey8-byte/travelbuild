@@ -131,17 +131,13 @@ async function onSubmit() {
 
 async function onCopySummary() {
   if (!summary.value) return
-  const ok = await copyText(summary.value)
+  // 复制给 PandaKing 同步：摘要 + 协作链接，一段到位（境外社也借此保留自己的回访链接）
+  const text = agencyLink.value
+    ? `${summary.value}\n\n—— 您的路线协作链接（可随时回访 / 跟进 PandaKing 反馈）——\n${agencyLink.value}`
+    : summary.value
+  const ok = await copyText(text)
   copied.value = ok
   setTimeout(() => (copied.value = false), 2000)
-}
-
-const linkCopied = ref(false)
-async function onCopyLink() {
-  if (!agencyLink.value) return
-  const ok = await copyText(agencyLink.value)
-  linkCopied.value = ok
-  setTimeout(() => (linkCopied.value = false), 2000)
 }
 
 onMounted(() => {
@@ -156,18 +152,14 @@ onMounted(() => {
       <p class="hint">您的路线初稿已提交给 PandaKing，我们将尽快确认并规划。</p>
       <div v-if="summary" class="notify-box">
         <div class="notify-head">
-          <span>📋 提交摘要（复制发给 PandaKing 同步）</span>
+          <span>📋 提交摘要 + 协作链接（复制发给 PandaKing 同步）</span>
           <button class="btn ghost sm" @click="onCopySummary">{{ copied ? '已复制 ✓' : '复制' }}</button>
         </div>
         <pre class="notify-text">{{ summary }}</pre>
-      </div>
-
-      <div v-if="agencyLink" class="notify-box link-box">
-        <div class="notify-head">
-          <span>🔗 您的路线协作链接（收藏可随时回访 / 跟进 PandaKing 反馈）</span>
-          <button class="btn ghost sm" @click="onCopyLink">{{ linkCopied ? '已复制 ✓' : '复制' }}</button>
+        <div v-if="agencyLink" class="link-line">
+          <span class="link-lab">🔗 您的路线协作链接：</span>
+          <a :href="agencyLink" target="_blank" rel="noopener">{{ agencyLink }}</a>
         </div>
-        <a class="link-url" :href="agencyLink" target="_blank" rel="noopener">{{ agencyLink }}</a>
         <p class="hint" style="margin:8px 0 0;">PandaKing 规划或回传反馈后，重新打开此链接即可看到最新进展。</p>
       </div>
     </div>
@@ -245,9 +237,10 @@ onMounted(() => {
 .notify-head { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--brand); }
 .notify-head .btn { margin-left: auto; }
 .notify-text { margin: 8px 0 0; white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.6; color: var(--ink); font-family: inherit; }
-.link-box { border-color: var(--line); background: var(--card); }
-.link-url { display: block; margin-top: 8px; font-size: 13px; line-height: 1.5; color: var(--brand); word-break: break-all; text-decoration: none; }
-.link-url:hover { text-decoration: underline; }
+.link-line { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 13px; line-height: 1.5; word-break: break-all; }
+.link-lab { color: var(--muted); margin-right: 2px; }
+.link-line a { color: var(--brand); text-decoration: none; }
+.link-line a:hover { text-decoration: underline; }
 .itin-block { margin-top: 4px; }
 .itin-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .itin-hint { font-size: 11px; color: var(--muted); text-align: right; }
