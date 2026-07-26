@@ -70,6 +70,7 @@ interface Day {
   spots: string[]
   hotel: string
   meals: string[]
+  notes?: string
 }
 const itinerary = ref<{ days: Day[] }>({ days: [] })
 const openDays = ref(new Set<number>())
@@ -83,7 +84,7 @@ function countNonEmpty(arr: string[]): number {
   return arr.filter((x) => String(x).trim()).length
 }
 function newDay(n: number): Day {
-  return { day: n, city: '', spots: [''], hotel: '', meals: [''] }
+  return { day: n, city: '', spots: [''], hotel: '', meals: [''], notes: '' }
 }
 function parseItinerary(it: unknown) {
   const days = (it as { days?: Day[] })?.days
@@ -425,12 +426,14 @@ async function onAgTranslate() {
       const mealsTr = await Promise.all(
         ((day.meals ?? []) as string[]).map((m) => translateText(String(m || ''), 'th')),
       )
+      const notesTr = await translateText(String(day.notes || ''), 'th')
       lines.push(`${t('th', 'day')} ${dayNum} · ${cityTr || '—'}`)
       const spots = spotsTr.filter(Boolean)
       const meals = mealsTr.filter(Boolean)
       if (spots.length) lines.push(`  ${t('th', 'spots')}: ${spots.join('、')}`)
       if (hotelTr) lines.push(`  ${t('th', 'hotel')}: ${hotelTr}`)
       if (meals.length) lines.push(`  ${t('th', 'meals')}: ${meals.join('、')}`)
+      if (notesTr) lines.push(`  ${t('th', 'col_notes')}: ${notesTr}`)
       lines.push('')
     }
     lines.push('────────────────────')
@@ -851,6 +854,10 @@ function goHome() {
               </div>
               <button class="btn ghost sm" @click="addMeal(d)">+ 添加餐饮</button>
             </div>
+            <div class="day-field full">
+              <label>备注</label>
+              <input v-model="d.notes" placeholder="当天备注（选填）" />
+            </div>
             <div class="day-actions">
               <button class="btn ghost sm" @click="removeDay(di)">删除当天</button>
             </div>
@@ -868,6 +875,10 @@ function goHome() {
               <span class="day-chips">
                 <span v-for="(m, mi) in d.meals.filter(Boolean)" :key="mi" class="day-chip day-chip-meal">{{ m }}</span>
               </span>
+            </div>
+            <div v-if="d.notes?.trim()" class="day-readonly-row">
+              <span class="day-readonly-lab">备注</span>
+              <span class="day-readonly-val">{{ d.notes }}</span>
             </div>
           </div>
         </div>

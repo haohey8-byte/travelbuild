@@ -7,7 +7,7 @@ import { useAuthStore } from '@/stores/auth'
 import { createRoute, deleteRoute } from '@/api/routes'
 import { fetchAgencies } from '@/api/auth'
 import { safeName, safeText } from '@/utils/name'
-import type { Route, RouteStatusKey, Agency } from '@/types'
+import type { Route, RouteStatusKey, Agency, ItineraryDay } from '@/types'
 
 async function retry<T>(fn: () => Promise<T>, retries = 3, baseDelay = 2000): Promise<T> {
   let lastErr: any
@@ -211,6 +211,31 @@ function open(r: Route) {
 const showCreate = ref(false)
 const creating = ref(false)
 const createErr = ref('')
+// 行程按天结构化录入（选填，与「境外旅行社发起的路线初稿」一致）
+const draftDays = ref<ItineraryDay[]>([newDay(1)])
+function newDay(n: number): ItineraryDay {
+  return { day: n, city: '', spots: [''], hotel: '', meals: [''], notes: '' }
+}
+function addDraftDay() {
+  draftDays.value.push(newDay(draftDays.value.length + 1))
+}
+function removeDraftDay(i: number) {
+  if (draftDays.value.length <= 1) return
+  draftDays.value.splice(i, 1)
+  draftDays.value.forEach((d, idx) => (d.day = idx + 1))
+}
+function addDraftSpot(d: ItineraryDay) {
+  d.spots.push('')
+}
+function removeDraftSpot(d: ItineraryDay, i: number) {
+  d.spots.splice(i, 1)
+}
+function addDraftMeal(d: ItineraryDay) {
+  d.meals.push('')
+}
+function removeDraftMeal(d: ItineraryDay, i: number) {
+  d.meals.splice(i, 1)
+}
 const form = ref({
   customerName: '',
   customerNameCn: '',
@@ -233,7 +258,7 @@ async function onCreate() {
     createErr.value = 'PandaKing 创建路线必须选择境外旅行社'
     return
   }
-  creating.value = true
+    creating.value = true
   try {
     const payload: any = {
       customerName: form.value.customerName.trim(),
@@ -249,6 +274,18 @@ async function onCreate() {
     if (user.value?.role === 'pandaking') {
       payload.agencyId = form.value.agencyId.trim()
     }
+    // 行程：按天结构化录入（选填），有内容才作为初稿入库
+    const itinDays = draftDays.value.map((d) => ({
+      day: d.day,
+      city: d.city.trim(),
+      hotel: d.hotel.trim(),
+      spots: d.spots.map((s) => s.trim()).filter(Boolean),
+      meals: d.meals.map((m) => m.trim()).filter(Boolean),
+      notes: d.notes.trim(),
+    }))
+    if (itinDays.some((d) => d.city || d.hotel || d.notes || d.spots.length || d.meals.length)) {
+      payload.initialDraft = { itinerary: { days: itinDays } }
+    }
     await createRoute(payload)
     showCreate.value = false
     form.value = {
@@ -262,6 +299,7 @@ async function onCreate() {
       travelDate: '',
       modeKey: 'collab',
     }
+    draftDays.value = [newDay(1)]
     await store.load()
   } catch (e: any) {
     console.error('创建路线失败:', e)
@@ -445,6 +483,34 @@ async function confirmDelete() {
               <option value="solo">自营（PandaKing 直接报价）</option>
             </select>
           </label>
+
+          <div class="itin-block">
+            <div class="itin-head">
+              <span class="itin-title">行程安排（选填）</span>
+              <span class="itin-hint">按 D1–Dn 填写，可留空</span>
+            </div>
+            <div v-for="(d, di) in draftDays" :key="di" class="day-card-mini">
+              <div class="day-card-mini-head">
+                <span class="day-badge-mini">D{{ d.day }}</span>
+                <button v-if="draftDays.length > 1" type="button" class="mini-del" @click="removeDraftDay(di)">×</button>
+              </div>
+              <input v-model="d.city" type="text" placeholder="城市 / 区域（如 成都）" />
+              <input v-model="d.hotel" type="text" placeholder="住宿酒店（选填）" />
+              <div v-for="(s, si) in d.spots" :key="'s' + si" class="inline-mini">
+                <input v-model="d.spots[si]" type="text" placeholder="景点 / 活动（选填）" />
+                <button type="button" class="mini-del" @click="removeDraftSpot(d, si)">×</button>
+              </div>
+              <button type="button" class="mini-add-line" @click="addDraftSpot(d)">＋ 添加景点</button>
+              <div v-for="(m, mi) in d.meals" :key="'m' + mi" class="inline-mini">
+                <input v-model="d.meals[mi]" type="text" placeholder="餐饮安排（选填）" />
+                <button type="button" class="mini-del" @click="removeDraftMeal(d, mi)">×</button>
+              </div>
+              <button type="button" class="mini-add-line" @click="addDraftMeal(d)">＋ 添加餐饮</button>
+              <input v-model="d.notes" type="text" placeholder="当天备注（选填）" />
+            </div>
+            <button type="button" class="day-add-btn" @click="addDraftDay">＋ 添加一天</button>
+          </div>
+
           <p v-if="createErr" class="err">{{ createErr }}</p>
           <div class="modal-actions">
             <button type="button" class="btn" :disabled="creating" @click="showCreate = false">取消</button>
@@ -642,4 +708,18 @@ async function confirmDelete() {
   .col-op { grid-column: 2; grid-row: 1; }
   .row-del { opacity: 1; }
 }
+
+/* —— 新建路线弹窗：行程按天结构化录入 —— */
+.itin-block { margin: 4px 0 6px; border-top: 1px dashed var(--line); padding-top: 12px; }
+.itin-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.itin-title { font-size: var(--fs-sm); color: var(--muted); font-weight: 600; }
+.itin-hint { font-size: 11px; color: var(--muted); text-align: right; }
+.day-card-mini { border: 1px solid var(--line); border-radius: 10px; padding: 10px; margin-top: 10px; background: rgba(0,0,0,.02); }
+.day-card-mini-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.day-badge-mini { font-weight: 700; color: var(--brand); font-size: 14px; }
+.inline-mini { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+.inline-mini input { flex: 1; }
+.mini-del { border: none; background: rgba(0,0,0,.06); color: var(--danger); border-radius: 6px; width: 30px; height: 38px; font-size: 16px; cursor: pointer; flex: none; }
+.mini-add-line { margin-top: 6px; border: none; background: transparent; color: var(--brand); font-size: 13px; cursor: pointer; padding: 4px 0; }
+.day-add-btn { margin-top: 10px; width: 100%; border: 1px dashed var(--brand); color: var(--brand); border-radius: 8px; background: transparent; padding: 10px; cursor: pointer; font-size: 14px; }
 </style>

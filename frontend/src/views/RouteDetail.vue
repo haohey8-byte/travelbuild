@@ -162,10 +162,11 @@ interface Day {
   spots: string[]
   hotel: string
   meals: string[]
+  notes?: string
 }
 const itinerary = ref<{ days: Day[] }>({ days: [newDay(1)] })
 function newDay(n: number): Day {
-  return { day: n, city: '', spots: [''], hotel: '', meals: [''] }
+  return { day: n, city: '', spots: [''], hotel: '', meals: [''], notes: '' }
 }
 
 // 选择「当前有效版本」：优先用含真实行程/报价内容的最新版本，避免空保存把详情页变成空白
@@ -917,7 +918,8 @@ const hasItineraryContent = computed(() =>
       (d.city && d.city.trim()) ||
       (d.hotel && d.hotel.trim()) ||
       d.spots.some((s) => s && s.trim()) ||
-      d.meals.some((m) => m && m.trim()),
+      d.meals.some((m) => m && m.trim()) ||
+      (d.notes && d.notes.trim()),
   ),
 )
 
@@ -1100,6 +1102,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
                   <span v-if="d.hotel" class="tag"><b>住宿</b>{{ d.hotel }}</span>
                   <span class="tag"><b>景点</b>{{ spotCount(d) }} 处</span>
                   <span class="tag"><b>用餐</b>{{ mealCount(d) }} 项</span>
+                  <span v-if="d.notes" class="tag"><b>备注</b>{{ d.notes }}</span>
                 </div>
               </div>
               <div class="chev" :class="{ open: openDays.has(di) }">▾</div>
@@ -1125,6 +1128,10 @@ const collabEvents = computed<CollabEvent[]>(() => {
                   <button class="mini-del" title="删除" @click="removeMeal(d, mi)">×</button>
                 </div>
                 <button class="mini-add" @click="addMeal(d)">＋ 餐饮</button>
+              </div>
+              <div class="field full">
+                <label>备注</label>
+                <input v-model="d.notes" placeholder="当天备注（选填）" />
               </div>
               <div class="edit-bar">
                 <button class="del" @click="removeDay(di)">删除当天</button>

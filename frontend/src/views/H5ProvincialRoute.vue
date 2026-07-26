@@ -56,6 +56,7 @@ interface Day {
   spots: string[]
   hotel: string
   meals: string[]
+  notes?: string
 }
 const itinerary = ref<{ days: Day[] }>({ days: [] })
 const openDays = ref(new Set<number>()) // 展开的天数索引
@@ -68,7 +69,7 @@ function countNonEmpty(arr: string[]): number {
   return arr.filter((x) => String(x).trim()).length
 }
 function newDay(n: number): Day {
-  return { day: n, city: '', spots: [''], hotel: '', meals: [''] }
+  return { day: n, city: '', spots: [''], hotel: '', meals: [''], notes: '' }
 }
 function parseItinerary(it: unknown) {
   const days = (it as { days?: Day[] })?.days
@@ -809,6 +810,7 @@ function goRouteDetail() {
                   <span v-if="d.hotel" class="day-tag">{{ d.hotel }}</span>
                   <span class="day-tag">{{ countNonEmpty(d.spots) }} 处景点</span>
                   <span class="day-tag">{{ countNonEmpty(d.meals) }} 项用餐</span>
+                  <span v-if="d.notes" class="day-tag">{{ d.notes }}</span>
                 </span>
               </div>
             </div>
@@ -890,6 +892,10 @@ function goRouteDetail() {
                     <button class="btn ghost xs" @click="removeMeal(d, mi)">×</button>
                   </div>
                   <button class="btn ghost sm" @click="addMeal(d)">+ 添加餐饮</button>
+                </div>
+                <div class="day-field full">
+                  <label>备注</label>
+                  <input v-model="d.notes" placeholder="当天备注（选填）" />
                 </div>
                 <div class="day-actions">
                   <button class="btn ghost sm" @click="removeDay(di)">删除当天</button>

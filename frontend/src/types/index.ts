@@ -313,6 +313,16 @@ export interface IntakeDraft {
   quote?: Quote | null
 }
 
+// 行程按天结构化（城市 / 酒店 / 景点 / 餐饮 / 备注），录入端使用（notes 必填，由 newDay 初始化为空串）
+export interface ItineraryDay {
+  day: number
+  city: string
+  spots: string[]
+  hotel: string
+  meals: string[]
+  notes: string
+}
+
 export interface IntakeResult {
   routeId: string
   success: boolean
