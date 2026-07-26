@@ -326,6 +326,8 @@ export interface ItineraryDay {
 export interface IntakeResult {
   routeId: string
   success: boolean
+  // 提交成功后后端为境外社生成的协作 H5 链接（相对路径，如 /h5/route/xxx），供其回访跟进
+  agencyLink?: string
 }
 
 // 预发提交链接返回（PandaKing 控制台调用）

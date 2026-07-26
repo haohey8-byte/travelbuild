@@ -727,7 +727,20 @@ export class RoutesService {
       where: { token: body.token },
       data: { submitCount: { increment: 1 }, lastSubmittedAt: new Date() },
     })
-    return { routeId: route.id, success: true }
+    // 提交成功即为境外社生成「路线协作链接」（agency 角色，非公开），
+    // 供其随时回访查看 PandaKing 的规划/反馈，形成多轮往返闭环。
+    // 该令牌与 ensureAgencyShare 复用同一查询条件（role=agency/public=false/costInquiryId=null），
+    // PandaKing 后续「回传反馈」将继承此令牌而非新建。
+    let latest = await this.latestVersion(route.id)
+    if (!latest) {
+      // 提交时未带任何行程/报价（initialDraft 为空）则补一个空 v1 草稿版本，保证协作链接有可挂载的版本
+      const v = await this.prisma.routeVersion.create({
+        data: { routeId: route.id, version: 'v1', draft: true, itinerary: Prisma.JsonNull, quote: Prisma.JsonNull },
+      })
+      latest = v
+    }
+    const agencyShare = await this.createShare(route.id, 'agency', latest.id, false)
+    return { routeId: route.id, success: true, agencyLink: agencyShare.link }
   }
 
   // 省地接社凭令牌在协作页编辑行程并填写成本①（利润默认0）；

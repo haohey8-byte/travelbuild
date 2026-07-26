@@ -43,6 +43,7 @@ function removeMeal(d: ItineraryDay, i: number) {
 const loading = ref(false)
 const submitted = ref(false)
 const routeId = ref('')
+const agencyLink = ref('') // 提交成功后后端返回的境外社协作 H5 链接（完整 URL）
 const sendErr = ref('')
 const summary = ref('')
 const copied = ref(false)
@@ -109,6 +110,10 @@ async function onSubmit() {
   try {
     const res = await submitIntake(token, draft)
     routeId.value = res.routeId
+    // 拼完整 URL，便于境外社直接打开 / 复制跟进
+    agencyLink.value = res.agencyLink
+      ? `${window.location.origin}${res.agencyLink}`
+      : ''
     submitted.value = true
     summary.value = buildSummary()
     document.title = `${destination.value.trim() || '行程'} · 路线提交成功`
@@ -131,6 +136,14 @@ async function onCopySummary() {
   setTimeout(() => (copied.value = false), 2000)
 }
 
+const linkCopied = ref(false)
+async function onCopyLink() {
+  if (!agencyLink.value) return
+  const ok = await copyText(agencyLink.value)
+  linkCopied.value = ok
+  setTimeout(() => (linkCopied.value = false), 2000)
+}
+
 onMounted(() => {
   document.title = '提交路线初稿 · PandaKing9'
 })
@@ -147,6 +160,15 @@ onMounted(() => {
           <button class="btn ghost sm" @click="onCopySummary">{{ copied ? '已复制 ✓' : '复制' }}</button>
         </div>
         <pre class="notify-text">{{ summary }}</pre>
+      </div>
+
+      <div v-if="agencyLink" class="notify-box link-box">
+        <div class="notify-head">
+          <span>🔗 您的路线协作链接（收藏可随时回访 / 跟进 PandaKing 反馈）</span>
+          <button class="btn ghost sm" @click="onCopyLink">{{ linkCopied ? '已复制 ✓' : '复制' }}</button>
+        </div>
+        <a class="link-url" :href="agencyLink" target="_blank" rel="noopener">{{ agencyLink }}</a>
+        <p class="hint" style="margin:8px 0 0;">PandaKing 规划或回传反馈后，重新打开此链接即可看到最新进展。</p>
       </div>
     </div>
 
@@ -223,6 +245,9 @@ onMounted(() => {
 .notify-head { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--brand); }
 .notify-head .btn { margin-left: auto; }
 .notify-text { margin: 8px 0 0; white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.6; color: var(--ink); font-family: inherit; }
+.link-box { border-color: var(--line); background: var(--card); }
+.link-url { display: block; margin-top: 8px; font-size: 13px; line-height: 1.5; color: var(--brand); word-break: break-all; text-decoration: none; }
+.link-url:hover { text-decoration: underline; }
 .itin-block { margin-top: 4px; }
 .itin-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .itin-hint { font-size: 11px; color: var(--muted); text-align: right; }
