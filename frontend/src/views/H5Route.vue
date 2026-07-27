@@ -179,7 +179,7 @@ const agNotifyText = ref('')
 const agNotifyTip = ref('')
 const initialAgProfit2Mode = ref<'amount' | 'percent'>('amount')
 const initialAgProfit2 = ref(0)
-const initialAgItinerary = ref<{ days: { day: number; city: string }[] }>({ days: [] })
+const initialAgItinerary = ref<{ days: { day: number; city: string; spots: string[]; hotel: string; meals: string[]; notes?: string }[] }>({ days: [] })
 const agChanges = computed<ProvincialChanges>(() => {
   if (!isAgencyView.value) return {}
   return diffQuoteChanges({
@@ -187,7 +187,7 @@ const agChanges = computed<ProvincialChanges>(() => {
     after: {
       profit2: Number(agProfit2.value) || 0,
       profit2Mode: agProfit2Mode.value,
-      itinerary: { days: itinerary.value.days.map((d) => ({ day: d.day, city: d.city })) },
+      itinerary: { days: itinerary.value.days },
     },
     editableFields: ['profit2', 'itinerary'],
     versionLabel: data.value?.version,
@@ -195,7 +195,7 @@ const agChanges = computed<ProvincialChanges>(() => {
 })
 const agHasChange = computed(() => {
   const ch = agChanges.value
-  return !!ch.totals?.profit2 || (!!ch.itinerary && ch.itinerary.cityChanges.length > 0)
+  return !!ch.totals?.profit2 || (!!ch.itinerary && (ch.itinerary.cityChanges.length > 0 || ch.itinerary.detailChanges.length > 0))
 })
 
 // —— 旅行社视角：成本明细（per-item quoteA 来自后端 hideCostsForRole 暴露的 items.cost1） ——
@@ -393,7 +393,9 @@ async function onAgSave() {
     // 更新基线（下一轮基于新基线检测变更）
     initialAgProfit2Mode.value = agProfit2Mode.value
     initialAgProfit2.value = Number(agProfit2.value) || 0
-    initialAgItinerary.value = { days: itinerary.value.days.map((dd) => ({ day: dd.day, city: dd.city })) }
+    initialAgItinerary.value = {
+      days: itinerary.value.days.map((dd) => ({ day: dd.day, city: dd.city, spots: [...dd.spots], hotel: dd.hotel, meals: [...dd.meals], notes: dd.notes })),
+    }
     if (combinedNote) await loadFeedback()
     agFbText.value = ''
     agSaveOk.value = `已保存行程与报价（对客总价 ¥${Number(gp).toLocaleString()}）并通知 ${ownerName.value}，可把下方链接发回继续协作`
@@ -569,7 +571,9 @@ onMounted(async () => {
       // 记录本轮编辑基线（用于计算「本轮关键变更摘要」，多轮协作逐轮核对）
       initialAgProfit2Mode.value = agProfit2Mode.value
       initialAgProfit2.value = Number(agProfit2.value) || 0
-      initialAgItinerary.value = { days: itinerary.value.days.map((dd) => ({ day: dd.day, city: dd.city })) }
+      initialAgItinerary.value = {
+        days: itinerary.value.days.map((dd) => ({ day: dd.day, city: dd.city, spots: [...dd.spots], hotel: dd.hotel, meals: [...dd.meals], notes: dd.notes })),
+      }
     }
     const title = `${safeText(d.destination) || '定制行程'} · 规划路线及报价方案`
     document.title = title

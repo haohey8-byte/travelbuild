@@ -120,6 +120,66 @@ export interface ProvincialItineraryChange {
   dayCountAfter: number
   dayDelta: number // 天数增减
   cityChanges: string[] // 人类可读的城市变更，如 "D3 大阪→京都" / "D5 东京(新增)"
+  detailChanges: string[] // 逐天行程细节变更（景点/酒店/餐饮/备注），如 "D3 +酒店：XX酒店" / "D3 景点：+故宫 -长城"
+}
+
+// 行程单天结构（用于细节 diff）：day/city 必填，其余细节字段可选，
+// 以兼容「仅含 day/city 的精简行程」调用方（如 RouteDetail 控制台摘要）与「notes 可选」的 Day 类型。
+export interface DiffItineraryDay {
+  day: number
+  city: string
+  spots?: string[]
+  hotel?: string
+  meals?: string[]
+  notes?: string
+}
+
+// 逐天比对行程细节（景点/酒店/餐饮/备注），返回带 Dn 前缀的人类可读变更行。
+// 仅对「前后都存在」的同一天做细节对比（新增/移除的天已由 cityChanges 覆盖）。
+function diffDayDetails(b: DiffItineraryDay, a: DiffItineraryDay, d: number): string[] {
+  const out: string[] = []
+  const p = `D${d}`
+  const bHotel = (b.hotel || '').trim()
+  const aHotel = (a.hotel || '').trim()
+  if (bHotel !== aHotel) {
+    if (!bHotel) out.push(`${p} +酒店：${aHotel}`)
+    else if (!aHotel) out.push(`${p} 酒店清空`)
+    else out.push(`${p} 酒店：${bHotel}→${aHotel}`)
+  }
+  const bSpots = new Set((b.spots || []).map((s) => s.trim()).filter(Boolean))
+  const aSpots = new Set((a.spots || []).map((s) => s.trim()).filter(Boolean))
+  if (!setEq(bSpots, aSpots)) {
+    const added = [...aSpots].filter((x) => !bSpots.has(x))
+    const removed = [...bSpots].filter((x) => !aSpots.has(x))
+    const parts: string[] = []
+    if (added.length) parts.push('+' + added.join(' +'))
+    if (removed.length) parts.push('-' + removed.join(' -'))
+    out.push(`${p} 景点：${parts.join(' ')}`)
+  }
+  const bMeals = new Set((b.meals || []).map((s) => s.trim()).filter(Boolean))
+  const aMeals = new Set((a.meals || []).map((s) => s.trim()).filter(Boolean))
+  if (!setEq(bMeals, aMeals)) {
+    const added = [...aMeals].filter((x) => !bMeals.has(x))
+    const removed = [...bMeals].filter((x) => !aMeals.has(x))
+    const parts: string[] = []
+    if (added.length) parts.push('+' + added.join(' +'))
+    if (removed.length) parts.push('-' + removed.join(' -'))
+    out.push(`${p} 餐饮：${parts.join(' ')}`)
+  }
+  const bNotes = (b.notes || '').trim()
+  const aNotes = (a.notes || '').trim()
+  if (bNotes !== aNotes) {
+    if (!bNotes) out.push(`${p} +备注`)
+    else if (!aNotes) out.push(`${p} 备注清空`)
+    else out.push(`${p} 备注变更`)
+  }
+  return out
+}
+
+function setEq(a: Set<string>, b: Set<string>): boolean {
+  if (a.size !== b.size) return false
+  for (const x of a) if (!b.has(x)) return false
+  return true
 }
 export interface QuoteTotalsChange {
   cost1?: { before: number; after: number }
@@ -155,8 +215,8 @@ export interface CollabNotifyOpts {
 export function diffProvincialChanges(opts: {
   beforeItems: { name: string; cost1: number }[]
   afterItems: { name: string; cost1: number }[]
-  beforeItinerary?: { days: { day: number; city: string }[] }
-  afterItinerary?: { days: { day: number; city: string }[] }
+  beforeItinerary?: { days: DiffItineraryDay[] }
+  afterItinerary?: { days: DiffItineraryDay[] }
   versionLabel?: string
 }): ProvincialChanges {
   const changes: ProvincialChanges = {}
@@ -201,11 +261,18 @@ export function diffProvincialChanges(opts: {
         else cityChanges.push(`D${d} ${bCity}→${aCity}`)
       }
     }
+    // 逐天行程细节变更：仅对比前后都存在的同一天（新增/移除天已由 cityChanges 覆盖）
+    const detailChanges: string[] = []
+    const cmpLen = Math.min(bDays.length, aDays.length)
+    for (let i = 0; i < cmpLen; i++) {
+      detailChanges.push(...diffDayDetails(bDays[i], aDays[i], i + 1))
+    }
     changes.itinerary = {
       dayCountBefore: bDays.length,
       dayCountAfter: aDays.length,
       dayDelta: aDays.length - bDays.length,
       cityChanges,
+      detailChanges,
     }
   }
   return changes
@@ -232,7 +299,7 @@ export interface QuoteDiffInput {
   items?: QuoteLevel[]
   profit2Mode?: ProfitMode
   profit2?: number
-  itinerary?: { days: { day: number; city: string }[] }
+  itinerary?: { days: DiffItineraryDay[] }
 }
 export function diffQuoteChanges(opts: {
   before: QuoteDiffInput
@@ -310,11 +377,18 @@ export function diffQuoteChanges(opts: {
         else cityChanges.push(`D${d} ${bCity}→${aCity}`)
       }
     }
+    // 逐天行程细节变更：仅对比前后都存在的同一天
+    const detailChanges: string[] = []
+    const cmpLen = Math.min(bDays.length, aDays.length)
+    for (let i = 0; i < cmpLen; i++) {
+      detailChanges.push(...diffDayDetails(bDays[i], aDays[i], i + 1))
+    }
     changes.itinerary = {
       dayCountBefore: bDays.length,
       dayCountAfter: aDays.length,
       dayDelta: aDays.length - bDays.length,
       cityChanges,
+      detailChanges,
     }
   }
 
@@ -347,13 +421,14 @@ export function formatQuoteChanges(ch: ProvincialChanges): string {
     const p = ch.totals.profit2
     lines.push(`利润②：${Math.round(p.before).toLocaleString()} → ${Math.round(p.after).toLocaleString()}${p.mode === 'percent' ? '%' : ''}`)
   }
-  if (ch.itinerary && ch.itinerary.cityChanges.length > 0) {
+  if (ch.itinerary && (ch.itinerary.cityChanges.length > 0 || ch.itinerary.detailChanges.length > 0)) {
     const dayDelta = ch.itinerary.dayDelta
     const daysText = dayDelta !== 0
       ? `（天数：${ch.itinerary.dayCountBefore}天 → ${ch.itinerary.dayCountAfter}天${dayDelta > 0 ? `，+${dayDelta}` : dayDelta}天）`
       : ''
     lines.push(`行程调整${daysText}`)
     for (const c of ch.itinerary.cityChanges.slice(0, 15)) lines.push(`  ${c}`)
+    for (const c of ch.itinerary.detailChanges.slice(0, 15)) lines.push(`  ${c}`)
   }
   return lines.join('\n')
 }
@@ -397,9 +472,10 @@ export function collabNotifyText(opts: CollabNotifyOpts): string {
       const p = ch.totals.profit2
       sub.push(`利润② 合计 ¥${Math.round(p.before).toLocaleString()} → ¥${Math.round(p.after).toLocaleString()}${p.mode === 'percent' ? '(%)' : ''}（本次调整）`)
     }
-    if (ch.itinerary && ch.itinerary.cityChanges.length > 0) {
+    if (ch.itinerary && (ch.itinerary.cityChanges.length > 0 || ch.itinerary.detailChanges.length > 0)) {
       sub.push(`行程：${ch.itinerary.dayCountBefore} → ${ch.itinerary.dayCountAfter} 天`)
       for (const c of ch.itinerary.cityChanges.slice(0, 8)) sub.push(`• ${c}`)
+      for (const c of ch.itinerary.detailChanges.slice(0, 8)) sub.push(`• ${c}`)
     }
     // 仅当除版本标签外还有实质变更时才展示块
     if (sub.length > (ch.versionLabel ? 1 : 0)) blocks.push(...sub)

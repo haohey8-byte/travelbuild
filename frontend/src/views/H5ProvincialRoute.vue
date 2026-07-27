@@ -139,7 +139,7 @@ const provAuthorName = computed(() => provAgencyName.value || '省地接社')
 const totalCost = computed(() => quoteItems.value.reduce((s, it) => s + (Number(it.cost1) || 0), 0))
 // 回传前的基线快照：用于多轮回传时计算「关键变更摘要」（与一手逐轮核对）
 const initialCostItems = ref<{ name: string; cost1: number }[]>([])
-const initialItinerary = ref<{ days: { day: number; city: string }[] }>({ days: [] })
+const initialItinerary = ref<{ days: { day: number; city: string; spots: string[]; hotel: string; meals: string[]; notes?: string }[] }>({ days: [] })
 function normalizeCostItems(): { name: string; cost1: number }[] {
   return quoteItems.value
     .filter((it) => String(it.name).trim() || Number(it.cost1) > 0)
@@ -149,7 +149,7 @@ function normalizeCostItems(): { name: string; cost1: number }[] {
 // —— 实时变更检测（问题3：自动记录变动，展示到页面）——
 const currentChanges = computed(() => {
   const afterItems = normalizeCostItems()
-  const afterItinerary = { days: itinerary.value.days.map((d) => ({ day: d.day, city: d.city })) }
+  const afterItinerary = { days: itinerary.value.days }
   return diffProvincialChanges({
     beforeItems: initialCostItems.value,
     afterItems,
@@ -164,7 +164,7 @@ const hasCostChange = computed(() => {
 })
 const hasItineraryChange = computed(() => {
   const ch = currentChanges.value.itinerary
-  return ch && ch.cityChanges && ch.cityChanges.length > 0
+  return !!ch && ((ch.cityChanges && ch.cityChanges.length > 0) || (ch.detailChanges && ch.detailChanges.length > 0))
 })
 const hasAnyChange = computed(() => hasCostChange.value || hasItineraryChange.value)
 
@@ -181,13 +181,16 @@ function changeSummaryText(): string {
       else lines.push(`  · ${it.name}：¥${it.before.toLocaleString()} → ¥${it.after.toLocaleString()}`)
     }
   }
-  if (ch.itinerary && ch.itinerary.cityChanges && ch.itinerary.cityChanges.length > 0) {
+  if (ch.itinerary && ((ch.itinerary.cityChanges && ch.itinerary.cityChanges.length > 0) || (ch.itinerary.detailChanges && ch.itinerary.detailChanges.length > 0))) {
     const dayDelta = ch.itinerary.dayDelta
     const daysText = dayDelta !== 0
       ? `（天数：${ch.itinerary.dayCountBefore}天 → ${ch.itinerary.dayCountAfter}天${dayDelta > 0 ? `，+${dayDelta}` : dayDelta}天）`
       : ''
     lines.push(`行程调整${daysText}`)
     for (const c of ch.itinerary.cityChanges.slice(0, 15)) {
+      lines.push(`  ${c}`)
+    }
+    for (const c of ch.itinerary.detailChanges.slice(0, 15)) {
       lines.push(`  ${c}`)
     }
   }
@@ -324,7 +327,9 @@ onMounted(async () => {
     }
     // 记录回传前基线（多轮协作：用于生成本轮关键变更摘要）
     initialCostItems.value = quoteItems.value.map((i) => ({ name: String(i.name || ''), cost1: Number(i.cost1) || 0 }))
-    initialItinerary.value = { days: itinerary.value.days.map((d) => ({ day: d.day, city: d.city })) }
+    initialItinerary.value = {
+      days: itinerary.value.days.map((d) => ({ day: d.day, city: d.city, spots: [...d.spots], hotel: d.hotel, meals: [...d.meals], notes: d.notes })),
+    }
     document.title = pageTitle.value
     // 预填「填写人」：省地接社视图用机构名、PandaKing 视图用账号名（均可编辑）
     provFbName.value = provAgencyName.value || '省地接社'
@@ -367,7 +372,9 @@ async function onSubmitHandoff() {
         fbText.value = ''
         // 更新基线（下一轮基于新基线检测变更）
         initialCostItems.value = items.map((i) => ({ ...i }))
-        initialItinerary.value = { days: itinerary.value.days.map((d) => ({ day: d.day, city: d.city })) }
+        initialItinerary.value = {
+          days: itinerary.value.days.map((d) => ({ day: d.day, city: d.city, spots: [...d.spots], hotel: d.hotel, meals: [...d.meals], notes: d.notes })),
+        }
       } catch (fe: any) {
         fbErr.value = fe?.response?.data?.message || '变更记录提交失败（行程与成本已保存）'
       }
@@ -386,7 +393,7 @@ async function onSubmitHandoff() {
       : `行程与报价已保存并同步给 ${ownerName.value} ✅`
     if (data.value) {
       // 多轮协作：计算本轮关键变更摘要，让一手一眼看清改了哪些价格/行程
-      const afterItinerary = { days: itinerary.value.days.map((d) => ({ day: d.day, city: d.city })) }
+      const afterItinerary = { days: itinerary.value.days }
       const changes = diffProvincialChanges({
         beforeItems: initialCostItems.value,
         afterItems: items,
@@ -746,6 +753,9 @@ function goRouteDetail() {
                   <span v-if="currentChanges.itinerary?.cityChanges" class="ch-city-list">
                     <span v-for="c in currentChanges.itinerary.cityChanges" :key="c" class="ch-city-tag">{{ c }}</span>
                   </span>
+                  <div v-if="currentChanges.itinerary?.detailChanges && currentChanges.itinerary.detailChanges.length" class="ch-detail-list">
+                    <div v-for="c in currentChanges.itinerary.detailChanges" :key="c" class="ch-detail-line">{{ c }}</div>
+                  </div>
                 </span>
               </div>
             </section>
@@ -980,6 +990,9 @@ function goRouteDetail() {
                 <span v-if="currentChanges.itinerary?.cityChanges" class="ch-city-list">
                   <span v-for="c in currentChanges.itinerary.cityChanges" :key="c" class="ch-city-tag">{{ c }}</span>
                 </span>
+                <div v-if="currentChanges.itinerary?.detailChanges && currentChanges.itinerary.detailChanges.length" class="ch-detail-list">
+                  <div v-for="c in currentChanges.itinerary.detailChanges" :key="c" class="ch-detail-line">{{ c }}</div>
+                </div>
               </span>
             </div>
           </section>
@@ -1139,6 +1152,8 @@ function goRouteDetail() {
 .ch-down { color: var(--ok); margin-left: 4px; }
 .ch-city-list { display: block; margin-top: 4px; }
 .ch-city-tag { display: inline-block; background: rgba(0,0,0,.04); border-radius: 4px; padding: 1px 6px; font-size: 11px; margin: 2px 4px 2px 0; }
+.ch-detail-list { display: block; margin-top: 4px; }
+.ch-detail-line { font-size: 12px; color: var(--ink-2); line-height: 1.6; }
 
 /* ── 通用按钮 ── */
 .btn { width: 100%; margin-top: 8px; padding: 10px; border: 1px solid var(--line-strong); background: var(--surface); border-radius: 10px; cursor: pointer; font-size: 14px; font-family: inherit; }
