@@ -1071,29 +1071,56 @@ export class RoutesService {
 
   // 协作 H5 视图（按 token 解析，报价仅暴露对客总价）
   // 对于省地接社协作 share，额外返回 costInquiry 状态/成本①，便于统一协作页编辑。
-  async getH5(token: string, principal?: { role: Role } | null) {
-    const share = await this.prisma.routeShare.findUnique({
+  async getH5(token: string) {
+    // 优先按协作令牌(RouteShare)解析；成本询价令牌(CostInquiry.token)是历史遗留的另一种令牌，
+    // 其对应省地接社协作共享(role=provincial, costInquiryId 关联)已能承载同样的成本①协作，
+    // 故此处把成本询价令牌兜底解析到其关联的省地接社共享，统一由 H5ProvincialRoute 承接，退役旧 H5CostInquiry 页。
+    let share = await this.prisma.routeShare.findUnique({
       where: { token },
       include: { costInquiry: true },
     })
+    if (!share) {
+      const ci = await this.prisma.costInquiry.findUnique({ where: { token } })
+      if (ci) {
+        share = await this.prisma.routeShare.findFirst({
+          where: { costInquiryId: ci.id, role: 'provincial' },
+          include: { costInquiry: true },
+        })
+      }
+    }
     if (!share) throw new NotFoundException('协作链接无效')
     if (share.expiresAt && share.expiresAt.getTime() < Date.now()) {
       throw new NotFoundException('协作链接已过期')
     }
-    // 已登录 PandaKing 经任意协作链接查看时放开全量报价（成本①+利润①+利润②），
-    // 即便该令牌是 agency/provincial 角色；匿名或非 PandaKing 仍严格按令牌角色做字段级隔离。
-    const effRole: Role = principal?.role === 'pandaking' ? 'pandaking' : share.role
+    // 字段级可见性严格按「令牌角色」决定，不再因登录态(PandaKing JWT)而劫持视角：
+    // 这样 PandaKing 登录后打开旅行社/省地接社令牌，看到的仍是收件方视角（便于预览对方所见），
+    // 全量编辑通过显式切换到 pandaking 令牌实现（前端视角切换条），收件方数据隔离不被破坏。
+    const effRole: Role = share.role
     const route = await this.prisma.route
       .findUniqueOrThrow({ where: { id: share.routeId } })
       .catch(() => {
         throw new NotFoundException('路线不存在')
       })
-    let version = share.versionId
-      ? await this.prisma.routeVersion.findUnique({ where: { id: share.versionId } })
-      : null
+    // 版本解析策略：
+    // - 对客(public)令牌：保留冻结语义（以生成链接时的 versionId 为准），保证客户看到的报价稳定不变。
+    // - 非公开协作令牌(agency/provincial/pandaking)：忽略冻结的 versionId，始终解析该路线「最新已发布(非草稿)版本」，
+    //   避免「在填好报价前生成的协作链接打开后看不到报价」的问题；若无已发布版本则退而求其次取最新版本（含草稿）。
+    let version: any = null
+    if (share.public && share.versionId) {
+      version = await this.prisma.routeVersion.findUnique({ where: { id: share.versionId } })
+    }
     if (!version) {
-      // 协作 H5 不强制要求「已发布」版本：草稿版即可作为协作起点；
-      // 完全没有版本时从空白行程开始，允许省地接社从零协作编辑。
+      version =
+        (
+          await this.prisma.routeVersion.findMany({
+            where: { routeId: share.routeId, draft: false },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          })
+        )[0] ?? null
+    }
+    if (!version) {
+      // 兜底：路线仅有草稿版本时（协作起步阶段），允许从最新草稿开始。
       version =
         (
           await this.prisma.routeVersion.findMany({
@@ -1113,6 +1140,7 @@ export class RoutesService {
     }
     const result: any = {
       token,
+      tokenRole: share.role,
       public: share.public,
       routeId: route.id,
       destination: route.destination,

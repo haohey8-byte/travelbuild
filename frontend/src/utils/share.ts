@@ -54,10 +54,11 @@ export function pandakingH5Url(token: string): string {
   return `${base}#/h5/route/${token}`
 }
 
-// 成本询价 H5 链接：指向前端 SPA 的询价填写页（hash 路由），一手复制后发微信群给省地接社。
+// 成本询价 H5 链接： retired 旧 /h5/cost-inquiry 页，统一改指「省地接社协作 H5」(H5ProvincialRoute)。
+// 后端 getH5 会把成本询价令牌兜底解析到其关联的省地接社共享，故历史省地接社询价链接仍可直接打开。
 export function costInquiryH5Url(token: string): string {
   const base = window.location.origin + (import.meta.env.VITE_BASE || '/')
-  return `${base}#/h5/cost-inquiry/${token}`
+  return `${base}#/h5/provincial-route/${token}`
 }
 
 // 省地接社协作 H5 链接：指向前端 SPA 的协作编辑页（hash 路由），一手复制后发微信群给省地接社。

@@ -17,7 +17,7 @@ export class H5Controller {
   // 已登录 PandaKing 携带 JWT 时放开全量视图，便于在协作链接上直接规划与报价）
   @Get('route/:token')
   getRoute(@Param('token') token: string, @CurrentUser() user?: { role: Role }) {
-    return this.svc.getH5(token, user ? { role: user.role } : null)
+    return this.svc.getH5(token)
   }
 
   // 提交协作反馈（客户/对方修改意见）

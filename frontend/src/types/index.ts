@@ -170,6 +170,7 @@ export interface H5Route {
   version: string
   statusKey: string
   role: Role
+  tokenRole?: Role // 令牌原始角色（getH5 现严格按令牌角色返回，tokenRole 与 role 通常一致；保留字段便于前端明确区分）
   itinerary: Record<string, unknown>
   guestPrice: number | null
   // 双向协作回路：对端可编辑令牌（PandaKing 视图返回 agencyToken，旅行社/公开视图返回 pandakingToken）
@@ -241,26 +242,6 @@ export interface CostInquiry {
   cost1: number | null
   costItems?: CostInquiryItem[]
   createdAt: string
-}
-
-// 成本询价 H5（省地接社填写成本①，免登录）
-export interface H5CostInquiry {
-  token: string
-  status: string
-  cost1: number | null
-  costItems?: CostInquiryItem[]
-  // 路线归属账号名（创建者，即 PandaKing 平台方），用于 H5 内替代「一手」字眼显示具体注册名
-  ownerName?: string | null
-  // 被询价省地接社机构名，用于回传通知文案个性化（显示为具体机构名）
-  agencyName?: string | null
-  route: {
-    id: string
-    customerName?: string | null
-    customerNameCn?: string | null
-    destination: string
-    groupSize: number
-    travelDate: string | null
-  }
 }
 
 // 路线归档历史（一手删除路线时的备份快照）

@@ -52,22 +52,38 @@ const notifyTip = ref('')
 // 查看方随时把协作方案链接转发到微信群（复制「说明 + 链接」）
 const shareTip = ref('')
 
-// —— 角色分支 ——
-// public=true → 对客只读链接（客户看板）；否则按 role 区分 PandaKing(全编辑) / agency(行程+利润②)
-// PandaKing 视角：已登录 PandaKing（经 JWT）打开任意协作链接时同样放开全量编辑，
-// 即便该令牌角色是 agency/provincial；匿名或非 PandaKing 仍按令牌角色隔离。
-const isPkView = computed(
-  () => authStore.currentRole === 'pandaking' || (data.value?.role === 'pandaking' && !data.value?.public),
-)
-const isAgencyView = computed(() => data.value?.role === 'agency' && !data.value?.public)
+// —— 角色分支（严格按「令牌角色」驱动，不再被 PandaKing 登录态劫持）——
+// public=true → 对客只读链接（客户看板）；role=agency(非公开) → 境外旅行社行程+利润②；
+// role=pandaking(非公开) → PandaKing 全量编辑。PandaKing 管理员登录后默认看到「收件方视角」(令牌角色视角)，
+// 通过顶部视角切换条显式进入 pandaking 令牌做全量编辑，从而能预览对方所见、又保留完整编辑能力。
+const tokenRole = computed(() => (data.value?.tokenRole ?? data.value?.role) as string | undefined)
+const isPkView = computed(() => tokenRole.value === 'pandaking' && !data.value?.public)
+const isAgencyView = computed(() => tokenRole.value === 'agency' && !data.value?.public)
 const isPublicView = computed(() => !!data.value?.public)
 const canEditItinerary = computed(() => isPkView.value || isAgencyView.value)
 const roleBadgeClass = computed(() => (isPkView.value ? 'rb-pk' : isAgencyView.value ? 'rb-ag' : 'rb-pub'))
 const roleBadgeText = computed(() => {
-  if (isPkView.value) return '👑 PandaKing · 可编辑行程与价格'
-  if (isAgencyView.value) return '🧳 您 · 可编辑行程与加价'
+  if (isPkView.value) return '👑 PandaKing · 全量编辑行程与报价'
+  if (isAgencyView.value) return '🧳 境外旅行社 · 可编辑行程与加价'
   return '👀 客户预览 · 只读'
 })
+
+// —— PandaKing 视角切换条（仅 PandaKing 管理员登录时显示）——
+// 默认停留在「收件方预览」（即当前令牌角色的视角）；点击「PandaKing 编辑」跳转到 pandaking 令牌做全量编辑。
+// 这样 PandaKing 既能预览 agency/省地接社/客户所见，也能一键进入自己的编辑态，互不干扰。
+const isPkLoggedIn = computed(() => authStore.currentRole === 'pandaking')
+const pkViewMode = computed(() => (isPkView.value ? 'pk' : 'recipient'))
+function switchPkView(target: 'recipient' | 'pk') {
+  const d = data.value
+  if (!d) return
+  if (target === 'pk') {
+    // 进入 PandaKing 全量编辑：跳到 pandaking 令牌（该令牌返回全量报价）
+    if (!isPkView.value && d.pandakingToken) router.push(`/h5/route/${d.pandakingToken}`)
+  } else {
+    // 返回收件方预览：当前若在 pandaking 令牌上，跳回 agency 令牌
+    if (isPkView.value && d.agencyToken) router.push(`/h5/route/${d.agencyToken}`)
+  }
+}
 const ownerName = computed(() => (data.value && data.value.ownerName) || 'PandaKing')
 
 // —— 行程（按天，可编辑：PandaKing / agency；只读：public）——
@@ -656,6 +672,15 @@ function goHome() {
       </div>
       <div class="role-badge" :class="roleBadgeClass">{{ roleBadgeText }}</div>
 
+      <!-- PandaKing 视角切换条：默认收件方预览，显式切换才进入 PandaKing 全量编辑 -->
+      <div v-if="isPkLoggedIn" class="pk-view-switch">
+        <span class="pk-view-switch-label">PandaKing 控制台 · 视角</span>
+        <div class="pk-view-switch-tabs">
+          <button :class="{ active: pkViewMode === 'recipient' }" @click="switchPkView('recipient')">收件方预览</button>
+          <button :class="{ active: pkViewMode === 'pk' }" @click="switchPkView('pk')">PandaKing 编辑</button>
+        </div>
+      </div>
+
       <!-- ============ PandaKing 视角：全量编辑行程 + 价格 ============ -->
       <template v-if="isPkView">
         <section class="h5-edit-section">
@@ -971,6 +996,13 @@ function goHome() {
 .rb-pk { background: var(--brand-50); color: var(--brand); border: 1px solid var(--brand); }
 .rb-ag { background: #e9f1fe; color: #1e40af; border: 1px solid #c2dafe; }
 .rb-pub { background: #f4f6fa; color: #3c4655; border: 1px solid #e6e8eb; }
+
+/* PandaKing 视角切换条 */
+.pk-view-switch { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 10px 0 4px; padding: 8px 10px; background: var(--brand-50); border: 1px solid var(--brand); border-radius: 10px; }
+.pk-view-switch-label { font-size: 12px; font-weight: 600; color: var(--brand); }
+.pk-view-switch-tabs { display: inline-flex; border: 1px solid var(--brand); border-radius: 999px; overflow: hidden; }
+.pk-view-switch-tabs button { border: 0; background: transparent; color: var(--brand); font-size: 12px; font-weight: 600; padding: 5px 12px; cursor: pointer; }
+.pk-view-switch-tabs button.active { background: var(--brand); color: #fff; }
 
 .h5-price { margin: 12px 0; font-size: 16px; }
 .h5-price b { color: var(--brand); }

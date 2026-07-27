@@ -25,6 +25,9 @@ const loading = ref(true)
 // —— PandaKing 登录检测（一手打开省地接社回传 URL 时显示「回传确认+加价」视图）——
 const auth = useAuthStore()
 const isPk = computed(() => auth.user?.role === 'pandaking')
+// PandaKing 视角预览开关：默认停留在 PandaKing 回传/编辑视图（PandaKing 的本职协作动作），
+// 可一键「预览省地接社视角」查看对方所见，再切回。省地接社(匿名)打开始终是其自身编辑视图。
+const pkPreview = ref(false)
 // PandaKing 视角按询价状态拆分：
 //  - 已回传（submitted）→ 加价 + 生成对旅行社链接
 //  - 未回传（pending/其他）→ 等待回传提示 + 行程只读预览（不显示加价，因为没成本①）
@@ -600,8 +603,15 @@ function goRouteDetail() {
     </div>
 
     <!-- ============ 省地接社主内容区（角色分支） ============ -->
-    <template v-else-if="data && isPk && pkReady">
+    <template v-else-if="data && isPk && !pkPreview && pkReady">
       <!-- ═══════════ PandaKing 视角（已回传）：回传确认 + 加价 + 生成对旅行社链接 ═══════════ -->
+      <div class="pk-view-switch" v-if="isPk">
+        <span class="pk-view-switch-label">PandaKing 控制台 · 视角</span>
+        <div class="pk-view-switch-tabs">
+          <button :class="{ active: !pkPreview }" @click="pkPreview = false">PandaKing 回传/编辑</button>
+          <button :class="{ active: pkPreview }" @click="pkPreview = true">预览省地接社视角</button>
+        </div>
+      </div>
       <div class="prov-content pk-view">
 
         <!-- ── 头部标识 ── -->
@@ -780,7 +790,14 @@ function goRouteDetail() {
     </template>
 
     <!-- ============ PandaKing 视角（未回传）：等待省地接社回传成本① ============ -->
-    <template v-else-if="data && isPk && pkPending">
+    <template v-else-if="data && isPk && !pkPreview && pkPending">
+      <div class="pk-view-switch" v-if="isPk">
+        <span class="pk-view-switch-label">PandaKing 控制台 · 视角</span>
+        <div class="pk-view-switch-tabs">
+          <button :class="{ active: !pkPreview }" @click="pkPreview = false">PandaKing 回传/编辑</button>
+          <button :class="{ active: pkPreview }" @click="pkPreview = true">预览省地接社视角</button>
+        </div>
+      </div>
       <div class="prov-content pk-view pk-pending">
         <!-- ── 头部标识 ── -->
         <div class="prov-header">
@@ -827,7 +844,7 @@ function goRouteDetail() {
     </template>
 
     <!-- ============ PandaKing 视角（已改派）：旧询价被改派给其他省地接社 ============ -->
-    <template v-else-if="data && isPk && pkSuperseded">
+    <template v-else-if="data && isPk && !pkPreview && pkSuperseded">
       <div class="prov-content center">
         <h1 class="prov-title">🔁 该询价已改派</h1>
         <p>这条成本询价已被改派给其他省地接社，本协作链接已失效。</p>
@@ -837,7 +854,14 @@ function goRouteDetail() {
     </template>
 
     <!-- ============ 省地接社主内容区（非 PandaKing：省地接社编辑页）============ -->
-    <template v-else-if="data && !isPk">
+    <template v-else-if="data && (!isPk || pkPreview)">
+      <div class="pk-view-switch" v-if="isPk">
+        <span class="pk-view-switch-label">PandaKing 控制台 · 视角</span>
+        <div class="pk-view-switch-tabs">
+          <button :class="{ active: !pkPreview }" @click="pkPreview = false">PandaKing 回传/编辑</button>
+          <button :class="{ active: pkPreview }" @click="pkPreview = true">预览省地接社视角</button>
+        </div>
+      </div>
       <div class="prov-content" v-if="!provSuperseded">
 
       <!-- ────── 头部信息 ────── -->
@@ -1032,6 +1056,13 @@ function goRouteDetail() {
 .prov-page { font-family: -apple-system, "PingFang SC", sans-serif; padding: 16px; }
 .center { text-align: center; padding: 48px 0; color: var(--muted); }
 .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* PandaKing 视角切换条 */
+.pk-view-switch { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 auto 12px; max-width: 520px; padding: 8px 10px; background: var(--brand-50); border: 1px solid var(--brand); border-radius: 10px; }
+.pk-view-switch-label { font-size: 12px; font-weight: 600; color: var(--brand); }
+.pk-view-switch-tabs { display: inline-flex; border: 1px solid var(--brand); border-radius: 999px; overflow: hidden; }
+.pk-view-switch-tabs button { border: 0; background: transparent; color: var(--brand); font-size: 12px; font-weight: 600; padding: 5px 12px; cursor: pointer; }
+.pk-view-switch-tabs button.active { background: var(--brand); color: #fff; }
 
 /* ── 手机优先（<768px） ── */
 .prov-content { max-width: 520px; margin: 0 auto; }
