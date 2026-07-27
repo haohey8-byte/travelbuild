@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { submitIntake } from '@/api/routes'
 import { copyText } from '@/utils/share'
@@ -12,6 +12,10 @@ const customerName = ref('')
 const customerNameCn = ref('')
 const country = ref('')
 const destination = ref('')
+// 必填项是否全部填写（实时校验，用于按钮禁用 + 红框高亮）
+const canSubmit = computed(
+  () => customerName.value.trim() && country.value.trim() && destination.value.trim(),
+)
 const groupSize = ref<number>(1)
 const travelDate = ref('')
 // —— 行程按天结构化录入（选填，不强制）——
@@ -169,16 +173,16 @@ onMounted(() => {
       <p class="hint">请填写路线基本信息，提交后 PandaKing 将收到并进入规划确认流程。</p>
 
       <label class="h5-label">客户名称（外文）*</label>
-      <input v-model="customerName" class="h5-input" placeholder="如 Smith Family" />
+      <input v-model="customerName" class="h5-input" :class="{ invalid: !customerName.trim() }" placeholder="如 Smith Family" />
 
       <label class="h5-label">客户中文名</label>
       <input v-model="customerNameCn" class="h5-input" placeholder="如 史密斯一家（选填）" />
 
       <label class="h5-label">国家 *</label>
-      <input v-model="country" class="h5-input" placeholder="如 美国" />
+      <input v-model="country" class="h5-input" :class="{ invalid: !country.trim() }" placeholder="如 美国" />
 
       <label class="h5-label">目的地 *</label>
-      <input v-model="destination" class="h5-input" placeholder="如 北京 / 上海" />
+      <input v-model="destination" class="h5-input" :class="{ invalid: !destination.trim() }" placeholder="如 北京 / 上海" />
 
       <label class="h5-label">人数</label>
       <input v-model.number="groupSize" class="h5-input" type="number" min="1" placeholder="如 10" />
@@ -216,7 +220,7 @@ onMounted(() => {
       </div>
 
       <p v-if="sendErr" class="err">{{ sendErr }}</p>
-      <button class="btn btn-primary" :disabled="loading" @click="onSubmit">
+      <button class="btn btn-primary" :disabled="!canSubmit || loading" @click="onSubmit">
         {{ loading ? '提交中…' : '提交路线初稿' }}
       </button>
     </div>
@@ -230,8 +234,9 @@ onMounted(() => {
 .hint { color: var(--ink); font-size: 14px; line-height: 1.6; margin: 0 0 14px; }
 .h5-label { font-size: 13px; color: var(--muted); display: block; margin: 12px 0 6px; }
 .h5-input { width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 15px; box-sizing: border-box; font-family: inherit; }
+.h5-input.invalid { border-color: var(--danger); background: #FCEBEB; }
 .btn-primary { width: 100%; margin-top: 16px; background: var(--brand); color: #fff; border: none; border-radius: 10px; padding: 12px; font-weight: 700; cursor: pointer; }
-.btn-primary:disabled { opacity: 0.6; }
+.btn-primary:disabled { opacity: 1; background: var(--muted); cursor: not-allowed; }
 .err { color: var(--danger); margin-top: 10px; }
 .notify-box { margin-top: 14px; border: 1px solid var(--brand); border-radius: 10px; padding: 10px 12px; background: rgba(59,130,246,.06); }
 .notify-head { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--brand); }
