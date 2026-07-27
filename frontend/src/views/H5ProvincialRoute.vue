@@ -28,8 +28,11 @@ const isPk = computed(() => auth.user?.role === 'pandaking')
 // PandaKing 视角按询价状态拆分：
 //  - 已回传（submitted）→ 加价 + 生成对旅行社链接
 //  - 未回传（pending/其他）→ 等待回传提示 + 行程只读预览（不显示加价，因为没成本①）
-const pkReady = computed(() => isPk.value && data.value?.costInquiry?.status === 'submitted')
-const pkPending = computed(() => isPk.value && data.value?.costInquiry?.status !== 'submitted')
+const ciStatus = computed(() => data.value?.costInquiry?.status)
+const pkReady = computed(() => isPk.value && ciStatus.value === 'submitted')
+const pkPending = computed(() => isPk.value && ciStatus.value === 'pending')
+const pkSuperseded = computed(() => isPk.value && ciStatus.value === 'superseded')
+const provSuperseded = computed(() => !isPk.value && ciStatus.value === 'superseded')
 
 // —— PandaKing 加价 & 生成对旅行社链接 ——
 const pkProfit1Mode = ref<'amount' | 'percent'>('amount')
@@ -823,9 +826,19 @@ function goRouteDetail() {
       </div>
     </template>
 
+    <!-- ============ PandaKing 视角（已改派）：旧询价被改派给其他省地接社 ============ -->
+    <template v-else-if="data && isPk && pkSuperseded">
+      <div class="prov-content center">
+        <h1 class="prov-title">🔁 该询价已改派</h1>
+        <p>这条成本询价已被改派给其他省地接社，本协作链接已失效。</p>
+        <p class="muted">如需继续跟进，请在路线详情重新发起询价获取最新链接。</p>
+        <button class="btn btn-primary" @click="goRouteDetail">去路线详情</button>
+      </div>
+    </template>
+
     <!-- ============ 省地接社主内容区（非 PandaKing：省地接社编辑页）============ -->
     <template v-else-if="data && !isPk">
-      <div class="prov-content">
+      <div class="prov-content" v-if="!provSuperseded">
 
       <!-- ────── 头部信息 ────── -->
       <div class="prov-header">
@@ -998,6 +1011,11 @@ function goRouteDetail() {
 
         </div>
       </div>
+    </div>
+    <div v-else class="prov-content center">
+      <p>该询价已被一手改派给其他省地接社，本链接已失效。</p>
+      <p class="muted">请使用一手重新发送的最新询价链接参与协作。</p>
+      <button class="btn btn-primary" @click="goHome">返回工作台</button>
     </div>
 </template>
 

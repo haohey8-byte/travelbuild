@@ -32,7 +32,7 @@ async function load() {
         <tbody>
           <tr v-for="ci in myInquiries" :key="ci.id">
             <td data-label="路线">{{ ci.routeId.slice(0, 8) }}</td>
-            <td data-label="状态">{{ ci.status === 'submitted' ? '已回传' : '待回传' }}</td>
+            <td data-label="状态">{{ ci.status === 'submitted' ? '已回传' : ci.status === 'superseded' ? '已改派' : '待回传' }}</td>
             <td data-label="报价">{{ ci.cost1 != null ? '¥' + Number(ci.cost1).toLocaleString() : '-' }}</td>
             <td data-label="操作">
               <a v-if="ci.token" :href="costInquiryH5Url(ci.token)" target="_blank" class="link">打开询价 H5 ↗</a>

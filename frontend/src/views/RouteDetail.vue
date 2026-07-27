@@ -1379,8 +1379,8 @@ const collabEvents = computed<CollabEvent[]>(() => {
                       <tr>
                         <td data-label="省地接社">{{ provincialAgencies.find((a) => a.id === ci.provincialId)?.name || ci.provincialId }}</td>
                         <td data-label="状态">
-                          <span class="pill xs" :class="ci.status === 'submitted' ? 'st-confirmed' : 'st-awaiting_quote'">
-                            {{ ci.status === 'submitted' ? '已回传' : '待回传' }}
+                          <span class="pill xs" :class="ci.status === 'submitted' ? 'st-confirmed' : ci.status === 'superseded' ? 'st-superseded' : 'st-awaiting_quote'">
+                            {{ ci.status === 'submitted' ? '已回传' : ci.status === 'superseded' ? '已改派' : '待回传' }}
                           </span>
                         </td>
                         <td data-label="成本①">{{ ci.cost1 != null ? yuan(ci.cost1) : '-' }}</td>
@@ -1493,6 +1493,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
 .st-awaiting_feedback { background: var(--info-50); border-color: #cfe0fc; color: var(--info); }
 .st-awaiting_confirm, .st-booked { background: var(--ok-50); border-color: #bfead8; color: var(--ok); }
 .st-confirmed { background: var(--ok-50); border-color: #bfead8; color: var(--ok); }
+.st-superseded { background: #eceff3; border-color: #cfd6df; color: #6b7785; }
 .st-pending_followup { background: var(--warn-50); border-color: #f6d9a8; color: var(--warn); }
 .st-lost { background: var(--danger-50); border-color: #f6c9c5; color: var(--danger); }
 

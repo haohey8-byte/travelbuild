@@ -460,12 +460,19 @@ export class RoutesService {
       where: {
         routeId,
         role: 'provincial',
-        costInquiry: { provincialId: effectiveProvincialId },
+        costInquiry: { provincialId: effectiveProvincialId, status: { not: 'superseded' } },
       },
     })
     if (existing) {
       return { token: existing.token, link: `/h5/provincial-route/${existing.token}` }
     }
+
+    // 改派：作废其他省地接社尚未回传（pending）的成本询价，避免多家同时回填造成歧义。
+    // 已回传（submitted）的询价保留，不破坏既有真实报价数据。
+    await this.prisma.costInquiry.updateMany({
+      where: { routeId, provincialId: { not: effectiveProvincialId }, status: 'pending' },
+      data: { status: 'superseded' },
+    })
 
     // 不存在则新建（与原 createProvincialShare 逻辑一致）
     const token = genToken()
@@ -759,6 +766,9 @@ export class RoutesService {
     }
     if (share.costInquiry == null) {
       throw new NotFoundException('协作链接未关联成本询价')
+    }
+    if (share.costInquiry.status === 'superseded') {
+      throw new BadRequestException('该询价已被改派，链接已失效，请使用最新询价链接')
     }
 
     const incomingItems = Array.isArray(input.items) ? input.items : []

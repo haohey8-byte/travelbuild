@@ -202,7 +202,7 @@ export interface H5Route {
   // 仅省地接社协作 H5 返回
   costInquiry?: {
     id: string
-    status: 'pending' | 'submitted'
+    status: 'pending' | 'submitted' | 'superseded'
     cost1: number | null
     costItems?: CostInquiryItem[]
     agencyName?: string | null // 被询价省地接社机构名（后端 getH5 解析，用于回传文案个性化）
@@ -237,7 +237,7 @@ export interface CostInquiry {
   routeId: string
   provincialId: string
   token?: string
-  status: 'pending' | 'submitted'
+  status: 'pending' | 'submitted' | 'superseded'
   cost1: number | null
   costItems?: CostInquiryItem[]
   createdAt: string
