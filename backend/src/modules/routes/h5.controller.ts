@@ -1,6 +1,8 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common'
 import { RoutesService } from './routes.service'
 import { CostInquiryService } from './cost-inquiry.service'
+import { CurrentUser } from '../../common/decorators/current-user.decorator'
+import { Role } from './role-visibility'
 
 // 协作 H5（公开，免登录） —— 对应 doc/04-接口契约/H5协作链接.md
 // 客户/对方凭共享令牌只读查看行程与对客报价，并可提交反馈，完成协作闭环。
@@ -11,10 +13,11 @@ export class H5Controller {
     private readonly costInquiry: CostInquiryService,
   ) {}
 
-  // 渲染协作 H5（按 token 解析路线+version，报价仅暴露对客总价）
+  // 渲染协作 H5（按 token 解析路线+version，报价按令牌角色字段级可见；
+  // 已登录 PandaKing 携带 JWT 时放开全量视图，便于在协作链接上直接规划与报价）
   @Get('route/:token')
-  getRoute(@Param('token') token: string) {
-    return this.svc.getH5(token)
+  getRoute(@Param('token') token: string, @CurrentUser() user?: { role: Role }) {
+    return this.svc.getH5(token, user ? { role: user.role } : null)
   }
 
   // 提交协作反馈（客户/对方修改意见）

@@ -8,6 +8,8 @@ import {
   submitH5PandakingEdit,
   submitH5AgencyEdit,
 } from '@/api/h5'
+import { saveVersion } from '@/api/routes'
+import { useAuthStore } from '@/stores/auth'
 import { safeText, safeName } from '@/utils/name'
 import {
   shareH5Url,
@@ -32,6 +34,7 @@ import RoutePdf from '@/components/RoutePdf.vue'
 
 const route = useRoute()
 const router = useRouter()
+const authStore = useAuthStore()
 const token = route.params.token as string
 
 const data = ref<H5Route | null>(null)
@@ -51,7 +54,11 @@ const shareTip = ref('')
 
 // —— 角色分支 ——
 // public=true → 对客只读链接（客户看板）；否则按 role 区分 PandaKing(全编辑) / agency(行程+利润②)
-const isPkView = computed(() => data.value?.role === 'pandaking' && !data.value?.public)
+// PandaKing 视角：已登录 PandaKing（经 JWT）打开任意协作链接时同样放开全量编辑，
+// 即便该令牌角色是 agency/provincial；匿名或非 PandaKing 仍按令牌角色隔离。
+const isPkView = computed(
+  () => authStore.currentRole === 'pandaking' || (data.value?.role === 'pandaking' && !data.value?.public),
+)
 const isAgencyView = computed(() => data.value?.role === 'agency' && !data.value?.public)
 const isPublicView = computed(() => !!data.value?.public)
 const canEditItinerary = computed(() => isPkView.value || isAgencyView.value)
@@ -218,11 +225,8 @@ async function copyPeerLink() {
   const caption = shareH5Caption(data.value, 'agency')
   let link = ''
   if (isPkView.value) {
-    link = data.value.agencyToken ? agencyH5Url(data.value.agencyToken) : ''
-    if (!link) {
-      pkPeerTip.value = '暂无可发送的对旅行社链接'
-      return
-    }
+    // 优先用对端 agency 令牌；若当前即为 agency 协作链接（PandaKing 经此链接规划），则当前 token 即旅行社链接
+    link = data.value.agencyToken ? agencyH5Url(data.value.agencyToken) : shareH5Url(token)
     const ok = await copyText(`${caption}\n\n👉 查看并编辑行程报价（对旅行社）：${link}`)
     pkPeerTip.value = ok ? '对旅行社链接已复制，去微信粘贴 ✅' : '复制失败，请长按上方文案手动复制'
   } else if (isAgencyView.value) {
@@ -241,6 +245,22 @@ async function copyShareLink() {
   const caption = shareH5Caption(data.value, 'agency')
   const ok = await copyText(`${caption}\n${shareH5Url(token)}`)
   shareTip.value = ok ? '协作链接已复制，去微信粘贴到群里即可 ✅' : '复制失败，请长按上方链接手动复制'
+}
+
+// PandaKing 价格编辑区回填（成本①+利润① 来自 items，利润② 来自 totals）
+function populatePkQuote(d: H5Route) {
+  if (d.role === 'pandaking' && !d.public && d.quote?.items) {
+    quoteItems.value = (d.quote.items as any[]).map((it) => ({
+      name: it.name ?? '',
+      type: it.type || 'other',
+      cost1: Number(it.cost1) || 0,
+      profit1Mode: (it.profit1Mode as 'amount' | 'percent') ?? 'amount',
+      profit1: Number(it.profit1) || 0,
+    }))
+    const tot = d.quote.totals
+    pkProfit2Mode.value = (tot?.profit2Mode as 'amount' | 'percent') ?? 'amount'
+    pkProfit2.value = Number(tot?.profit2) || 0
+  }
 }
 
 // PandaKing 全量保存：行程 + 价格 → 生成新版本 → 同步对端令牌
@@ -263,6 +283,18 @@ async function onPkSave() {
         })),
         totals: { profit2Mode: pkProfit2Mode.value, profit2: Number(pkProfit2.value) || 0 },
       },
+    }
+    // 已登录 PandaKing 打开任意协作链接（含 agency/provincial 令牌）时，走 JWT 控制台通道保存：
+    // 全量写入成本①+利润①+利润②，并自动把所有协作令牌同步到新版本（agency 重开链接即见最新规划）。
+    if (authStore.currentRole === 'pandaking' && data.value.routeId) {
+      await saveVersion(data.value.routeId, { ...payload, draft: false })
+      const d = await fetchH5Route(token)
+      data.value = d
+      parseItinerary(d.itinerary)
+      populatePkQuote(d)
+      const gp = d.quote?.totals?.guestPrice ?? pkGuestPrice.value
+      pkSaveOk.value = `已保存行程与报价（对客总价 ¥${Number(gp).toLocaleString()}）✅ 可把下方链接发给旅行社继续协作`
+      return
     }
     const res = await submitH5PandakingEdit(token, payload)
     // 用后端权威数据回显
@@ -512,18 +544,7 @@ onMounted(async () => {
     data.value = d
     parseItinerary(d.itinerary)
     // PandaKing：回填价格编辑区（成本①+利润① 来自 items，利润② 来自 totals）
-    if (d.role === 'pandaking' && !d.public && d.quote?.items) {
-      quoteItems.value = (d.quote.items as any[]).map((it) => ({
-        name: it.name ?? '',
-        type: it.type || 'other',
-        cost1: Number(it.cost1) || 0,
-        profit1Mode: (it.profit1Mode as 'amount' | 'percent') ?? 'amount',
-        profit1: Number(it.profit1) || 0,
-      }))
-      const tot = d.quote.totals
-      pkProfit2Mode.value = (tot?.profit2Mode as 'amount' | 'percent') ?? 'amount'
-      pkProfit2.value = Number(tot?.profit2) || 0
-    }
+    populatePkQuote(d)
     // 旅行社：回填利润②
     if (d.role === 'agency' && !d.public && d.quote?.totals) {
       const tot = d.quote.totals

@@ -254,7 +254,7 @@ onMounted(() => {
 .day-badge-mini { font-weight: 700; color: var(--brand); font-size: 14px; }
 .inline-mini { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
 .inline-mini .h5-input { flex: 1; }
-.mini-del { border: none; background: rgba(0,0,0,.06); color: var(--danger); border-radius: 6px; width: 30px; height: 38px; font-size: 16px; cursor: pointer; flex: none; }
+.mini-del { border: none; background: rgba(0,0,0,.06); color: var(--muted); border-radius: 6px; width: 30px; height: 38px; font-size: 16px; cursor: pointer; flex: none; }
 .mini-add-line { margin-top: 6px; border: none; background: transparent; color: var(--brand); font-size: 13px; cursor: pointer; padding: 4px 0; }
 .day-add-btn { margin-top: 10px; width: 100%; border: 1px dashed var(--brand); color: var(--brand); border-radius: 8px; background: transparent; padding: 10px; cursor: pointer; font-size: 14px; }
 </style>

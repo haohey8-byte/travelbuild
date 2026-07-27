@@ -727,10 +727,10 @@ export class RoutesService {
       where: { token: body.token },
       data: { submitCount: { increment: 1 }, lastSubmittedAt: new Date() },
     })
-    // 提交成功即为境外社生成「路线协作链接」（agency 角色，非公开），
-    // 供其随时回访查看 PandaKing 的规划/反馈，形成多轮往返闭环。
-    // 该令牌与 ensureAgencyShare 复用同一查询条件（role=agency/public=false/costInquiryId=null），
-    // PandaKing 后续「回传反馈」将继承此令牌而非新建。
+    // 提交成功即为境外社生成「路线协作链接」（agency 角色，非公开，可编辑 H5 /h5/route/），
+    // 供其随时回访查看 PandaKing 的规划/反馈、并补充自身利润②，形成多轮往返闭环。
+    // 复用 ensureAgencyShare：幂等（同一 route 复用已存在令牌，不重复创建），
+    // 且返回可编辑 H5 链接而非只读 SSR 页 /share/route/；PandaKing 后续「回传反馈」继承此令牌。
     let latest = await this.latestVersion(route.id)
     if (!latest) {
       // 提交时未带任何行程/报价（initialDraft 为空）则补一个空 v1 草稿版本，保证协作链接有可挂载的版本
@@ -739,7 +739,7 @@ export class RoutesService {
       })
       latest = v
     }
-    const agencyShare = await this.createShare(route.id, 'agency', latest.id, false)
+    const agencyShare = await this.ensureAgencyShare(route.id)
     return { routeId: route.id, success: true, agencyLink: agencyShare.link }
   }
 
@@ -1061,7 +1061,7 @@ export class RoutesService {
 
   // 协作 H5 视图（按 token 解析，报价仅暴露对客总价）
   // 对于省地接社协作 share，额外返回 costInquiry 状态/成本①，便于统一协作页编辑。
-  async getH5(token: string) {
+  async getH5(token: string, principal?: { role: Role } | null) {
     const share = await this.prisma.routeShare.findUnique({
       where: { token },
       include: { costInquiry: true },
@@ -1070,6 +1070,9 @@ export class RoutesService {
     if (share.expiresAt && share.expiresAt.getTime() < Date.now()) {
       throw new NotFoundException('协作链接已过期')
     }
+    // 已登录 PandaKing 经任意协作链接查看时放开全量报价（成本①+利润①+利润②），
+    // 即便该令牌是 agency/provincial 角色；匿名或非 PandaKing 仍严格按令牌角色做字段级隔离。
+    const effRole: Role = principal?.role === 'pandaking' ? 'pandaking' : share.role
     const route = await this.prisma.route
       .findUniqueOrThrow({ where: { id: share.routeId } })
       .catch(() => {
@@ -1094,7 +1097,7 @@ export class RoutesService {
     // 其余按 share.role 做字段级可见性（省地接社仅成本①、旅行社见报价A、一手全见）。
     const visible = (share.public
       ? maskQuotePublic(version?.quote ?? null)
-      : hideCostsForRole(version?.quote ?? null, share.role)) as {
+      : hideCostsForRole(version?.quote ?? null, effRole)) as {
       items?: any[]
       totals?: any
     }
@@ -1109,7 +1112,7 @@ export class RoutesService {
       travelDate: route.travelDate ? route.travelDate.toISOString() : null,
       version: version?.version ?? null,
       statusKey: route.statusKey,
-      role: share.role,
+      role: effRole,
       // 无版本时给空行程，省地接社可新建第一天（provincialEdit 会自动落 v1）
       itinerary: version?.itinerary ?? { days: [] },
       // 按角色字段级可见性返回报价：省地接社仅见成本①、旅行社见报价A、一手全见
