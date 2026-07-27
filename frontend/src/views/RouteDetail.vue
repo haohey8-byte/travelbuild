@@ -389,9 +389,12 @@ const linkedProvName = computed(() => {
   if (!pid) return ''
   return provincialAgencies.value.find((a) => a.id === pid)?.name || ''
 })
-const inquireTargetLabel = computed(() =>
-  linkedProvName.value ? `向"${linkedProvName.value}"咨询` : '向省地接社咨询',
-)
+const inquireTargetLabel = computed(() => {
+  // 实时跟随弹窗内下拉选择（支持改派），未选时回退到已关联机构名
+  const selId = collabProvId.value.trim() || data.value?.provincialId
+  const name = selId ? provincialAgencies.value.find((a) => a.id === selId)?.name || '' : ''
+  return name ? `向"${name}"咨询` : '向省地接社咨询'
+})
 async function loadInquiries() {
   if (role.value !== 'pandaking') return
   loadingInquiries.value = true
@@ -421,40 +424,39 @@ async function onApplyInquiry(inqId: string) {
 
 // 「发起询价」弹窗副标题：解释这个动作是什么
 const inquireSubtitle = computed(() =>
-  '向省地接社发起本次行程的成本询价：自动保存当前行程与报价，生成统一协作链接（含主题+URL）。请在弹窗内点「复制（含链接）」按钮，去微信粘贴发给省地接社。',
+  '向省地接社发起本次行程的成本询价：自动保存当前行程与报价，生成统一协作链接（含主题+URL）。可在此确认当前省地接社或重新选择改派；生成后请在弹窗内点「复制（含链接）」按钮，去微信粘贴发给省地接社。',
 )
 // 「保存并报价」弹窗副标题：解释这个动作是什么
 const quoteSubtitle = computed(() =>
   '向境外旅行社发报价：自动保存当前报价（含省地接社成本①与您的利润①），生成对旅行社的 H5 链接（含报价A）。请在弹窗内点「复制（含链接）」按钮，去微信粘贴发给境外旅行社。',
 )
 
-// 一手「🤝 发起询价」—— 已关联省地接社则直接生成（与「保存并报价」体验一致，自动保存+弹窗预览+已复制）；未关联才弹窗选机构
+// 一手「🤝 发起询价」—— 无论是否已关联省地接社都打开弹窗：
+// 已关联时预选当前机构并支持「更换机构」改派；未关联时先保存草稿再让用户选机构
 async function openInquireDialog() {
-  const linkedProv = data.value?.provincialId
-  if (linkedProv) {
-    collabProvId.value = linkedProv
-    await doInquire()
-    return
-  }
-  // 未关联省地接社 → 先自动保存当前行程与报价（如新加的「9座车」成本①），再打开弹窗让用户选机构
-  savingNotify.value = true
-  actionErr.value = ''
-  try {
-    await saveVersion(id, {
-      itinerary: itinerary.value,
-      quote: buildQuote(),
-      draft: false,
-      notify: false,
-      baseVersionId: baseVersionId.value,
-    })
-    await load()
-  } catch (e: any) {
-    if (detectStale(e)) { savingNotify.value = false; return }
-    savingNotify.value = false
-    actionErr.value = e?.response?.data?.message || '保存行程失败'
-    return
-  } finally {
-    savingNotify.value = false
+  // 预选当前已关联机构（若有），弹窗内可重新选择改派
+  collabProvId.value = data.value?.provincialId || ''
+  // 未关联省地接社 → 先自动保存当前行程与报价（如新加的「9座车」成本①），确保弹窗里选机构前草稿已落库
+  if (!collabProvId.value.trim()) {
+    savingNotify.value = true
+    actionErr.value = ''
+    try {
+      await saveVersion(id, {
+        itinerary: itinerary.value,
+        quote: buildQuote(),
+        draft: false,
+        notify: false,
+        baseVersionId: baseVersionId.value,
+      })
+      await load()
+    } catch (e: any) {
+      if (detectStale(e)) { savingNotify.value = false; return }
+      savingNotify.value = false
+      actionErr.value = e?.response?.data?.message || '保存行程失败'
+      return
+    } finally {
+      savingNotify.value = false
+    }
   }
   dialogText.value = ''
   dialogSubtitle.value = inquireSubtitle.value
@@ -1428,7 +1430,11 @@ const collabEvents = computed<CollabEvent[]>(() => {
             暂无省地接社机构，请先在「账号」页新建一个「省地接社」机构。
           </div>
           <div v-else class="nd-agency-pick">
-            <label>选择省地接社机构：</label>
+            <p v-if="linkedProvName" class="nd-cur">
+              当前已关联省地接社：<b>{{ linkedProvName }}</b>
+              <span class="nd-cur-tip">（如需改派，请在下方重新选择）</span>
+            </p>
+            <label>选择 / 更换省地接社机构：</label>
             <select v-model="collabProvId" :disabled="loadingProvincialAgencies">
               <option value="" disabled>{{ loadingProvincialAgencies ? '加载中…' : '请选择' }}</option>
               <option v-for="a in provincialAgencies" :key="a.id" :value="a.id">{{ a.name }}（{{ a.id }}）</option>
@@ -1575,6 +1581,9 @@ const collabEvents = computed<CollabEvent[]>(() => {
 .pk-actions { display: flex; flex-direction: column; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--k-line); }
 .pk-actions .d-btn { width: 100%; text-align: center; }
 .nd-agency-pick { margin: 8px 0 4px; }
+.nd-cur { margin: 0 0 10px; font-size: 13px; color: var(--k-ink); line-height: 1.5; }
+.nd-cur b { color: var(--role-provincial-600, #1f5fbf); }
+.nd-cur-tip { color: var(--k-muted); font-size: 12px; }
 .nd-agency-pick label { display: block; font-size: 12px; color: var(--k-muted); margin-bottom: 6px; }
 .nd-agency-pick select { width: 100%; padding: 10px 12px; border: 1px solid var(--k-line); border-radius: 10px; font-size: 14px; font-family: inherit; background: #fff; }
 .nd-empty { padding: 12px 14px; border: 1px dashed var(--k-line); border-radius: 8px; color: var(--k-muted); font-size: 13px; }
