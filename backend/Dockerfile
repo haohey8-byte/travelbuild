@@ -46,6 +46,8 @@ COPY --from=build /app/backend/package.json ./backend/package.json
 COPY --from=build /app/frontend/dist ./spa
 EXPOSE 3000
 ENV PORT=3000
-# 容器启动：先迁移（幂等），再幂等种子（确保初始管理员账号存在且可登录，
-# 仅当 seed-pk 缺密码时补种，已改密的不覆盖），最后启动后端。
-CMD ["sh", "-c", "backend/node_modules/.bin/prisma migrate deploy --schema backend/prisma/schema.prisma && backend/node_modules/.bin/tsx backend/prisma/seed.ts && node backend/dist/main.js"]
+# 容器启动：先迁移（幂等），再跑 essential 种子（仅管理员 seed-pk，首次创建 / 改密兜底，不重复演示数据）；
+# 演示种子（机构 / 路线 / 案例 / KB / 邀请等）受 SEED_DEMO=1 门控，默认空跑，
+# 避免用户从 UI 删除演示数据后被容器自动重建（2026-07-27 改造）。
+# 若需演示数据：本机 `pnpm --filter backend seed:demo`，或在云托管临时设 SEED_DEMO=1 重部署一次。
+CMD ["sh", "-c", "backend/node_modules/.bin/prisma migrate deploy --schema backend/prisma/schema.prisma && backend/node_modules/.bin/tsx backend/prisma/seed.ts && if [ \"$SEED_DEMO\" = \"1\" ]; then echo '[startup] SEED_DEMO=1 -> running demo seed'; backend/node_modules/.bin/tsx backend/prisma/seed-demo.ts; fi && node backend/dist/main.js"]
