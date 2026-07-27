@@ -421,11 +421,11 @@ async function onApplyInquiry(inqId: string) {
 
 // 「发起询价」弹窗副标题：解释这个动作是什么
 const inquireSubtitle = computed(() =>
-  '向省地接社发起本次行程的成本询价：自动保存当前行程与报价，生成统一协作链接（含主题+URL），结构化文案已自动复制，去微信粘贴发给省地接社即可。',
+  '向省地接社发起本次行程的成本询价：自动保存当前行程与报价，生成统一协作链接（含主题+URL）。请在弹窗内点「复制（含链接）」按钮，去微信粘贴发给省地接社。',
 )
 // 「保存并报价」弹窗副标题：解释这个动作是什么
 const quoteSubtitle = computed(() =>
-  '向境外旅行社发报价：自动保存当前报价（含省地接社成本①与您的利润①），生成对旅行社的 H5 链接（含报价A），结构化文案已自动复制，去微信粘贴发给境外旅行社。',
+  '向境外旅行社发报价：自动保存当前报价（含省地接社成本①与您的利润①），生成对旅行社的 H5 链接（含报价A）。请在弹窗内点「复制（含链接）」按钮，去微信粘贴发给境外旅行社。',
 )
 
 // 一手「🤝 发起询价」—— 已关联省地接社则直接生成（与「保存并报价」体验一致，自动保存+弹窗预览+已复制）；未关联才弹窗选机构
@@ -508,9 +508,8 @@ async function openQuoteDialog() {
     dialogText.value = notifyBody
     dialogSubtitle.value = quoteSubtitle.value
 
-    // 4) 自动复制到剪贴板
-    const ok = await copyText(notifyBody)
-    actionOk.value = ok ? '报价链接已生成并复制，去微信粘贴发给境外旅行社 ✅' : '已生成，请手动复制下方文案'
+    // 4) 复制交由 NotifyDialog：打开弹窗时尽力自动复制 + 提供「复制（含链接）」按钮兜底
+    actionOk.value = '报价链接已生成，请在弹窗内点「复制（含链接）」按钮，去微信粘贴发给境外旅行社'
 
     // 5) 弹 NotifyDialog
     quoteDialog.value = true
@@ -577,9 +576,8 @@ async function doInquire() {
       .join('\n\n')
     dialogText.value = notifyBody
 
-    // 4) 自动复制（必须与 dialogText 一致，否则预览有摘要而粘贴到微信的文案缺摘要）
-    const ok = await copyText(notifyBody)
-    actionOk.value = ok ? '询价链接已生成并复制，去微信粘贴发给省地接社 ✅' : '已生成，请手动复制下方文案'
+    // 4) 复制交由 NotifyDialog：打开弹窗时尽力自动复制 + 提供「复制（含链接）」按钮兜底
+    actionOk.value = '询价链接已生成，请在弹窗内点「复制（含链接）」按钮，去微信粘贴发给省地接社'
 
     // 5) 弹出文案预览弹窗（已关联省地接社时弹窗尚未打开需在此打开；未关联场景弹窗已开）
     inquireDialog.value = true

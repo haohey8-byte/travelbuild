@@ -2,10 +2,9 @@
 // 协作通知弹窗（统一「发起询价」与「保存并报价」等动作的反馈）
 // - 标题：客户+行程+时间核心信息
 // - 主体：结构化文案（含 URL）
-// - 行为：弹出即自动复制 + 显示「已复制」状态
-// - 多轮：每次打开都重新生成（可重复触发）
-// - 支持「选择→生成」两步式：slot 区域可放选择控件 + 触发按钮，
-//   业务方在生成后通过 watch(text) 触发自动复制。
+// - 行为：弹出时尽力自动复制（桌面安全上下文生效）；并提供「复制（含链接）」按钮，
+//        由用户点击触发（新鲜手势，微信/iOS webview 也可靠），作为主复制入口。
+// - 多轮：每次打开都重新生成（可重复触发）。
 import { computed, onMounted, ref, watch } from 'vue'
 import { copyText } from '@/utils/share'
 
@@ -27,7 +26,9 @@ const emit = defineEmits<{
 }>()
 
 const copied = ref(false)
-const copiedHint = computed(() => (copied.value ? '✅ 已复制，去微信粘贴' : '已自动复制，去微信粘贴'))
+const copyHint = computed(() =>
+  copied.value ? '✅ 已复制到剪贴板，去微信粘贴' : '若未自动复制，点「复制（含链接）」按钮手动复制',
+)
 
 async function doCopy() {
   if (!props.text) return
@@ -73,12 +74,14 @@ onMounted(() => {
           <slot v-if="showSlot !== false" />
           <div v-if="text" class="nd-text-box">
             <div class="nd-text-head">
-              <span class="nd-text-lab">📋 通知文案预览（已自动复制，去微信粘贴）</span>
+              <span class="nd-text-lab">📋 通知文案预览（点「复制」按钮，去微信粘贴）</span>
               <span v-if="copied" class="nd-copied">✅ 已复制</span>
             </div>
             <pre class="nd-text">{{ text }}</pre>
+            <p v-if="!copied" class="nd-hint">{{ copyHint }}</p>
           </div>
           <div class="nd-actions">
+            <button v-if="text" class="btn btn-primary" @click="doCopy">{{ copied ? '✅ 已复制（点可再复制）' : '📋 复制（含链接）' }}</button>
             <button v-if="!text && generateLabel" class="btn btn-primary" @click="emit('generate')">{{ generateLabel }}</button>
             <button class="btn btn-ghost" @click="close">关闭</button>
           </div>
@@ -159,6 +162,7 @@ onMounted(() => {
 }
 .nd-text-lab { font-weight: 600; }
 .nd-copied { margin-left: auto; color: var(--ok, #10b981); font-weight: 700; }
+.nd-hint { margin: 8px 0 0; font-size: 12px; color: var(--muted, #76819a); line-height: 1.5; }
 .nd-text {
   margin: 0;
   white-space: pre-wrap;
