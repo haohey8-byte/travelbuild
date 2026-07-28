@@ -72,7 +72,7 @@ function scrollTop() {
     <!-- 杂志栏目条 -->
     <div class="masthead">
       <div class="home-inner masthead-inner">
-        <span class="masthead-meta">VOL.01 · 川渝疆考察笔记 · PANDAKING9</span>
+        <span class="masthead-meta">VOL.01 · 中国旅行笔记 · PANDAKING9</span>
         <span class="masthead-meta dim">ISSUE 2026</span>
       </div>
     </div>
@@ -80,12 +80,12 @@ function scrollTop() {
     <!-- Hero -->
     <section class="hero">
       <div class="home-inner hero-inner">
-        <span class="eyebrow">VOL.01 · 川渝疆考察笔记</span>
+        <span class="eyebrow">VOL.01 · 中国旅行笔记</span>
         <h1 class="hero-title">
           把每一次出发，<br />
           先在纸上走一遍。
         </h1>
-        <p class="hero-sub">在川渝疆的山与湖之间，画出只属于这一程的路线。</p>
+        <p class="hero-sub">在中国的山与湖之间，画出只属于这一程的路线。</p>
         <a class="btn btn-primary btn-lg hero-cta" :href="enterHref">{{ enterLabel }} →</a>
       </div>
     </section>
@@ -115,8 +115,8 @@ function scrollTop() {
     <!-- 页脚 -->
     <footer class="home-footer">
       <div class="home-inner footer-inner">
-        <p class="footer-line">和 PandaKing 我们一起共读、共写。</p>
-        <p class="footer-brand">PandaKing9 · 定制旅行协作平台</p>
+        <p class="footer-line">PandaKing9和你一起探索</p>
+        <p class="footer-brand">PandaKing9 · 定制旅行协作</p>
         <p class="icp">
           <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener">粤ICP备2026092981号</a>
         </p>

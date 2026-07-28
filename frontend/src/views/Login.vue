@@ -93,7 +93,7 @@ onMounted(() => {
   <div class="login-page">
     <div class="login-card card">
       <div class="brand">PandaKing9</div>
-      <div class="brand-sub">定制旅行协作平台</div>
+      <div class="brand-sub">定制旅行协作</div>
       <h2 class="title">管理员登录</h2>
       <p class="muted">使用手机号 + 密码登录控制台</p>
 

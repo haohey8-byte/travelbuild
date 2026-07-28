@@ -47,7 +47,7 @@ const meta = computed(() => [
 <template>
   <div class="pdf-doc">
     <header class="pdf-head">
-      <div class="pdf-brand">PandaKing9 · 定制旅行协作平台</div>
+      <div class="pdf-brand">PandaKing9 · 定制旅行协作</div>
       <h1 class="pdf-title">{{ model.title }}</h1>
       <div class="pdf-lang">{{ model.langName }}</div>
     </header>

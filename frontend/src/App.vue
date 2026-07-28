@@ -50,7 +50,7 @@ function onNav(to: string) {
   <div v-else-if="needsLogin" class="login-gate">
     <div class="login-card card">
       <div class="brand">PandaKing9</div>
-      <div class="brand-sub">定制旅行协作平台</div>
+      <div class="brand-sub">定制旅行协作</div>
       <p class="muted">请先登录后访问控制台</p>
       <button class="btn btn-primary" @click="onNav('/login')">去登录</button>
     </div>
