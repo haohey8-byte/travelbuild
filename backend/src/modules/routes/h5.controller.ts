@@ -89,4 +89,15 @@ export class H5Controller {
   ) {
     return this.svc.agencyEdit(token, body)
   }
+
+  // 一手 PandaKing 协作 H5：凭 pandaking 令牌直接分配/改派省地接社（免登录，与 pandaking-edit 同鉴权范式）。
+  // 这是「移动端枢纽也要能直接分配省地接社」的必要条件：token 模式无控制台 JWT，
+  // 不能走 @CurrentUser 鉴权的 /routes/:id/assign-provincial，须由本端点认 pandakingToken。
+  @Post('route/:token/pandaking-assign-provincial')
+  pandakingAssignProvincial(
+    @Param('token') token: string,
+    @Body() body: { provincialId: string },
+  ) {
+    return this.svc.pandakingAssignProvincial(token, body?.provincialId)
+  }
 }

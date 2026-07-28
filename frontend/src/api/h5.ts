@@ -50,9 +50,21 @@ export async function submitH5PandakingEdit(
   version: { version: string; itinerary?: unknown; quote?: unknown } | null
   quote: { items?: any[]; totals?: any } | null
   agencyToken?: string | null
+  provincialToken?: string | null
   guestPrice?: number | null
 }> {
   const { data } = await client.post(`/h5/route/${token}/pandaking-edit`, payload)
+  return data
+}
+
+// 一手 PandaKing 协作 H5：凭 pandaking 令牌直接分配/改派省地接社（免登录，对应后端
+// POST /h5/route/:token/pandaking-assign-provincial）。移动端枢纽也要能直接分配而不仅回控制台。
+// 返回刷新后的完整 H5 视图（与 getH5 一致），便于前端直接刷新枢纽状态条、机构下拉与对端令牌。
+export async function assignProvincialByToken(
+  token: string,
+  provincialId: string,
+): Promise<H5Route> {
+  const { data } = await client.post(`/h5/route/${token}/pandaking-assign-provincial`, { provincialId })
   return data
 }
 

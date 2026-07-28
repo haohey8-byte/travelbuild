@@ -176,6 +176,11 @@ export interface H5Route {
   // 双向协作回路：对端可编辑令牌（PandaKing 视图返回 agencyToken，旅行社/公开视图返回 pandakingToken）
   pandakingToken?: string | null
   agencyToken?: string | null
+  // token 模式（一手枢纽 /h5/pk-route/:token）分配/改派省地接社与生成省地接协作链接所需字段
+  // （仅 pandaking 非公开令牌返回，避免向省地接/旅行社/对客链接泄漏内部机构信息）
+  provincialId?: string | null
+  provincialAgencies?: { id: string; name: string }[]
+  provincialToken?: string | null
   // 路线归属账号名（创建者，即 PandaKing 平台方），用于 H5 内替代「一手」字眼显示具体注册名
   ownerName?: string | null
   // 净化报价：仅含对客报价（guestPrice），不含成本①/②/加价（公开 H5 不泄漏内部成本）

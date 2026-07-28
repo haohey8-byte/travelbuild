@@ -1022,8 +1022,31 @@ export class RoutesService {
       version: this.serializeVersion(version, 'pandaking'),
       quote: visible,
       agencyToken: await this.resolvePeerToken(share.routeId, 'agency', version.id),
+      // 省地接协作令牌：token 模式「保存并回传省地接社」生成链接用（与 getH5 pandaking 分支一致）
+      provincialToken: await this.resolvePeerToken(share.routeId, 'provincial', version.id),
       guestPrice: visible?.totals?.guestPrice ?? null,
     }
+  }
+
+  // 一手凭 pandaking 协作令牌在 H5 内直接分配/改派省地接社（免登录，与 pandakingEdit 同鉴权范式）。
+  // 仅校验 share.role==='pandaking' && !share.public（令牌即授权，不依赖控制台 JWT）。
+  // 写入 route.provincialId（与控制台 assignProvincial 同一字段，无新建数据模型），
+  // 返回刷新后的 getH5(token) 视图，便于前端直接刷新枢钮状态条、机构下拉与对端令牌。
+  async pandakingAssignProvincial(token: string, provincialId: string) {
+    const share = await this.prisma.routeShare.findUnique({ where: { token } })
+    if (!share || share.role !== 'pandaking' || share.public) {
+      throw new NotFoundException('协作链接无效')
+    }
+    if (!provincialId?.trim()) throw new BadRequestException('必须指定省地接社机构')
+    const target = await this.prisma.agency.findUnique({ where: { id: provincialId.trim() } })
+    if (!target || target.role !== 'provincial') {
+      throw new BadRequestException('省地接社机构不存在或角色不是省地接社')
+    }
+    await this.prisma.route.update({
+      where: { id: share.routeId },
+      data: { provincialId: provincialId.trim() },
+    })
+    return this.getH5(token)
   }
 
   // 境外旅行社凭协作令牌在 H5 内编辑行程 + 利润②（看不到成本①），提交后生成新版本快照。
@@ -1192,6 +1215,18 @@ export class RoutesService {
     // 完整报价仅经 pandaking 令牌返回；省地接社经自身 provincial 令牌仍只见成本①（权限隔离不变）。
     if (share.role === 'provincial') {
       result.pandakingToken = await this.resolvePeerToken(route.id, 'pandaking', version?.id)
+    }
+    // 一手枢纽视图（token 模式）：补充「分配/改派省地接社」所需的机构列表与当前已分配机构 id，
+    // 以及省地接协作令牌（token 模式「保存并回传省地接社」生成链接用）。
+    // 仅对 pandaking 非公开令牌返回，避免向省地接/旅行社/对客链接泄漏内部机构信息。
+    if (share.role === 'pandaking' && !share.public) {
+      result.provincialId = route.provincialId
+      result.provincialAgencies = await this.prisma.agency.findMany({
+        where: { role: 'provincial', disabled: false },
+        select: { id: true, name: true },
+        orderBy: { createdAt: 'asc' },
+      })
+      result.provincialToken = await this.resolvePeerToken(route.id, 'provincial', version?.id)
     }
     return result
   }

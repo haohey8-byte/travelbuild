@@ -22,6 +22,9 @@ const router = createRouter({
     { path: '/route-archives/:id', name: 'route-archive-detail', component: () => import('@/views/RouteArchiveDetail.vue'), props: true },
     // 协作 H5（公开，免登录，隐藏主导航）
     { path: '/h5/route/:token', name: 'h5-route', component: () => import('@/views/H5Route.vue'), meta: { h5: true } },
+    // 一手 PandaKing 移动枢纽：复用控制台 RouteDetail 组件（tokenMode 认 pandakingToken，免登录）。
+    // 用于接收省地接/境外社回传通知后，PandaKing 在微信里直接打开该订单的可编辑枢纽页。
+    { path: '/h5/pk-route/:token', name: 'h5-pk-route', component: () => import('@/views/RouteDetail.vue'), meta: { h5: true } },
     // 邀请接受 H5（一手/管理员复制链接发到微信群，受邀者打开后接受）
     { path: '/h5/invite/:token', name: 'h5-invite', component: () => import('@/views/H5Invite.vue'), meta: { h5: true } },
     // 成本询价 H5 已退役：统一由「省地接社协作 H5」(H5ProvincialRoute) 承接。

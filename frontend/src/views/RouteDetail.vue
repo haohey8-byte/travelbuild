@@ -16,6 +16,7 @@ import {
   ensureAgencyShare,
   ensurePandakingShare,
 } from '@/api/routes'
+import { fetchH5Route, fetchH5Feedback, assignProvincialByToken, submitH5Feedback, submitH5PandakingEdit } from '@/api/h5'
 import { fetchAgencies } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
 import { safeName, safeText } from '@/utils/name'
@@ -32,7 +33,7 @@ import {
   formatQuoteChanges,
 } from '@/utils/share'
 import type { ProvincialChanges } from '@/utils/share'
-import type { Route, RouteVersion, RouteStatusKey, QuoteLevel, RouteFeedbackItem, Agency, CostInquiry } from '@/types'
+import type { Route, RouteVersion, RouteStatusKey, QuoteLevel, RouteFeedbackItem, Agency, CostInquiry, Role, Quote, H5Route } from '@/types'
 import { buildPdfModel, type PdfModel } from '@/utils/pdf-model'
 import { calcDerived, calcGuestPrice } from '@/utils/quote'
 import { genUid } from '@/utils/uid'
@@ -47,8 +48,14 @@ const router = useRouter()
 const auth = useAuthStore()
 const { user } = storeToRefs(auth)
 const id = route.params.id as string
+// 移动枢纽（token 模式）：通过 pandakingToken 深链免登录驱动（路由 /h5/pk-route/:token）。
+// 该模式下角色恒为 'pandaking'，所有读写走 token 端点而非 JWT 控制台接口。
+const token = route.params.token as string | undefined
+const tokenMode = computed(() => !!token)
 
 const data = ref<Route | null>(null)
+// token 模式下保存后端返回的 H5 视图（含对端令牌与省地接社机构列表）
+const h5 = ref<H5Route | null>(null)
 const loading = ref(true)
 const err = ref('')
 const tab = ref<'edit' | 'info' | 'flow'>('edit')
@@ -217,8 +224,8 @@ const baselineProfit2 = ref(0)
 const baselineItinerary = ref<{ days: { day: number; city: string }[] }>({ days: [] })
 // PandaKing 视角「补充说明（可选）」——随「保存并报价 / 发起询价」一并记录为修改说明
 const pkSuggestion = ref('')
-// 当前角色
-const role = computed(() => auth.currentRole)
+// 当前角色：token 模式（移动枢纽）始终以一手 PandaKing 身份操作，无需登录
+const role = computed(() => (tokenMode.value ? 'pandaking' : auth.currentRole))
 // 乐观锁基准：加载时所基于的版本 ID，保存时回传后端做并发校验（防止控制台旧数据覆盖 H5 新修改）
 const baseVersionId = ref<string | null>(null)
 // 并发冲突提示条（后端返回 409 时置真，展示「立即刷新」按钮）
@@ -458,11 +465,28 @@ async function confirmAssign() {
   assigning.value = true
   assignErr.value = ''
   try {
-    await assignProvincial(id, assignProvId.value.trim())
-    assignDialog.value = false
-    await load() // 刷新 data.provincialId + 三态状态条
-    const name = provincialAgencies.value.find((a) => a.id === assignProvId.value)?.name || '省地接社'
-    actionOk.value = `已${assignIsReassign.value ? '改派' : '分配'}省地接社：${name}`
+    if (tokenMode.value && token) {
+      // token 模式：免登录直接分配 / 改派省地接社，后端返回刷新后的完整 H5 视图
+      const h = await assignProvincialByToken(token, assignProvId.value.trim())
+      h5.value = h
+      if (data.value) data.value = { ...data.value, provincialId: h.provincialId ?? null }
+      provincialAgencies.value = (h.provincialAgencies ?? []).map((a) => ({
+        id: a.id,
+        name: a.name,
+        role: 'provincial' as Role,
+        disabled: false,
+        createdAt: '',
+      }))
+      const name = h.provincialAgencies?.find((a) => a.id === assignProvId.value)?.name || '省地接社'
+      actionOk.value = `已${assignIsReassign.value ? '改派' : '分配'}省地接社：${name}`
+      assignDialog.value = false
+    } else {
+      await assignProvincial(id, assignProvId.value.trim())
+      assignDialog.value = false
+      await load() // 刷新 data.provincialId + 三态状态条
+      const name = provincialAgencies.value.find((a) => a.id === assignProvId.value)?.name || '省地接社'
+      actionOk.value = `已${assignIsReassign.value ? '改派' : '分配'}省地接社：${name}`
+    }
   } catch (e: any) {
     assignErr.value = e?.response?.data?.message || '分配失败'
   } finally {
@@ -488,6 +512,41 @@ async function openQuoteDialog() {
   actionErr.value = ''
   actionOk.value = ''
   try {
+    if (tokenMode.value && token) {
+      // token 模式：免登录保存一手编辑并生成对境外旅行社的「可编辑」链接
+      const res = await submitH5PandakingEdit(token, {
+        itinerary: itinerary.value,
+        quote: buildQuote(),
+      })
+      const agToken = res.agencyToken ?? h5.value?.agencyToken ?? null
+      const link = agToken ? agencyH5Url(agToken) : ''
+      const caption = shareH5Caption(data.value, 'agency')
+      const d = calcDerived(quoteItems.value)
+      const qa = Math.round(d.quoteA)
+      const text = `${caption}\n报价 ¥${qa.toLocaleString()}\n\n👉 查看路线及报价：${link}`
+      const changes = changesForAgency.value
+      const manual = pkSuggestion.value.trim()
+      const autoNote = formatQuoteChanges(changes)
+      const combinedNote = manual
+        ? (hasAgencyChange.value ? `${autoNote}\n\n【补充说明】${manual}` : manual)
+        : (hasAgencyChange.value ? autoNote : '')
+      if (combinedNote) {
+        try {
+          await submitH5Feedback(token, combinedNote, h5.value?.ownerName ?? 'PandaKing', 'pandaking')
+        } catch {
+          /* 变更记录失败不阻断保存 */
+        }
+      }
+      const notifyBody = [text, hasAgencyChange.value ? autoNote : '', manual ? `【补充说明】${manual}` : '']
+        .filter(Boolean)
+        .join('\n\n')
+      dialogText.value = notifyBody
+      dialogSubtitle.value = quoteSubtitle.value
+      actionOk.value = '报价链接已生成，请在弹窗内点「复制（含链接）」按钮，去微信粘贴发给境外旅行社'
+      quoteDialog.value = true
+      pkSuggestion.value = ''
+      await loadTokenMode(token) // 重新拉取最新（含对端令牌）
+    } else {
     // 1) 自动保存（写入当前行程 + 报价 + 利润①）
     const res = (await saveVersion(id, {
       itinerary: itinerary.value,
@@ -535,6 +594,7 @@ async function openQuoteDialog() {
     quoteDialog.value = true
     pkSuggestion.value = ''
     await load()
+    }
   } catch (e: any) {
     if (detectStale(e)) { savingNotify.value = false; return }
     actionErr.value = e?.response?.data?.message || '生成报价链接失败'
@@ -552,6 +612,59 @@ async function doInquire() {
   savingNotify.value = true
   inquireErr.value = ''
   try {
+    if (tokenMode.value && token) {
+      // token 模式：先保存一手编辑，再免登录分配省地接社并生成其「可编辑」协作链接
+      await submitH5PandakingEdit(token, { itinerary: itinerary.value, quote: buildQuote() })
+      const assigned = await assignProvincialByToken(token, collabProvId.value.trim())
+      h5.value = assigned
+      if (data.value) data.value = { ...data.value, provincialId: assigned.provincialId ?? null }
+      provincialAgencies.value = (assigned.provincialAgencies ?? []).map((a) => ({
+        id: a.id,
+        name: a.name,
+        role: 'provincial' as Role,
+        disabled: false,
+        createdAt: '',
+      }))
+      const pToken = assigned.provincialToken ?? null
+      const base = pToken ? provincialRouteH5Url(pToken) : ''
+      const params = new URLSearchParams()
+      if (data.value?.destination) params.set('d', data.value.destination)
+      const who = safeName(data.value?.customerNameCn, data.value?.customerName)
+      if (who) params.set('c', who)
+      const qs = params.toString()
+      const link = qs ? `${base}?${qs}` : base
+
+      // 构造结构化文案（措辞：PandaKing 已拟定初步行程，提交至贵社进行路线优化及报价，并带上具体省地接社机构名）
+      const caption = shareH5Caption(data.value ?? undefined)
+      const provAg = assigned.provincialAgencies?.find((a) => a.id === collabProvId.value)
+      const targetLabel = provAg?.name ? `（${provAg.name}）` : ''
+      const text = `${caption}\n\nPandaKing 已拟定初步行程，现提交至贵社${targetLabel}进行路线优化及报价，烦请查收反馈。\n\n👉 查看并回复：${link}`
+
+      // 计算本轮关键变更摘要（面向省地接社：仅成本① + 行程，不含 PandaKing 内部利润①），合并为修改记录，并附到微信文案
+      const changes = changesForProvincial.value
+      const manual = pkSuggestion.value.trim()
+      const autoNote = formatQuoteChanges(changes)
+      const combinedNote = manual
+        ? (hasProvincialChange.value ? `${autoNote}\n\n【补充说明】${manual}` : manual)
+        : (hasProvincialChange.value ? autoNote : '')
+      if (combinedNote) {
+        try {
+          await submitH5Feedback(token, combinedNote, h5.value?.ownerName ?? 'PandaKing', 'pandaking')
+        } catch {
+          /* 变更记录失败不阻断保存 */
+        }
+      }
+      const notifyBody = [text, hasProvincialChange.value ? autoNote : '', manual ? `【补充说明】${manual}` : '']
+        .filter(Boolean)
+        .join('\n\n')
+      dialogText.value = notifyBody
+
+      // 复制交由 NotifyDialog：打开弹窗时尽力自动复制 + 提供「复制（含链接）」按钮兜底
+      actionOk.value = '询价链接已生成，请在弹窗内点「复制（含链接）」按钮，去微信粘贴发给省地接社'
+      inquireDialog.value = true
+      pkSuggestion.value = ''
+      await loadTokenMode(token)
+    } else {
     // 1) 自动保存当前状态（含 PandaKing 的行程 + 利润①，但成本① 暂未填）
     await saveVersion(id, {
       itinerary: itinerary.value,
@@ -604,6 +717,7 @@ async function doInquire() {
     pkSuggestion.value = ''
     await load()
     await loadInquiries()
+    }
   } catch (e: any) {
     if (detectStale(e)) { savingNotify.value = false; return }
     actionErr.value = e?.response?.data?.message || '生成询价链接失败'
@@ -622,40 +736,95 @@ onMounted(() => {
   document.addEventListener('visibilitychange', onVisibilityChange)
 })
 onUnmounted(() => document.removeEventListener('visibilitychange', onVisibilityChange))
+// 把「版本」行程 / 报价映射进本页编辑态 refs（与迭代基线），供控制台版本流与 token 模式 H5 复用
+function applyVersion(v?: RouteVersion | null) {
+  if (v?.itinerary && typeof v.itinerary === 'object') {
+    const it = v.itinerary as { days?: Day[] }
+    itinerary.value = { days: it.days?.length ? it.days : [newDay(1)] }
+  } else {
+    itinerary.value = { days: [newDay(1)] }
+  }
+  if (v?.quote && typeof v.quote === 'object') {
+    const q = v.quote as { items?: QuoteLevel[]; totals?: Record<string, unknown> }
+    quoteItems.value = (q.items ?? []).map((it) => ({ ...it, uid: (it as any).uid || genUid() }))
+    const t: any = q.totals || {}
+    profit2Mode.value = t.profit2Mode === 'percent' ? 'percent' : 'amount'
+    profit2.value = Number(t.profit2) || 0
+  } else {
+    quoteItems.value = []
+    profit2Mode.value = 'amount'
+    profit2.value = 0
+  }
+  // 记录本轮编辑基线（用于计算「本轮关键变更摘要」，多轮协作逐轮核对）
+  baselineQuoteItems.value = quoteItems.value.map((it) => ({ ...it }))
+  baselineProfit2Mode.value = profit2Mode.value
+  baselineProfit2.value = Number(profit2.value) || 0
+  baselineItinerary.value = { days: itinerary.value.days.map((d) => ({ day: d.day, city: d.city })) }
+}
+
+// token 模式（移动枢纽）加载：凭 pandakingToken 免登录读取 H5 视图，映射进本页编辑态与合成 Route
+async function loadTokenMode(tk: string) {
+  const h = await fetchH5Route(tk)
+  h5.value = h
+  // 合成兼容控制台的 Route 对象（缺失字段降级为占位，避免模板读取报错）
+  data.value = {
+    id: h.routeId,
+    customerName: h.customerName || '—',
+    customerNameCn: h.customerNameCn || undefined,
+    country: '',
+    agency: '',
+    destination: h.destination,
+    groupSize: h.groupSize,
+    travelDate: h.travelDate,
+    statusKey: (h.statusKey as RouteStatusKey) || 'consulting',
+    modeKey: 'collab',
+    agencyId: null,
+    provincialId: h.provincialId ?? null,
+    version: h.version,
+    ownerName: h.ownerName ?? null,
+    versions: [],
+  }
+  // H5 已是「最新版本即协作上下文」，直接用其行程 / 报价构造伪版本复用 applyVersion
+  applyVersion({
+    id: `${h.routeId}:${h.version}`,
+    version: h.version,
+    draft: false,
+    itinerary: h.itinerary as Record<string, unknown>,
+    quote: (h.quote as unknown as Quote | null) ?? null,
+    createdAt: new Date().toISOString(),
+  })
+  // 省地接社机构下拉（token 模式由后端直接返回，免 JWT）
+  provincialAgencies.value = (h.provincialAgencies ?? []).map((a) => ({
+    id: a.id,
+    name: a.name,
+    role: 'provincial' as Role,
+    disabled: false,
+    createdAt: '',
+  }))
+  // 反馈记录（免登录读取），逆序展示
+  const list = await fetchH5Feedback(tk)
+  feedbackList.value = [...list].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  // 状态流转 / 成本询价依赖 JWT，token 模式跳过；对应 tab 在 tokenMode 隐藏
+}
+
 async function load() {
   loading.value = true
   err.value = ''
   try {
-    await loadProvincialAgencies()
-    const r = await fetchRoute(id)
-    data.value = r
-    const v = pickCurrentVersion(r.versions)
-    // 记录乐观锁基准：后续保存会回传此版本 ID，若期间协作方已生成新版本则后端拒绝（409）
-    baseVersionId.value = v?.id ?? null
-    if (v?.itinerary && typeof v.itinerary === 'object') {
-      const it = v.itinerary as { days?: Day[] }
-      itinerary.value = { days: it.days?.length ? it.days : [newDay(1)] }
+    if (tokenMode.value && token) {
+      tab.value = 'edit'
+      await loadTokenMode(token)
     } else {
-      itinerary.value = { days: [newDay(1)] }
+      await loadProvincialAgencies()
+      const r = await fetchRoute(id)
+      data.value = r
+      const v = pickCurrentVersion(r.versions)
+      // 记录乐观锁基准：后续保存会回传此版本 ID，若期间协作方已生成新版本则后端拒绝（409）
+      baseVersionId.value = v?.id ?? null
+      applyVersion(v)
+      await loadFeedback()
+      await loadInquiries()
     }
-    if (v?.quote && typeof v.quote === 'object') {
-      const q = v.quote as { items?: QuoteLevel[]; totals?: Record<string, unknown> }
-      quoteItems.value = (q.items ?? []).map((it) => ({ ...it, uid: (it as any).uid || genUid() }))
-      const t: any = q.totals || {}
-      profit2Mode.value = t.profit2Mode === 'percent' ? 'percent' : 'amount'
-      profit2.value = Number(t.profit2) || 0
-    } else {
-      quoteItems.value = []
-      profit2Mode.value = 'amount'
-      profit2.value = 0
-    }
-    // 记录本轮编辑基线（用于计算「本轮关键变更摘要」，多轮协作逐轮核对）
-    baselineQuoteItems.value = quoteItems.value.map((it) => ({ ...it }))
-    baselineProfit2Mode.value = profit2Mode.value
-    baselineProfit2.value = Number(profit2.value) || 0
-    baselineItinerary.value = { days: itinerary.value.days.map((d) => ({ day: d.day, city: d.city })) }
-    await loadFeedback()
-    await loadInquiries()
   } catch (e: any) {
     err.value = e?.response?.data?.message || '加载失败'
   } finally {
@@ -698,15 +867,22 @@ async function onSaveDraft() {
   actionErr.value = ''
   actionOk.value = ''
   try {
-    await saveVersion(id, {
-      itinerary: itinerary.value,
-      quote: buildQuote(),
-      draft: true,
-      notify: false,
-      baseVersionId: baseVersionId.value,
-    })
-    actionOk.value = '草稿已保存'
-    await load()
+    if (tokenMode.value && token) {
+      // token 模式：免登录保存一手编辑（仅保存，不通知任何人）
+      await submitH5PandakingEdit(token, { itinerary: itinerary.value, quote: buildQuote() })
+      actionOk.value = '草稿已保存'
+      await loadTokenMode(token)
+    } else {
+      await saveVersion(id, {
+        itinerary: itinerary.value,
+        quote: buildQuote(),
+        draft: true,
+        notify: false,
+        baseVersionId: baseVersionId.value,
+      })
+      actionOk.value = '草稿已保存'
+      await load()
+    }
   } catch (e: any) {
     if (detectStale(e)) { savingDraft.value = false; return }
     actionErr.value = e?.response?.data?.message || '保存失败'
@@ -1033,7 +1209,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
 </script>
 
 <template>
-  <div class="detail-v2">
+  <div class="detail-v2" :class="{ 'token-hub': tokenMode }">
     <p v-if="loading" class="loading">加载中…</p>
     <p v-else-if="err" class="err">{{ err }}</p>
 
@@ -1041,7 +1217,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
       <!-- 头部 -->
       <div class="head">
         <div class="left">
-          <button class="back" title="返回看板" @click="router.push('/routes/kanban')">‹</button>
+          <button v-if="!tokenMode" class="back" title="返回看板" @click="router.push('/routes/kanban')">‹</button>
           <div>
             <h1>{{ displayName(data) }}</h1>
             <div class="chips">
@@ -1095,7 +1271,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
       <div class="seg">
         <button :class="['seg-btn', { on: tab === 'edit' }]" @click="tab = 'edit'">行程与报价</button>
         <button :class="['seg-btn', { on: tab === 'info' }]" @click="tab = 'info'">客户与版本</button>
-        <button :class="['seg-btn', { on: tab === 'flow' }]" @click="tab = 'flow'">状态与协作</button>
+        <button v-if="!tokenMode" :class="['seg-btn', { on: tab === 'flow' }]" @click="tab = 'flow'">状态与协作</button>
       </div>
 
       <!-- ============ 行程与报价（两栏）============ -->
@@ -1274,8 +1450,8 @@ const collabEvents = computed<CollabEvent[]>(() => {
             <div><span>出行日期</span><b>{{ travelDateStr }}</b></div>
             <div><span>模式</span><b>{{ data.modeKey === 'collab' ? '协作' : '自营' }}</b></div>
           </div>
-          <h3 class="sub-h">版本历史</h3>
-          <div class="tbl-wrap">
+          <h3 class="sub-h" v-if="!tokenMode">版本历史</h3>
+          <div class="tbl-wrap" v-if="!tokenMode">
             <table class="tbl">
               <thead><tr><th>版本</th><th>草稿</th><th>创建时间</th></tr></thead>
               <tbody>
@@ -1291,8 +1467,8 @@ const collabEvents = computed<CollabEvent[]>(() => {
         </div>
       </div>
 
-      <!-- ============ 状态与协作 ============ -->
-      <div v-else class="stack">
+      <!-- ============ 状态与协作（token 模式依赖 JWT 状态流转，隐藏）============ -->
+      <div v-else-if="!tokenMode" class="stack">
         <!-- 状态流转 -->
         <div class="panel solo">
           <div class="panel-head">
@@ -1523,6 +1699,13 @@ const collabEvents = computed<CollabEvent[]>(() => {
         :subtitle="quoteSubtitle"
         :text="dialogText"
       />
+
+      <!-- 移动枢纽吸底操作栏（仅 token 模式 + 移动端显示；桌面隐藏，且移动端隐藏面板内 .pk-actions 避免重复操作） -->
+      <div v-if="tokenMode" class="pk-sticky">
+        <button class="d-btn primary" :disabled="!provAssigned || savingDraft || savingNotify" :title="provAssigned ? '' : '请先在上方状态条分配省地接社'" @click="openInquireDialog">🤝 发起询价</button>
+        <button class="d-btn primary" :disabled="savingDraft || savingNotify" @click="openQuoteDialog">💼 生成对旅行社链接</button>
+        <button class="d-btn ghost slim" :disabled="savingDraft || savingNotify" @click="onSaveDraft">💾 仅保存</button>
+      </div>
     </template>
   </div>
 </template>
@@ -1817,6 +2000,28 @@ const collabEvents = computed<CollabEvent[]>(() => {
     background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-sm);
   }
   .tbl tr.detail-row td::before { display: none; }
+}
+
+/* ===== 移动枢纽吸底操作栏（token 模式移动端专用；桌面与控制台均隐藏）===== */
+.pk-sticky { display: none; }
+@media (max-width: 640px) {
+  /* 移动端以吸底栏替代面板内操作区，避免两处重复操作 */
+  .token-hub .pk-actions { display: none; }
+  .pk-sticky {
+    display: flex;
+    gap: 8px;
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+    background: var(--surface);
+    border-top: 1px solid var(--k-line);
+    box-shadow: 0 -3px 12px rgba(20, 32, 51, 0.08);
+    z-index: 60;
+  }
+  .pk-sticky .d-btn { flex: 1; min-width: 0; }
+  .pk-sticky .d-btn.slim { flex: 0 0 auto; }
+  /* 给吸底栏留白，避免遮挡底部内容 */
+  .token-hub { padding-bottom: 84px; }
 }
 
 /* ===== 省地接社协作三态状态条（一手）===== */

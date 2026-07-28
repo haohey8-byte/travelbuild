@@ -47,11 +47,12 @@ export function agencyH5Url(token: string): string {
   return `${base}#/h5/route/${token}`
 }
 
-// 一手 PandaKing 协作 H5 链接：指向 SPA 协作页（hash 路由），与 agencyH5Url 同一组件（按 role 渲染不同权限）。
-// PandaKing 凭此链接在微信/H5 内全量编辑行程与价格，与旅行社反复往返协作。
+// 一手 PandaKing 协作 H5 链接：指向 SPA 的「移动枢纽」页（/h5/pk-route/:token，由 RouteDetail 组件
+// 以 tokenMode 渲染，免登录全量编辑行程与价格）。与 agencyH5Url 共用同一组件、按 role 渲染不同权限。
+// PandaKing 凭此链接在微信/H5 内直接当移动控制台用，与省地接/旅行社反复往返协作。
 export function pandakingH5Url(token: string): string {
   const base = window.location.origin + (import.meta.env.VITE_BASE || '/')
-  return `${base}#/h5/route/${token}`
+  return `${base}#/h5/pk-route/${token}`
 }
 
 // 成本询价 H5 链接： retired 旧 /h5/cost-inquiry 页，统一改指「省地接社协作 H5」(H5ProvincialRoute)。

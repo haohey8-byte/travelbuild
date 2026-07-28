@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { fetchH5Route, submitH5Feedback, fetchH5Feedback, editH5ProvincialRoute, submitH5PandakingEdit } from '@/api/h5'
 import { shareRoute, applyCostInquiry } from '@/api/routes'
 import { safeName, safeText } from '@/utils/name'
-import { shareH5Url, agencyH5Url, provincialRouteH5Url, shareH5Caption, collabNotifyText, copyText, diffProvincialChanges, roleLabel } from '@/utils/share'
+import { shareH5Url, agencyH5Url, provincialRouteH5Url, pandakingH5Url, shareH5Caption, collabNotifyText, copyText, diffProvincialChanges, roleLabel } from '@/utils/share'
 import { calcDerived } from '@/utils/quote'
 import { genUid } from '@/utils/uid'
 import { useAuthStore } from '@/stores/auth'
@@ -410,7 +410,7 @@ async function onSubmitHandoff() {
         authorName: provAuthorName.value,
         detail: fbText.value.trim() || undefined,
         changes,
-        url: window.location.href,
+        url: data.value.pandakingToken ? pandakingH5Url(data.value.pandakingToken) : window.location.href,
       })
       notifyText.value = text
       const ok = await copyText(text)
@@ -457,7 +457,7 @@ async function onProvStandaloneSubmit() {
     const author = provFbName.value.trim() || provAuthorName.value
     await submitH5Feedback(token, content, author, 'provincial')
     if (data.value) {
-      const link = provincialRouteH5Url(token)
+      const link = data.value.pandakingToken ? pandakingH5Url(data.value.pandakingToken) : window.location.href
       const text = collabNotifyText({
         kind: 'feedback',
         eventLabel: '提交了补充说明',
