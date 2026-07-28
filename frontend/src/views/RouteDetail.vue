@@ -11,6 +11,7 @@ import {
   submitConsoleFeedback,
   listCostInquiries,
   applyCostInquiry,
+  assignProvincial,
   ensureProvincialShare,
   ensureAgencyShare,
   ensurePandakingShare,
@@ -368,6 +369,18 @@ const loadingInquiries = ref(false)
 const collabProvId = ref('') // 「发起询价」弹窗内选定的省地接社机构 ID
 const applyingId = ref('')
 
+// 省地接社「分配 / 改派」轻量弹窗（仅改 route.provincialId，不发通知、不生成 CostInquiry/RouteShare）
+const assignDialog = ref(false)
+const assignProvId = ref('')
+const assigning = ref(false)
+const assignErr = ref('')
+const assignIsReassign = ref(false)
+// 「发起询价」弹窗内的本地报错（不再写入全局 actionErr，反馈紧跟动作）
+const inquireErr = ref('')
+
+// 省地接社是否已分配（驱动三态状态条 + 发起询价按钮可用性）
+const provAssigned = computed(() => !!data.value?.provincialId)
+
 // 省地接社机构下拉选项（一手分配/询价用）
 const provincialAgencies = ref<Agency[]>([])
 const loadingProvincialAgencies = ref(false)
@@ -390,10 +403,9 @@ const linkedProvName = computed(() => {
   return provincialAgencies.value.find((a) => a.id === pid)?.name || ''
 })
 const inquireTargetLabel = computed(() => {
-  // 实时跟随弹窗内下拉选择（支持改派），未选时回退到已关联机构名
-  const selId = collabProvId.value.trim() || data.value?.provincialId
-  const name = selId ? provincialAgencies.value.find((a) => a.id === selId)?.name || '' : ''
-  return name ? `向"${name}"咨询` : '向省地接社咨询'
+  // 按钮文案跟随「已分配的省地接社」机构名（稳定，来自 linkedProvName）；未分配时按钮禁用，仅作占位提示
+  const name = linkedProvName.value
+  return name ? `向"${name}"咨询` : '（未分配省地接社）'
 })
 async function loadInquiries() {
   if (role.value !== 'pandaking') return
@@ -431,33 +443,39 @@ const quoteSubtitle = computed(() =>
   '向境外旅行社发报价：自动保存当前报价（含省地接社成本①与您的利润①），生成对旅行社的 H5 链接（含报价A）。请在弹窗内点「复制（含链接）」按钮，去微信粘贴发给境外旅行社。',
 )
 
-// 一手「🤝 发起询价」—— 无论是否已关联省地接社都打开弹窗：
-// 已关联时预选当前机构并支持「更换机构」改派；未关联时先保存草稿再让用户选机构
+// 一手「🏢 分配 / 改派省地接社」—— 轻量弹窗：仅改 route.provincialId，不发通知、不生成 CostInquiry/RouteShare
+function openAssignDialog(isReassign: boolean) {
+  assignIsReassign.value = isReassign
+  assignProvId.value = isReassign ? (data.value?.provincialId || '') : ''
+  assignErr.value = ''
+  assignDialog.value = true
+}
+async function confirmAssign() {
+  if (!assignProvId.value.trim()) {
+    assignErr.value = '请选择省地接社机构'
+    return
+  }
+  assigning.value = true
+  assignErr.value = ''
+  try {
+    await assignProvincial(id, assignProvId.value.trim())
+    assignDialog.value = false
+    await load() // 刷新 data.provincialId + 三态状态条
+    const name = provincialAgencies.value.find((a) => a.id === assignProvId.value)?.name || '省地接社'
+    actionOk.value = `已${assignIsReassign.value ? '改派' : '分配'}省地接社：${name}`
+  } catch (e: any) {
+    assignErr.value = e?.response?.data?.message || '分配失败'
+  } finally {
+    assigning.value = false
+  }
+}
+
+// 一手「🤝 发起询价」—— 仅当已分配省地接社时可打开（按钮已 disabled 未分配态）；
+// 不再在打开时自动保存版本（C1：仅点「生成询价链接」由 doInquire 保存），避免污染版本历史
 async function openInquireDialog() {
   // 预选当前已关联机构（若有），弹窗内可重新选择改派
   collabProvId.value = data.value?.provincialId || ''
-  // 未关联省地接社 → 先自动保存当前行程与报价（如新加的「9座车」成本①），确保弹窗里选机构前草稿已落库
-  if (!collabProvId.value.trim()) {
-    savingNotify.value = true
-    actionErr.value = ''
-    try {
-      await saveVersion(id, {
-        itinerary: itinerary.value,
-        quote: buildQuote(),
-        draft: false,
-        notify: false,
-        baseVersionId: baseVersionId.value,
-      })
-      await load()
-    } catch (e: any) {
-      if (detectStale(e)) { savingNotify.value = false; return }
-      savingNotify.value = false
-      actionErr.value = e?.response?.data?.message || '保存行程失败'
-      return
-    } finally {
-      savingNotify.value = false
-    }
-  }
+  inquireErr.value = ''
   dialogText.value = ''
   dialogSubtitle.value = inquireSubtitle.value
   inquireDialog.value = true
@@ -528,11 +546,11 @@ async function openQuoteDialog() {
 // 「发起询价」弹窗内用户点确定（先选好机构后）—— 由弹窗内按钮触发
 async function doInquire() {
   if (!collabProvId.value.trim()) {
-    actionErr.value = '请先选择省地接社机构'
+    inquireErr.value = '请先选择省地接社机构'
     return
   }
   savingNotify.value = true
-  actionErr.value = ''
+  inquireErr.value = ''
   try {
     // 1) 自动保存当前状态（含 PandaKing 的行程 + 利润①，但成本① 暂未填）
     await saveVersion(id, {
@@ -1178,9 +1196,23 @@ const collabEvents = computed<CollabEvent[]>(() => {
             </div>
           </div>
 
+          <!-- 一手：省地接社协作三态状态条（分配 / 改派 入口，紧跟协作动作上方） -->
+          <div v-if="isPk && !readonly" class="pk-statusbar" :class="provAssigned ? 'assigned' : 'unassigned'">
+            <template v-if="!provAssigned">
+              <span class="pk-sb-icon">⚠️</span>
+              <span class="pk-sb-text">未分配省地接社 · 发起询价前需先分配机构</span>
+              <button class="pk-sb-btn" :disabled="loadingProvincialAgencies" @click="openAssignDialog(false)">🏢 分配省地接社</button>
+            </template>
+            <template v-else>
+              <span class="pk-sb-icon">✅</span>
+              <span class="pk-sb-text">已分配省地接社：<b>{{ linkedProvName }}</b></span>
+              <button class="pk-sb-btn ghost" :disabled="loadingProvincialAgencies" @click="openAssignDialog(true)">🔄 改派</button>
+            </template>
+          </div>
+
           <!-- 一手：发起询价 + 保存并报价（双主操作，弹 NotifyDialog 统一弹结构化文案+URL） -->
           <div v-if="isPk && !readonly" class="pk-actions">
-            <button class="d-btn primary block" :disabled="savingDraft || savingNotify" @click="openInquireDialog">
+            <button class="d-btn primary block" :disabled="!provAssigned || savingDraft || savingNotify" :title="provAssigned ? '' : '请先在上方状态条分配省地接社'" @click="openInquireDialog">
               🤝 发起询价（{{ inquireTargetLabel }}）
             </button>
             <button class="d-btn primary block" :disabled="savingDraft || savingNotify" @click="openQuoteDialog">
@@ -1435,11 +1467,36 @@ const collabEvents = computed<CollabEvent[]>(() => {
               <span class="nd-cur-tip">（如需改派，请在下方重新选择）</span>
             </p>
             <label>选择 / 更换省地接社机构：</label>
-            <select v-model="collabProvId" :disabled="loadingProvincialAgencies">
+            <select v-model="collabProvId" :class="{ 'nd-select-err': inquireErr }" :disabled="loadingProvincialAgencies">
               <option value="" disabled>{{ loadingProvincialAgencies ? '加载中…' : '请选择' }}</option>
               <option v-for="a in provincialAgencies" :key="a.id" :value="a.id">{{ a.name }}（{{ a.id }}）</option>
             </select>
+            <p v-if="inquireErr" class="nd-err">{{ inquireErr }}</p>
           </div>
+        </div>
+      </NotifyDialog>
+
+      <!-- 分配 / 改派省地接社（轻量弹窗：仅改 route.provincialId，不发通知、不生成询价） -->
+      <NotifyDialog
+        v-model:open="assignDialog"
+        :title="provAssigned ? '🔄 改派省地接社' : '🏢 分配省地接社'"
+        :subtitle="provAssigned
+          ? ('将本路线的省地接社由「' + linkedProvName + '」更换为其他机构。改派后协作链接将指向新机构。')
+          : '选择承接本路线地接与成本报价的省地接社机构。分配后该机构即可查看并参与协作。'"
+        :text="''"
+        generate-label="✅ 确定"
+        @generate="confirmAssign"
+      >
+        <div v-if="provincialAgencies.length === 0" class="nd-empty">
+          暂无省地接社机构，请先在「账号」页新建一个「省地接社」机构。
+        </div>
+        <div v-else class="nd-agency-pick">
+          <label>选择省地接社机构：</label>
+          <select v-model="assignProvId" :class="{ 'nd-select-err': assignErr }" :disabled="loadingProvincialAgencies || assigning">
+            <option value="" disabled>{{ loadingProvincialAgencies ? '加载中…' : '请选择' }}</option>
+            <option v-for="a in provincialAgencies" :key="a.id" :value="a.id">{{ a.name }}（{{ a.id }}）</option>
+          </select>
+          <p v-if="assignErr" class="nd-err">{{ assignErr }}</p>
         </div>
       </NotifyDialog>
 
@@ -1744,4 +1801,32 @@ const collabEvents = computed<CollabEvent[]>(() => {
   }
   .tbl tr.detail-row td::before { display: none; }
 }
+
+/* ===== 省地接社协作三态状态条（一手）===== */
+.pk-statusbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 12px 14px; border-radius: var(--r-md, 10px); margin-bottom: 14px;
+  font-size: 14px; border: 1px solid transparent; line-height: 1.5;
+}
+.pk-statusbar.unassigned {
+  background: var(--warn-50, #fff7ed); border-color: var(--warn, #f59e0b); color: #7a4d05;
+}
+.pk-statusbar.assigned {
+  background: var(--ok-50, #ecfdf5); border-color: var(--ok, #10b981); color: #065f46;
+}
+.pk-sb-icon { font-size: 16px; line-height: 1; }
+.pk-sb-text { flex: 1; min-width: 0; }
+.pk-sb-text b { font-weight: 700; }
+.pk-sb-btn {
+  border: 1px solid var(--brand, #0ea5a4); background: var(--brand, #0ea5a4); color: #fff;
+  border-radius: var(--r-sm, 8px); padding: 7px 12px; font-size: 13px; cursor: pointer; white-space: nowrap;
+}
+.pk-sb-btn:hover { opacity: 0.88; }
+.pk-sb-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.pk-sb-btn.ghost {
+  background: #fff; color: var(--brand, #0ea5a4); border-color: var(--brand, #0ea5a4);
+}
+/* 弹窗内下拉报错（slot 内容，归本组件 scope，确保覆盖生效） */
+.nd-select-err { border-color: var(--danger, #ef4444) !important; }
+.nd-err { color: var(--danger, #ef4444); font-size: 13px; margin: 6px 0 0; }
 </style>
