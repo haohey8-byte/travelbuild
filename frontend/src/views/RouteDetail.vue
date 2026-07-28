@@ -1476,29 +1476,46 @@ const collabEvents = computed<CollabEvent[]>(() => {
         </div>
       </NotifyDialog>
 
-      <!-- 分配 / 改派省地接社（轻量弹窗：仅改 route.provincialId，不发通知、不生成询价） -->
-      <NotifyDialog
-        v-model:open="assignDialog"
-        :title="provAssigned ? '🔄 改派省地接社' : '🏢 分配省地接社'"
-        :subtitle="provAssigned
-          ? ('将本路线的省地接社由「' + linkedProvName + '」更换为其他机构。改派后协作链接将指向新机构。')
-          : '选择承接本路线地接与成本报价的省地接社机构。分配后该机构即可查看并参与协作。'"
-        :text="''"
-        generate-label="✅ 确定"
-        @generate="confirmAssign"
-      >
-        <div v-if="provincialAgencies.length === 0" class="nd-empty">
-          暂无省地接社机构，请先在「账号」页新建一个「省地接社」机构。
+      <!-- 分配 / 改派省地接社（独立轻量弹窗：仅改 route.provincialId，不发通知、不生成询价；自管样式，避免 NotifyDialog slot 作用域/片段渲染坑） -->
+      <Teleport to="body">
+        <div v-if="assignDialog" class="assign-mask" @click.self="assignDialog = false">
+          <div class="assign-modal" role="dialog" aria-modal="true">
+            <div class="assign-head">
+              <span class="assign-title">{{ provAssigned ? '🔄 改派省地接社' : '🏢 分配省地接社' }}</span>
+              <button class="assign-close" @click="assignDialog = false" aria-label="关闭">×</button>
+            </div>
+            <div class="assign-body">
+              <p class="assign-sub">
+                {{ provAssigned
+                  ? ('将本路线的省地接社由「' + linkedProvName + '」更换为其他机构。改派后协作链接将指向新机构。')
+                  : '选择承接本路线地接与成本报价的省地接社机构。分配后该机构即可查看并参与协作。' }}
+              </p>
+              <div v-if="provincialAgencies.length === 0" class="assign-empty">
+                暂无省地接社机构，请先在「账号」页新建一个「省地接社」机构。
+              </div>
+              <div v-else class="assign-pick">
+                <label class="assign-label">选择省地接社机构：</label>
+                <select
+                  v-model="assignProvId"
+                  class="assign-select"
+                  :class="{ 'assign-select-err': assignErr }"
+                  :disabled="loadingProvincialAgencies || assigning"
+                >
+                  <option value="" disabled>{{ loadingProvincialAgencies ? '加载中…' : '请选择' }}</option>
+                  <option v-for="a in provincialAgencies" :key="a.id" :value="a.id">{{ a.name }}（{{ a.id }}）</option>
+                </select>
+                <p v-if="assignErr" class="assign-err">{{ assignErr }}</p>
+              </div>
+            </div>
+            <div class="assign-actions">
+              <button class="btn btn-primary" :disabled="!assignProvId || assigning" @click="confirmAssign">
+                {{ assigning ? '处理中…' : '✅ 确定' }}
+              </button>
+              <button class="btn btn-ghost" @click="assignDialog = false">关闭</button>
+            </div>
+          </div>
         </div>
-        <div v-else class="nd-agency-pick">
-          <label>选择省地接社机构：</label>
-          <select v-model="assignProvId" :class="{ 'nd-select-err': assignErr }" :disabled="loadingProvincialAgencies || assigning">
-            <option value="" disabled>{{ loadingProvincialAgencies ? '加载中…' : '请选择' }}</option>
-            <option v-for="a in provincialAgencies" :key="a.id" :value="a.id">{{ a.name }}（{{ a.id }}）</option>
-          </select>
-          <p v-if="assignErr" class="nd-err">{{ assignErr }}</p>
-        </div>
-      </NotifyDialog>
+      </Teleport>
 
       <NotifyDialog
         v-model:open="quoteDialog"
@@ -1829,4 +1846,55 @@ const collabEvents = computed<CollabEvent[]>(() => {
 /* 弹窗内下拉报错（slot 内容，归本组件 scope，确保覆盖生效） */
 .nd-select-err { border-color: var(--danger, #ef4444) !important; }
 .nd-err { color: var(--danger, #ef4444); font-size: 13px; margin: 6px 0 0; }
+
+/* ===== 分配 / 改派省地接社 自管轻量弹窗（脱离 NotifyDialog slot，自渲染必现）===== */
+.assign-mask {
+  position: fixed; inset: 0;
+  background: rgba(18, 26, 41, 0.5); backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9999; padding: 16px;
+}
+.assign-modal {
+  background: var(--surface); border-radius: var(--r-lg, 14px);
+  width: 100%; max-width: 460px; max-height: 92vh; overflow: auto;
+  box-shadow: var(--sh-lg, 0 12px 32px rgba(0,0,0,0.18));
+  font-family: -apple-system, 'PingFang SC', sans-serif;
+  color: var(--ink, #1c2430);
+}
+.assign-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 14px 18px; border-bottom: 1px solid var(--line, #e8edf4);
+}
+.assign-title { font-size: 16px; font-weight: 700; flex: 1; color: var(--ink, #1c2430); }
+.assign-close {
+  background: transparent; border: none; font-size: 22px; line-height: 1;
+  color: var(--muted, #76819a); cursor: pointer; padding: 0 6px;
+}
+.assign-close:hover { color: var(--ink, #1c2430); }
+.assign-body { padding: 14px 18px 4px; }
+.assign-sub {
+  color: var(--muted, #76819a); font-size: 13px; margin: 0 0 14px; line-height: 1.6;
+}
+.assign-empty {
+  padding: 18px 14px; background: var(--surface-2, #f5f7fa);
+  border-radius: var(--r-sm, 8px); color: var(--muted, #76819a);
+  font-size: 13px; text-align: center;
+}
+.assign-pick { display: flex; flex-direction: column; gap: 6px; }
+.assign-label { font-size: 13px; color: var(--ink, #1c2430); font-weight: 500; }
+.assign-select {
+  width: 100%; padding: 9px 12px;
+  border: 1px solid var(--line, #e8edf4); border-radius: var(--r-sm, 8px);
+  font-size: 14px; background: #fff; color: var(--ink, #1c2430);
+  cursor: pointer; outline: none; transition: border-color 0.15s;
+  appearance: auto;
+}
+.assign-select:focus { border-color: var(--brand, #0ea5a4); }
+.assign-select:disabled { opacity: 0.6; cursor: not-allowed; }
+.assign-select-err { border-color: var(--danger, #ef4444) !important; }
+.assign-err { color: var(--danger, #ef4444); font-size: 13px; margin: 6px 0 0; }
+.assign-actions {
+  display: flex; justify-content: flex-end; gap: 10px;
+  padding: 12px 18px 18px;
+}
 </style>
