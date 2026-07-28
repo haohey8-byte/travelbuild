@@ -1,9 +1,16 @@
 <script setup lang="ts">
 import { useAuthStore } from '@/stores/auth'
+import { useRouter } from 'vue-router'
 import { roleLabel } from '@/utils/share'
 import type { Role, User } from '@/types'
 
 const auth = useAuthStore()
+const router = useRouter()
+// 退出登录后返回首页（而非由路由守卫重定向到登录页）
+function onLogout() {
+  auth.logout()
+  router.push('/')
+}
 const user = auth.user as User | null
 
 const LEVEL_LABEL: Record<string, string> = { admin: '管理员', staff: '员工' }
@@ -37,7 +44,7 @@ const ROLE_LABEL: Record<Role, string> = {
       <div class="kv" v-if="user.agencyId"><span>机构编号</span><b>{{ user.agencyId }}</b></div>
       <div class="kv" v-if="user.level"><span>层级</span><b>{{ LEVEL_LABEL[user.level] || user.level }}</b></div>
       <div class="kv" v-if="user.phone"><span>手机号</span><b>{{ user.phone }}</b></div>
-      <button class="btn btn-primary" @click="auth.logout()">退出登录</button>
+      <button class="btn btn-primary" @click="onLogout">退出登录</button>
     </div>
 
     <div class="card" style="margin-top: 16px">

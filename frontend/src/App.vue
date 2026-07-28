@@ -10,6 +10,12 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 
+// 退出登录后返回首页（而非由路由守卫重定向到登录页）
+function onLogout() {
+  auth.logout()
+  router.push('/')
+}
+
 const isH5 = computed(() => route.meta.h5 === true)
 const isAuthPage = computed(() => route.meta.authPage === true)
 const isPublic = computed(() => route.meta.public === true)
@@ -77,7 +83,7 @@ function onNav(to: string) {
       <!-- 桌面端当前账号信息（真实账号固定角色，不再提供角色切换） -->
       <div class="role-switch">
         <span class="who" v-if="auth.user">{{ auth.user.name }} · {{ roleLabel(auth.user.role) }}</span>
-        <button class="btn ghost sm" @click="auth.logout()">{{ t('account.logout') }}</button>
+        <button class="btn ghost sm" @click="onLogout">{{ t('account.logout') }}</button>
       </div>
     </header>
 
@@ -104,7 +110,7 @@ function onNav(to: string) {
       <div class="drawer-role">
         <div class="dr-label">当前账号</div>
         <div class="who" v-if="auth.user">{{ auth.user.name }} · {{ roleLabel(auth.user.role) }}</div>
-        <button class="btn ghost sm full" @click="auth.logout()">{{ t('account.logout') }}</button>
+        <button class="btn ghost sm full" @click="onLogout">{{ t('account.logout') }}</button>
       </div>
     </aside>
 
