@@ -418,7 +418,12 @@ export function formatQuoteChanges(ch: ProvincialChanges): string {
       }
     }
   }
-  if (ch.totals?.profit2) {
+  // 对客总价（境外旅行社加价后透传 PandaKing 的总价涨跌，不暴露利润②）
+  if (ch.totals?.guestPrice) {
+    const g = ch.totals.guestPrice
+    lines.push(`对客总价：${Math.round(g.before).toLocaleString()} → ${Math.round(g.after).toLocaleString()}`)
+  } else if (ch.totals?.profit2) {
+    // 兼容：仅「旅行社自身」视角（PK→agency 通知）才透传利润②；PandaKing/省地接社不应走此分支
     const p = ch.totals.profit2
     lines.push(`利润②：${Math.round(p.before).toLocaleString()} → ${Math.round(p.after).toLocaleString()}${p.mode === 'percent' ? '%' : ''}`)
   }
@@ -431,6 +436,34 @@ export function formatQuoteChanges(ch: ProvincialChanges): string {
     for (const c of ch.itinerary.cityChanges.slice(0, 15)) lines.push(`  ${c}`)
     for (const c of ch.itinerary.detailChanges.slice(0, 15)) lines.push(`  ${c}`)
   }
+  return lines.join('\n')
+}
+
+// 把「利润②」替换为「对客总价」(= 报价A + 利润②)，用于向 PandaKing 透传报价涨跌而不暴露利润②。
+// 省地接社也不可见利润②，故所有面向 PandaKing 的摘要一律用对客总价替代利润②。
+export function toGuestPriceChanges(ch: ProvincialChanges, quoteA: number): ProvincialChanges {
+  if (!ch || !ch.totals?.profit2) return ch
+  const p2 = ch.totals.profit2
+  const base = Number(quoteA) || 0
+  const next: QuoteTotalsChange = { ...ch.totals }
+  delete next.profit2
+  next.guestPrice = { before: base + p2.before, after: base + p2.after }
+  return { ...ch, totals: next }
+}
+
+// 仅渲染行程变更（不含任何价格/利润），用于把协作方的行程调整意见透传给省地接社
+// （省地接社视角仅可见行程与文字说明，绝不能看到报价/利润②）
+export function formatItineraryChanges(ch: ProvincialChanges): string {
+  if (!ch || !ch.itinerary) return ''
+  const it = ch.itinerary
+  if (it.cityChanges.length === 0 && it.detailChanges.length === 0) return ''
+  const lines: string[] = ['【行程调整】']
+  const dayDelta = it.dayDelta
+  if (dayDelta !== 0) {
+    lines.push(`行程天数：${it.dayCountBefore}天 → ${it.dayCountAfter}天，${dayDelta > 0 ? `+${dayDelta}` : dayDelta}天`)
+  }
+  for (const c of it.cityChanges.slice(0, 15)) lines.push(`  ${c}`)
+  for (const c of it.detailChanges.slice(0, 15)) lines.push(`  ${c}`)
   return lines.join('\n')
 }
 
@@ -468,8 +501,12 @@ export function collabNotifyText(opts: CollabNotifyOpts): string {
         }
       }
     }
-    // 利润②（境外旅行社单独成块）
-    if (ch.totals?.profit2) {
+    // 对客总价（境外旅行社加价后透传 PandaKing，不暴露利润②）
+    if (ch.totals?.guestPrice) {
+      const g = ch.totals.guestPrice
+      sub.push(`对客总价 ¥${Math.round(g.before).toLocaleString()} → ¥${Math.round(g.after).toLocaleString()}（本次调整）`)
+    } else if (ch.totals?.profit2) {
+      // 兼容：仅旅行社自身视角（PK→agency 通知）才透传利润②；PandaKing/省地接社不应走此分支
       const p = ch.totals.profit2
       sub.push(`利润② 合计 ¥${Math.round(p.before).toLocaleString()} → ¥${Math.round(p.after).toLocaleString()}${p.mode === 'percent' ? '(%)' : ''}（本次调整）`)
     }

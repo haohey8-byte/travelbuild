@@ -21,6 +21,8 @@ import {
   roleLabel,
   diffQuoteChanges,
   formatQuoteChanges,
+  toGuestPriceChanges,
+  formatItineraryChanges,
 } from '@/utils/share'
 import type { ProvincialChanges } from '@/utils/share'
 import type { H5Route, RouteFeedbackItem, QuoteLevel } from '@/types'
@@ -182,7 +184,7 @@ const initialAgProfit2 = ref(0)
 const initialAgItinerary = ref<{ days: { day: number; city: string; spots: string[]; hotel: string; meals: string[]; notes?: string }[] }>({ days: [] })
 const agChanges = computed<ProvincialChanges>(() => {
   if (!isAgencyView.value) return {}
-  return diffQuoteChanges({
+  const ch = diffQuoteChanges({
     before: { profit2: initialAgProfit2.value, profit2Mode: initialAgProfit2Mode.value, itinerary: initialAgItinerary.value },
     after: {
       profit2: Number(agProfit2.value) || 0,
@@ -192,10 +194,13 @@ const agChanges = computed<ProvincialChanges>(() => {
     editableFields: ['profit2', 'itinerary'],
     versionLabel: data.value?.version,
   })
+  // 对客价 = 报价A + 利润②；对 PandaKing 透传「对客总价」涨跌，绝不暴露利润②本身。
+  // 省地接社也不可见利润②，故所有面向 PandaKing 的摘要一律用对客总价替代利润②。
+  return toGuestPriceChanges(ch, agQuoteA.value)
 })
 const agHasChange = computed(() => {
   const ch = agChanges.value
-  return !!ch.totals?.profit2 || (!!ch.itinerary && (ch.itinerary.cityChanges.length > 0 || ch.itinerary.detailChanges.length > 0))
+  return !!ch.totals?.guestPrice || (!!ch.itinerary && (ch.itinerary.cityChanges.length > 0 || ch.itinerary.detailChanges.length > 0))
 })
 
 // —— 旅行社视角：成本明细（per-item quoteA 来自后端 hideCostsForRole 暴露的 items.cost1） ——
@@ -368,6 +373,20 @@ async function onAgSave() {
         await submitH5Feedback(token, combinedNote, agFbName.value.trim() || authorName.value.trim() || undefined, 'agency')
       } catch {
         /* 变更记录失败不阻断保存 */
+      }
+    }
+    // 透传省地接社：境外旅行社的协调意见（行程变更 + 人工说明）需再次送达省地接社。
+    // 后端 feedbackRoleWhere 物理隔离 agency↔provincial，故以 authorRole='pandaking'（一手转达）
+    // 写入同路线反馈，使该条落入省地接社可见通道（provincial 仅见 authorRole ∈ {provincial, pandaking}）。
+    // 透传内容不含任何报价/利润②，仅行程调整 + 文字说明。
+    const relayItinerary = formatItineraryChanges(changes)
+    const relayBody = [manual, relayItinerary].filter(Boolean).join('\n')
+    if (relayBody) {
+      const relayContent = `📨 境外旅行社协调意见（一手 PandaKing 转达）：\n${relayBody}`
+      try {
+        await submitH5Feedback(token, relayContent, agFbName.value.trim() || authorName.value.trim() || undefined, 'pandaking')
+      } catch {
+        /* 透传省地接社失败不阻断主流程 */
       }
     }
     if (data.value) {
@@ -613,8 +632,16 @@ async function onSend() {
   submitting.value = true
   sendErr.value = ''
   try {
-    await submitH5Feedback(token, content, authorName.value.trim() || undefined)
-    thanks.value = true
+  await submitH5Feedback(token, content, authorName.value.trim() || undefined)
+  // 旅行社视角的纯反馈，也需透传省地接社（一手转达），不含任何报价/利润②
+  if (isAgencyView.value) {
+    try {
+      await submitH5Feedback(token, `📨 境外旅行社协调意见（一手 PandaKing 转达）：\n${content}`, authorName.value.trim() || undefined, 'pandaking')
+    } catch {
+      /* 透传省地接社失败不阻断主流程 */
+    }
+  }
+  thanks.value = true
     if (data.value) {
       // 反馈接收方恒为对端：PandaKing 视图 → 发 agency 可编辑链接；agency/公开视图 → 发 pandaking 可编辑链接
       let url = ''

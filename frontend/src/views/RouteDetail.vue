@@ -31,6 +31,8 @@ import {
   provincialRouteH5Url,
   diffQuoteChanges,
   formatQuoteChanges,
+  toGuestPriceChanges,
+  formatItineraryChanges,
 } from '@/utils/share'
 import type { ProvincialChanges } from '@/utils/share'
 import type { Route, RouteVersion, RouteStatusKey, QuoteLevel, RouteFeedbackItem, Agency, CostInquiry, Role, Quote, H5Route } from '@/types'
@@ -330,6 +332,10 @@ const currentChanges = computed<ProvincialChanges>(() => {
     versionLabel: versionLabel.value,
   })
 })
+// 报价A 基线（境外旅行社加价前的对客价基础），用于把利润②换算成对客总价
+const quoteABase = computed(() => Number(calcDerived(quoteItems.value).quoteA) || 0)
+// 面向 PandaKing 的变更摘要：把利润②替换为对客总价，避免向枢纽暴露境外旅行社利润率
+const currentChangesForPk = computed<ProvincialChanges>(() => toGuestPriceChanges(currentChanges.value, quoteABase.value))
 const hasAnyChange = computed(() => {
   const ch = currentChanges.value
   const costChanged = !!ch.cost && ch.cost.items.length > 0
@@ -901,8 +907,8 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
   actionOk.value = ''
   try {
     const note = feedbackNote.value
-    // 历史记录仍保存「完整摘要 + 补充说明」（发送方视角）
-    const historyNote = formatQuoteChanges(currentChanges.value)
+    // 历史记录：面向 PandaKing 的摘要用对客总价替代利润②，绝不向枢纽暴露境外旅行社利润率
+    const historyNote = formatQuoteChanges(currentChangesForPk.value)
     const combinedNote = note.trim()
       ? (hasAnyChange.value ? `${historyNote}\n\n【补充说明】${note.trim()}` : note.trim())
       : (hasAnyChange.value ? historyNote : '')
@@ -914,7 +920,8 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
     if (a.key !== 'reject' && data.value) {
       let link = ''
       // 通知文案的变更摘要必须按收件方可见域裁剪，避免向省地接社/旅行社暴露 PandaKing 内部利润①
-      let notifyChanges: ProvincialChanges = currentChanges.value
+      // 默认（含 agency→PandaKing 分支）用对客总价替代利润②，不向枢纽暴露利润率
+      let notifyChanges: ProvincialChanges = currentChangesForPk.value
       try {
         if (isPk.value) {
           // 一手回传反馈 / 状态通知 → 带旅行社「可编辑」链接，形成多轮往返闭环
@@ -1004,7 +1011,8 @@ async function onSubmitSuggestion(who: 'agency' | 'provincial') {
   // 2) 提交反馈建议给一手（允许为空：仅保存工作也可）。合并「本轮变更摘要」一并记录
   const note = consSuggestion.value.trim()
   // 按当前操作方角色选取变更域：旅行社只能改利润②+行程；省地接社只能改成本①+行程
-  const changes = who === 'agency' ? changesForAgency.value : changesForProvincial.value
+  // 面向 PandaKing 的摘要用对客总价替代利润②（利润② 不得暴露给枢纽）
+  const changes = who === 'agency' ? toGuestPriceChanges(changesForAgency.value, quoteABase.value) : changesForProvincial.value
   const hasChange = who === 'agency' ? hasAgencyChange.value : hasProvincialChange.value
   const autoNote = formatQuoteChanges(changes)
   const combinedNote = note
@@ -1032,6 +1040,18 @@ async function onSubmitSuggestion(who: 'agency' | 'provincial') {
       // 旅行社提交建议并通知一手 → 带一手「可编辑」链接，对称形成多轮往返闭环
       const s = await ensurePandakingShare(id)
       link = pandakingH5Url(s.token)
+      // 透传省地接社（一手 PandaKing 转达）：用同一 route 的 pandaking 令牌提交 source='h5' 反馈，
+      // authorRole='pandaking' 使其落入省地接社可见通道（provincial 仅见 authorRole ∈ {provincial, pandaking}）。
+      // 必须用 submitH5Feedback（source='h5'）——省地接社 H5 页的 getFeedbackByToken 只返回 source='h5' 记录。
+      const relayItinerary = formatItineraryChanges(changesForAgency.value)
+      const relayBody = [note, relayItinerary].filter(Boolean).join('\n')
+      if (relayBody) {
+        try {
+          await submitH5Feedback(s.token, `📨 境外旅行社协调意见（一手 PandaKing 转达）：\n${relayBody}`, user.value?.name || roleLabel(role.value), 'pandaking')
+        } catch {
+          /* 透传省地接社失败不阻断主流程 */
+        }
+      }
     } else {
       // 断点2 修复：省地接社提交成本建议并通知一手 → 带一手「可编辑」链接（原只读 shareRoute 改为可编辑），
       // 与旅行社分支对称；成本①/利润①权限隔离不受影响（令牌仅指向该 route 的一手协作视图）。
