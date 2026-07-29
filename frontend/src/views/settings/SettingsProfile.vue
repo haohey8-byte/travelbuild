@@ -50,7 +50,7 @@ const ROLE_LABEL: Record<Role, string> = {
     <div class="card" style="margin-top: 16px">
       <h3>协作说明（物理隔绝）</h3>
       <p class="muted">
-        本平台采用<b>物理隔绝</b>设计：一手 PandaKing、旅行社、省地接社三方数据互不越权可见。
+        本平台采用<b>物理隔绝</b>设计： PandaKing、旅行社、省地接社三方数据互不越权可见。
         旅行社与省地接社互相不知道对方的存在与数据；价格与成本信息按角色严格裁剪。
         你看到的「我的路线 / 我的询价」仅包含归属于本机构的数据。
       </p>

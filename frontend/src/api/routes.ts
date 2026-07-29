@@ -13,7 +13,7 @@ import type {
   IntakeLinkOpts,
 } from '@/types'
 
-// 一手查看已删除路线的归档快照（列表 / 详情）
+// 查看已删除路线的归档快照（列表 / 详情）
 export async function listRouteArchives(): Promise<RouteArchive[]> {
   const { data } = await client.get('/route-archives')
   return data
@@ -40,7 +40,7 @@ export async function createRoute(payload: unknown): Promise<Route> {
   return data
 }
 
-// 一手删除路线：后端先归档快照到 RouteArchive 备份历史库，再硬删（仅一手 PandaKing 可操作）
+// 删除路线：后端先归档快照到 RouteArchive 备份历史库，再硬删（仅 PandaKing 可操作）
 export async function deleteRoute(id: string): Promise<{ id: string; archived: boolean }> {
   const { data } = await client.delete(`/routes/${id}`)
   return data
@@ -90,7 +90,7 @@ export async function saveVersion(routeId: string, payload: unknown): Promise<Ro
 }
 
 // 生成协作 H5 共享链接
-// - role: 'agency' | 'pandaking' | 'provincial' —— 一手分享给旅行社时传 'agency'
+// - role: 'agency' | 'pandaking' | 'provincial' —— 分享给旅行社时传 'agency'
 // - isPublic: true = 公开(对客)只读 SSR 页（仅暴露对客价 guestPrice）；false = 内部交互页（按 role 可见性）
 export async function shareRoute(
   routeId: string,
@@ -115,13 +115,13 @@ export async function routeAction(
   return data
 }
 
-// 反馈记录（H5 链接反馈 + 一手回传反馈 + 控制台建议），供协作双方查看
+// 反馈记录（H5 链接反馈 + 回传反馈 + 控制台建议），供协作双方查看
 export async function fetchRouteFeedback(routeId: string): Promise<RouteFeedbackItem[]> {
   const { data } = await client.get(`/routes/${routeId}/feedback`)
   return data
 }
 
-// 控制台协作反馈：境外旅行社 / 省地接社 在详情页把建议提交给一手 PandaKing（不触发状态流转）
+// 控制台协作反馈：境外旅行社 / 省地接社 在详情页把建议提交给 PandaKing（不触发状态流转）
 export async function submitConsoleFeedback(
   routeId: string,
   content: string,
@@ -136,20 +136,20 @@ export async function submitConsoleFeedback(
   return data
 }
 
-// 一手将路线分配给省地接社（分配后该省地接社可见并参与协作）
+// 将路线分配给省地接社（分配后该省地接社可见并参与协作）
 export async function assignProvincial(routeId: string, provincialId: string): Promise<Route> {
   const { data } = await client.post(`/routes/${routeId}/assign-provincial`, { provincialId })
   return data
 }
 
-// 一手将路线改派给某境外旅行社：更新归属机构并使旧 agency 协作令牌失效、生成新令牌。
+// 将路线改派给某境外旅行社：更新归属机构并使旧 agency 协作令牌失效、生成新令牌。
 // 返回新的 agency H5 令牌与链接（用于重新生成微信文案与 URL）。
 export async function assignAgency(routeId: string, agencyId: string): Promise<{ token: string; link: string }> {
   const { data } = await client.post(`/routes/${routeId}/assign-agency`, { agencyId })
   return data
 }
 
-// 一手向省地接社发起成本询价 → 返回 H5 链接（复制发微信群）
+// 向省地接社发起成本询价 → 返回 H5 链接（复制发微信群）
 export async function createCostInquiry(
   routeId: string,
   provincialId: string,
@@ -158,19 +158,19 @@ export async function createCostInquiry(
   return data
 }
 
-// 成本询价列表（按权限隔离：一手全部；省地接社仅本机构）
+// 成本询价列表（按权限隔离：全部；省地接社仅本机构）
 export async function listCostInquiries(routeId?: string): Promise<CostInquiry[]> {
   const { data } = await client.get('/cost-inquiries', { params: routeId ? { routeId } : undefined })
   return data
 }
 
-// 一手将询价成本①写入路线报价
+// 将询价成本①写入路线报价
 export async function applyCostInquiry(inquiryId: string): Promise<{ ok: boolean }> {
   const { data } = await client.post(`/cost-inquiries/${inquiryId}/apply`)
   return data
 }
 
-// 一手发起「省地接社协作 H5」：一次操作完成分配 + 发起成本询价，返回统一协作链接
+// 发起「省地接社协作 H5」：一次操作完成分配 + 发起成本询价，返回统一协作链接
 export async function createProvincialShare(
   routeId: string,
   provincialId?: string,
@@ -189,7 +189,7 @@ export async function ensureProvincialShare(
 }
 
 // 幂等获取「境外旅行社协作 H5」令牌：同 route 复用已有令牌，不重复创建。
-// 一手在控制台「回传反馈 / 状态通知」时生成旅行社可编辑链接，形成多轮往返闭环。
+// 在控制台「回传反馈 / 状态通知」时生成旅行社可编辑链接，形成多轮往返闭环。
 export async function ensureAgencyShare(
   routeId: string,
 ): Promise<{ token: string; link: string }> {
@@ -197,8 +197,8 @@ export async function ensureAgencyShare(
   return data
 }
 
-// 幂等获取「一手（PandaKing）协作 H5」令牌：同 route 复用已有令牌，不重复创建。
-// 境外旅行社在控制台「提交建议 / 状态通知」时生成一手可编辑链接，对称形成多轮往返闭环。
+// 幂等获取「（PandaKing）协作 H5」令牌：同 route 复用已有令牌，不重复创建。
+// 境外旅行社在控制台「提交建议 / 状态通知」时生成可编辑链接，对称形成多轮往返闭环。
 export async function ensurePandakingShare(
   routeId: string,
 ): Promise<{ token: string; link: string }> {

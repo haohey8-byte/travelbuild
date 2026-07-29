@@ -11,7 +11,7 @@ interface AuthUser {
   level: 'admin' | 'staff'
 }
 
-// 路线归档历史：查看一手已删除路线的备份快照
+// 路线归档历史：查看已删除路线的备份快照
 @Controller('route-archives')
 @UseGuards(JwtAuthGuard)
 export class RouteArchiveController {

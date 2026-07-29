@@ -2,14 +2,14 @@ import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/commo
 import { PrismaService } from '../../prisma/prisma.service'
 import { Role } from './role-visibility'
 
-// 路线归档历史查看服务：仅一手 PandaKing 可查看已删除路线的备份快照
+// 路线归档历史查看服务：仅 PandaKing 可查看已删除路线的备份快照
 @Injectable()
 export class RouteArchiveService {
   constructor(private readonly prisma: PrismaService) {}
 
   private assertPandaking(role: Role) {
     if (role !== 'pandaking') {
-      throw new ForbiddenException('仅一手 PandaKing 可查看路线归档')
+      throw new ForbiddenException('仅 PandaKing 可查看路线归档')
     }
   }
 

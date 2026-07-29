@@ -3,8 +3,8 @@ export type Role = 'pandaking' | 'agency' | 'provincial'
 
 export type RouteStatusKey =
   | 'consulting'            // 咨询中（草稿，未提交）
-  | 'awaiting_pk_confirm'   // 待一手确认（旅行社已发草案）
-  | 'awaiting_agency_revision' // 待旅行社修订（一手回传反馈）
+  | 'awaiting_pk_confirm'   // 待确认（旅行社已发草案）
+  | 'awaiting_agency_revision' // 待旅行社修订（回传反馈）
   | 'awaiting_quote'        // 待报价
   | 'awaiting_feedback'     // 待反馈
   | 'awaiting_confirm'      // 待确认
@@ -29,7 +29,7 @@ export interface Route {
   version?: string
   lastAction?: string
   versions?: RouteVersion[]
-  // 路线归属账号名（创建者，即 PandaKing 平台方），供控制台页替代「一手」字眼显示具体账号名
+  // 路线归属账号名（创建者，即 PandaKing 平台方），供控制台页显示具体账号名
   ownerName?: string | null
 }
 
@@ -48,7 +48,7 @@ export interface QuoteLevel {
   profit1Mode?: ProfitMode // PandaKing 利润表示（金额/百分比），默认 amount
   profit1?: number // PandaKing 利润值（默认 0）
   quoteA?: number // 行级 PandaKing 报价（可选冗余存储，便于前端直接显示）
-  // 兼容旧字段（历史数据迁移期保留）：cost2=旧一手利润、markup=旧旅行社加价
+  // 兼容旧字段（历史数据迁移期保留）：cost2=旧利润、markup=旧旅行社加价
   cost2?: number
   markup?: number
   guestPrice?: number // 行级/合计对客价（冗余，便于 PDF 与公开 H5 复用）
@@ -176,18 +176,18 @@ export interface H5Route {
   // 双向协作回路：对端可编辑令牌（PandaKing 视图返回 agencyToken，旅行社/公开视图返回 pandakingToken）
   pandakingToken?: string | null
   agencyToken?: string | null
-  // token 模式（一手枢纽 /h5/pk-route/:token）分配/改派省地接社与生成省地接协作链接所需字段
+  // token 模式（枢纽 /h5/pk-route/:token）分配/改派省地接社与生成省地接协作链接所需字段
   // （仅 pandaking 非公开令牌返回，避免向省地接/旅行社/对客链接泄漏内部机构信息）
   provincialId?: string | null
   provincialAgencies?: { id: string; name: string }[]
   provincialToken?: string | null
-  // 路线归属账号名（创建者，即 PandaKing 平台方），用于 H5 内替代「一手」字眼显示具体注册名
+  // 路线归属账号名（创建者，即 PandaKing 平台方），用于 H5 内显示具体注册名
   ownerName?: string | null
   // 旅行社协作 H5（role=agency）归属的具体旅行社机构名（后端 getH5 解析，用于明示「具体是哪家旅行社」）
   agencyName?: string | null
   // 净化报价：仅含对客报价（guestPrice），不含成本①/②/加价（公开 H5 不泄漏内部成本）
   // 旅行社视角（role=agency, public=false）下 totals 还会返回 quoteA/profit2Mode/profit2，便于 H5 旅行社视图加利润②
-  // 一手视角（role=pandaking, public=false）下返回全量：items 含 cost1/profit1Mode/profit1/quoteA，totals 含 quoteA/profit2
+  // 视角（role=pandaking, public=false）下返回全量：items 含 cost1/profit1Mode/profit1/quoteA，totals 含 quoteA/profit2
   quote?: {
     items?: {
       name?: string
@@ -224,7 +224,7 @@ export interface H5Feedback {
   createdAt: string
 }
 
-// 路线反馈记录（控制台与 H5 页共用）：H5 链接反馈 + 一手回传反馈 + 控制台建议
+// 路线反馈记录（控制台与 H5 页共用）：H5 链接反馈 + 回传反馈 + 控制台建议
 export interface RouteFeedbackItem {
   id: string
   source: 'h5' | 'console'
@@ -239,7 +239,7 @@ export interface CostInquiryItem {
   amount: number
 }
 
-// 成本询价（一手 ↔ 省地接社）
+// 成本询价（ ↔ 省地接社）
 export interface CostInquiry {
   id: string
   routeId: string
@@ -251,7 +251,7 @@ export interface CostInquiry {
   createdAt: string
 }
 
-// 路线归档历史（一手删除路线时的备份快照）
+// 路线归档历史（删除路线时的备份快照）
 export interface RouteArchive {
   id: string
   routeId: string
@@ -266,7 +266,7 @@ export interface RouteArchive {
   createdAt: string
 }
 
-// 省地接社协作 H5 令牌（一手生成，省地接社打开可编辑分配给自己的行程）
+// 省地接社协作 H5 令牌（生成，省地接社打开可编辑分配给自己的行程）
 export interface ProvincialShare {
   token: string
   link: string

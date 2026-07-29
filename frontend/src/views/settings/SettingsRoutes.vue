@@ -40,7 +40,7 @@ async function load() {
 }
 
 function open(r: Route) {
-  // 非一手：只读态打开（隐藏保存/提交/协作按钮）；一手：可编辑
+  // 非：只读态打开（隐藏保存/提交/协作按钮）；：可编辑
   router.push({ path: `/routes/${r.id}`, query: isReadonly ? { ro: '1' } : {} })
 }
 function verLabel(r: Route) {

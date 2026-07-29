@@ -646,7 +646,7 @@ async function onSend() {
   sendErr.value = ''
   try {
   await submitH5Feedback(token, content, authorName.value.trim() || undefined)
-  // 旅行社视角的纯反馈，也需透传省地接社（一手转达），不含任何报价/利润②
+  // 旅行社视角的纯反馈，也需透传省地接社（转达），不含任何报价/利润②
   if (isAgencyView.value) {
     try {
       await submitH5Feedback(token, `📨 旅行社协调意见：\n${content}`, authorName.value.trim() || undefined, 'pandaking')

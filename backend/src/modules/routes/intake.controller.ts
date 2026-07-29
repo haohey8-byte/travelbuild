@@ -33,7 +33,7 @@ export class IntakeController {
   constructor(private readonly svc: RoutesService) {}
 
   // 预发机构提交链接：钉死 agencyId，返回 token + H5 链接。
-  // 一手 PandaKing 可为任意境外社预发；境外社仅可为「自己机构」预发（双向协作）。
+  // PandaKing 可为任意境外社预发；境外社仅可为「自己机构」预发（双向协作）。
   // 支持有效期选项：permanent / expiresInDays / customExpiresAt + note。每机构单条常驻（重复预发作废旧链接）。
   @Post('intake-link')
   @UseGuards(JwtAuthGuard)
@@ -59,7 +59,7 @@ export class IntakeController {
     throw new ForbiddenException('无权限操作')
   }
 
-  // 原地编辑提交链接（PATCH）：改有效期 / 备注，不改 token。一手可编辑任意；境外社仅可编辑自己机构。
+  // 原地编辑提交链接（PATCH）：改有效期 / 备注，不改 token。可编辑任意；境外社仅可编辑自己机构。
   @Patch('intake-link/:token')
   @UseGuards(JwtAuthGuard)
   updateIntakeLink(
@@ -78,7 +78,7 @@ export class IntakeController {
     })
   }
 
-  // 撤销提交链接（DELETE）：作废 token，旧链接立即失效。一手可撤任意；境外社仅可撤自己机构。
+  // 撤销提交链接（DELETE）：作废 token，旧链接立即失效。可撤任意；境外社仅可撤自己机构。
   @Delete('intake-link/:token')
   @UseGuards(JwtAuthGuard)
   deleteIntakeLink(@Param('token') token: string, @CurrentUser() user: AuthUser) {
@@ -95,14 +95,14 @@ export class IntakeController {
     return this.svc.submitIntake(body)
   }
 
-  // 已生成链接列表：一手见全部；境外社仅见自己机构的链接；省地接社无
+  // 已生成链接列表：见全部；境外社仅见自己机构的链接；省地接社无
   @Get('intake-links')
   @UseGuards(JwtAuthGuard)
   listIntakeLinks(@CurrentUser() user: AuthUser) {
     return this.svc.listIntakeLinks(user)
   }
 
-  // 复制计数（复制历史）：一手与境外社可操作（境外社仅见自己链接，但允许复制）
+  // 复制计数（复制历史）：与境外社可操作（境外社仅见自己链接，但允许复制）
   @Post('intake-link/:token/copy')
   @UseGuards(JwtAuthGuard)
   markCopied(@Param('token') token: string, @CurrentUser() user: AuthUser) {

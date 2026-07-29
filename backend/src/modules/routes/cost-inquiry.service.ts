@@ -10,9 +10,9 @@ import { Prisma } from '@prisma/client'
 import type { AuthPrincipal } from '../auth/auth.service'
 import { recalcQuote } from './role-visibility'
 
-// 成本询价（一手 ↔ 省地接社）—— 对应 doc/04-接口契约/H5协作链接.md 与 PRD「成本询价」
-// 流程：一手在路线详情发起询价（指定省地接社机构）→ 生成 H5 链接（复制发微信群）
-//       → 省地接社打开 H5 填成本①并提交 → 一手在路线详情「应用」把成本①写入路线报价
+// 成本询价（ ↔ 省地接社）—— 对应 doc/04-接口契约/H5协作链接.md 与 PRD「成本询价」
+// 流程：在路线详情发起询价（指定省地接社机构）→ 生成 H5 链接（复制发微信群）
+//       → 省地接社打开 H5 填成本①并提交 → 在路线详情「应用」把成本①写入路线报价
 // 物理隔绝：询价仅对「该省地接社机构」可见；境外旅行社不可见任何询价。
 @Injectable()
 export class CostInquiryService {
@@ -22,10 +22,10 @@ export class CostInquiryService {
     return Math.random().toString(36).slice(2) + Date.now().toString(36)
   }
 
-  // 一手发起成本询价（指定省地接社机构）
+  // 发起成本询价（指定省地接社机构）
   async create(routeId: string, provincialId: string, caller: AuthPrincipal) {
     if (caller.role !== 'pandaking') {
-      throw new ForbiddenException('仅一手 PandaKing 可发起成本询价')
+      throw new ForbiddenException('仅 PandaKing 可发起成本询价')
     }
     if (!provincialId?.trim()) throw new BadRequestException('必须指定省地接社机构编号')
     const target = await this.prisma.agency.findUnique({ where: { id: provincialId.trim() } })
@@ -65,7 +65,7 @@ export class CostInquiryService {
       status: ci.status,
       cost1: ci.cost1 != null ? Number(ci.cost1) : null,
       costItems: (ci.costItems as { name: string; amount: number }[] | undefined) ?? [],
-      // 路线归属账号名（创建者，即 PandaKing 平台方），用于 H5 内替代「一手」字眼
+      // 路线归属账号名（创建者，即 PandaKing 平台方），用于 H5 内显示具体注册名
       ownerName: owner?.name ?? 'PandaKing',
       // 被询价省地接社机构名，用于回传通知文案个性化（显示为具体机构名）
       agencyName,
@@ -99,7 +99,7 @@ export class CostInquiryService {
     return { id: updated.id, status: updated.status, cost1: Number(updated.cost1) }
   }
 
-  // 列表（按权限隔离）：一手可见全部（可按 routeId 过滤）；省地接社仅见本机构；旅行社不可见
+  // 列表（按权限隔离）：可见全部（可按 routeId 过滤）；省地接社仅见本机构；旅行社不可见
   async list(routeId: string | undefined, caller: AuthPrincipal) {
     const where: { routeId?: string; provincialId?: string } = {}
     if (routeId) where.routeId = routeId
@@ -127,12 +127,12 @@ export class CostInquiryService {
     }))
   }
 
-  // 一手将询价成本①写入路线报价（按项目合并，并重新计算合计）
+  // 将询价成本①写入路线报价（按项目合并，并重新计算合计）
   // 核心：省地接社反馈的 costItems 不是只写入 totals.cost1，而是写入 quote.items，
   // 让报价表（按项目展示）和成本询价明细保持一致。
   async applyToRoute(inquiryId: string, caller: AuthPrincipal) {
     if (caller.role !== 'pandaking') {
-      throw new ForbiddenException('仅一手 PandaKing 可应用成本询价')
+      throw new ForbiddenException('仅 PandaKing 可应用成本询价')
     }
     const ci = await this.prisma.costInquiry.findUniqueOrThrow({ where: { id: inquiryId } })
     const rawCostItems = (ci.costItems as { name?: string; amount?: number }[] | undefined) ?? []

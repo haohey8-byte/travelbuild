@@ -67,7 +67,7 @@ const actionOk = ref('')
 const savingDraft = ref(false)
 const savingNotify = ref(false)
 const doing = ref('')
-// 编辑区「反馈建议」输入框（agency / provincial 提交给一手 PandaKing 的建议，与状态流转 tab 的反馈分开）
+// 编辑区「反馈建议」输入框（agency / provincial 提交给 PandaKing 的建议，与状态流转 tab 的反馈分开）
 const consSuggestion = ref('')
 
 // —— 协作通知弹窗（发起询价 / 保存并报价 共用 NotifyDialog）——
@@ -85,7 +85,7 @@ const pdfErr = ref('')
 const pdfModel = ref<PdfModel | null>(null)
 const pdfWrap = ref<HTMLElement | null>(null)
 
-// 版本开放范围（权限矩阵 4.7 / 5.8）：一手=全部；旅行社=旅行社版+游客版；其余无
+// 版本开放范围（权限矩阵 4.7 / 5.8）：=全部；旅行社=旅行社版+游客版；其余无
 const pdfVersionOptions = computed<{ value: PdfVersion; label: string }[]>(() => {
   if (role.value === 'pandaking') {
     return [
@@ -154,7 +154,7 @@ async function onExportPdf() {
   }
 }
 
-// —— 反馈记录（H5 链接反馈 + 一手回传反馈，协作双方可见）——
+// —— 反馈记录（H5 链接反馈 + 回传反馈，协作双方可见）——
 const feedbackList = ref<RouteFeedbackItem[]>([])
 async function loadFeedback() {
   try {
@@ -215,7 +215,7 @@ function removeMeal(d: Day, i: number) {
 }
 
 // —— 报价（项目可自定义名称；成本① + 利润1 = 报价A；报价A + 利润2 = 对客价）——
-// 价格表已抽取为共用组件 QuoteTable（一手/旅行社/省地接社同页），此处仅保留数据与角色标志。
+// 价格表已抽取为共用组件 QuoteTable（/旅行社/省地接社同页），此处仅保留数据与角色标志。
 const quoteItems = ref<QuoteLevel[]>([])
 // 境外旅行社利润2（元/%），作用于报价A 合计 → 对客价（由 QuoteTable 双向绑定）
 const profit2Mode = ref<'amount' | 'percent'>('amount')
@@ -227,7 +227,7 @@ const baselineProfit2 = ref(0)
 const baselineItinerary = ref<{ days: { day: number; city: string }[] }>({ days: [] })
 // PandaKing 视角「补充说明（可选）」——随「保存并报价 / 发起询价」一并记录为修改说明
 const pkSuggestion = ref('')
-// 当前角色：token 模式（移动枢纽）始终以一手 PandaKing 身份操作，无需登录
+// 当前角色：token 模式（移动枢纽）始终以 PandaKing 身份操作，无需登录
 const role = computed(() => (tokenMode.value ? 'pandaking' : auth.currentRole))
 // 乐观锁基准：加载时所基于的版本 ID，保存时回传后端做并发校验（防止控制台旧数据覆盖 H5 新修改）
 const baseVersionId = ref<string | null>(null)
@@ -264,7 +264,7 @@ const isAgency = computed(() => role.value === 'agency')
 const isProv = computed(() => role.value === 'provincial')
 // 只读态：从「系统设置 → 我的路线」打开时为 true，隐藏保存/提交/协作按钮（agency/provincial 概览）
 const readonly = computed(() => route.query.ro === '1')
-// 路线归属账号名（创建者 = PandaKing 平台方），用于替代「一手」字眼，显示具体注册名
+// 路线归属账号名（创建者 = PandaKing 平台方），用于显示具体注册名
 const ownerName = computed(() => data.value?.ownerName || 'PandaKing')
 
 // —— 状态流转 ——
@@ -370,14 +370,14 @@ function checkHasChange(ch: ProvincialChanges) {
   const itinChanged = !!ch.itinerary && ch.itinerary.cityChanges.length > 0
   return costChanged || profit2Changed || itinChanged
 }
-// 一手 → 省地接社：仅展示成本① + 行程（利润① 对省地接社不可见，不应出现在摘要）
+// → 省地接社：仅展示成本① + 行程（利润① 对省地接社不可见，不应出现在摘要）
 const changesForProvincial = computed<ProvincialChanges>(() => buildChanges(['cost1', 'itinerary']))
 const hasProvincialChange = computed(() => checkHasChange(changesForProvincial.value))
-// 一手 → 境外旅行社：仅展示利润② + 行程（利润① 是 PandaKing 内部字段，不应向旅行社摘要）
+// → 境外旅行社：仅展示利润② + 行程（利润① 是 PandaKing 内部字段，不应向旅行社摘要）
 const changesForAgency = computed<ProvincialChanges>(() => buildChanges(['profit2', 'itinerary']))
 const hasAgencyChange = computed(() => checkHasChange(changesForAgency.value))
 
-// —— 省地接社协作（一手：用于「发起询价」弹窗的机构选择 + 「状态与协作」tab 的成本询价列表）——
+// —— 省地接社协作（：用于「发起询价」弹窗的机构选择 + 「状态与协作」tab 的成本询价列表）——
 const costInquiries = ref<CostInquiry[]>([])
 const loadingInquiries = ref(false)
 const collabProvId = ref('') // 「发起询价」弹窗内选定的省地接社机构 ID
@@ -395,7 +395,7 @@ const inquireErr = ref('')
 // 省地接社是否已分配（驱动三态状态条 + 发起询价按钮可用性）
 const provAssigned = computed(() => !!data.value?.provincialId)
 
-// 省地接社机构下拉选项（一手分配/询价用）
+// 省地接社机构下拉选项（分配/询价用）
 const provincialAgencies = ref<Agency[]>([])
 const loadingProvincialAgencies = ref(false)
 async function loadProvincialAgencies() {
@@ -484,7 +484,7 @@ const quoteTargetLabel = computed(() => {
   return name ? `向"${name}"发报价` : '（未关联旅行社）'
 })
 
-// 一手「🏢 分配 / 改派省地接社」—— 轻量弹窗：仅改 route.provincialId，不发通知、不生成 CostInquiry/RouteShare
+// 「🏢 分配 / 改派省地接社」—— 轻量弹窗：仅改 route.provincialId，不发通知、不生成 CostInquiry/RouteShare
 function openAssignDialog(isReassign: boolean) {
   assignIsReassign.value = isReassign
   assignProvId.value = isReassign ? (data.value?.provincialId || '') : ''
@@ -528,7 +528,7 @@ async function confirmAssign() {
   }
 }
 
-// 一手「🤝 发起询价」—— 仅当已分配省地接社时可打开（按钮已 disabled 未分配态）；
+// 「🤝 发起询价」—— 仅当已分配省地接社时可打开（按钮已 disabled 未分配态）；
 // 不再在打开时自动保存版本（C1：仅点「生成询价链接」由 doInquire 保存），避免污染版本历史
 async function openInquireDialog() {
   // 预选当前已关联机构（若有），弹窗内可重新选择改派
@@ -539,7 +539,7 @@ async function openInquireDialog() {
   inquireDialog.value = true
 }
 
-// 一手「💼 保存并报价」—— 自动保存 → 生成结构化文案 + URL → 自动复制 → 弹 NotifyDialog
+// 「💼 保存并报价」—— 自动保存 → 生成结构化文案 + URL → 自动复制 → 弹 NotifyDialog
 async function openQuoteDialog() {
   if (!data.value) return
   savingNotify.value = true
@@ -547,7 +547,7 @@ async function openQuoteDialog() {
   actionOk.value = ''
   try {
     if (tokenMode.value && token) {
-      // token 模式：免登录保存一手编辑并生成对境外旅行社的「可编辑」链接
+      // token 模式：免登录保存编辑并生成对境外旅行社的「可编辑」链接
       const res = await submitH5PandakingEdit(token, {
         itinerary: itinerary.value,
         quote: buildQuote(),
@@ -671,7 +671,7 @@ async function doInquire() {
   inquireErr.value = ''
   try {
     if (tokenMode.value && token) {
-      // token 模式：先保存一手编辑，再免登录分配省地接社并生成其「可编辑」协作链接
+      // token 模式：先保存编辑，再免登录分配省地接社并生成其「可编辑」协作链接
       await submitH5PandakingEdit(token, { itinerary: itinerary.value, quote: buildQuote() })
       const assigned = await assignProvincialByToken(token, collabProvId.value.trim())
       h5.value = assigned
@@ -926,7 +926,7 @@ async function onSaveDraft() {
   actionOk.value = ''
   try {
     if (tokenMode.value && token) {
-      // token 模式：免登录保存一手编辑（仅保存，不通知任何人）
+      // token 模式：免登录保存编辑（仅保存，不通知任何人）
       await submitH5PandakingEdit(token, { itinerary: itinerary.value, quote: buildQuote() })
       actionOk.value = '草稿已保存'
       await loadTokenMode(token)
@@ -976,16 +976,16 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
       let notifyChanges: ProvincialChanges = currentChangesForPk.value
       try {
         if (isPk.value) {
-          // 一手回传反馈 / 状态通知 → 带旅行社「可编辑」链接，形成多轮往返闭环
+          // 回传反馈 / 状态通知 → 带旅行社「可编辑」链接，形成多轮往返闭环
           const s = await ensureAgencyShare(id)
           link = agencyH5Url(s.token)
           notifyChanges = changesForAgency.value
         } else if (isAgency.value) {
-          // 旅行社回传反馈 / 状态通知 → 带一手「可编辑」链接，对称形成多轮往返闭环
+          // 旅行社回传反馈 / 状态通知 → 带「可编辑」链接，对称形成多轮往返闭环
           const s = await ensurePandakingShare(id)
           link = pandakingH5Url(s.token)
         } else if (isProv.value) {
-          // 断点2 修复：省地接社回传反馈 / 状态通知 → 带一手「可编辑」链接（原只读链接改为可编辑），
+          // 断点2 修复：省地接社回传反馈 / 状态通知 → 带「可编辑」链接（原只读链接改为可编辑），
           // 对称形成 PandaKing↔省地接社 多轮往返闭环；成本①/利润①权限隔离不受影响。
           const s = await ensurePandakingShare(id)
           link = pandakingH5Url(s.token)
@@ -1032,10 +1032,10 @@ async function onAction(a: { key: string; label: string; needNote?: boolean }) {
 
 /* ============================================================
    编辑区保存栏：按三角色统一「保存 / 通知」逻辑
-   - 一手 PandaKing：保存草稿 + 保存并通知（生成面向客户的 H5 链接）
-   - 境外旅行社 agency：保存草稿 + 提交建议并通知一手（保存加价 + 把建议发给一手，不生成客户链接）
-   - 省地接社 provincial：保存草稿 + 保存成本并通知一手（保存行程/成本说明 + 把建议发给一手）
-   「保存并通知」对非一手角色 = 一次提交即把工作与建议通知上游，不再额外生成客户 H5 链接。
+   - PandaKing：保存草稿 + 保存并通知（生成面向客户的 H5 链接）
+   - 境外旅行社 agency：保存草稿 + 提交建议并通知（保存加价 + 把建议发给，不生成客户链接）
+   - 省地接社 provincial：保存草稿 + 保存成本并通知（保存行程/成本说明 + 把建议发给）
+   「保存并通知」对非角色 = 一次提交即把工作与建议通知上游，不再额外生成客户 H5 链接。
    ============================================================ */
 async function onSubmitSuggestion(who: 'agency' | 'provincial') {
   if (who !== 'agency' && who !== 'provincial') return
@@ -1060,7 +1060,7 @@ async function onSubmitSuggestion(who: 'agency' | 'provincial') {
     return
   }
 
-  // 2) 提交反馈建议给一手（允许为空：仅保存工作也可）。合并「本轮变更摘要」一并记录
+  // 2) 提交反馈建议给（允许为空：仅保存工作也可）。合并「本轮变更摘要」一并记录
   const note = consSuggestion.value.trim()
   // 按当前操作方角色选取变更域：旅行社只能改利润②+行程；省地接社只能改成本①+行程
   // 面向 PandaKing 的摘要用对客总价替代利润②（利润② 不得暴露给枢纽）
@@ -1089,7 +1089,7 @@ async function onSubmitSuggestion(who: 'agency' | 'provincial') {
   let link = ''
   try {
     if (who === 'agency') {
-      // 旅行社提交建议并通知一手 → 带一手「可编辑」链接，对称形成多轮往返闭环
+      // 旅行社提交建议并通知 → 带「可编辑」链接，对称形成多轮往返闭环
       const s = await ensurePandakingShare(id)
       link = pandakingH5Url(s.token)
       // 透传省地接社：用同一 route 的 pandaking 令牌提交 source='h5' 反馈，
@@ -1106,8 +1106,8 @@ async function onSubmitSuggestion(who: 'agency' | 'provincial') {
         }
       }
     } else {
-      // 断点2 修复：省地接社提交成本建议并通知一手 → 带一手「可编辑」链接（原只读 shareRoute 改为可编辑），
-      // 与旅行社分支对称；成本①/利润①权限隔离不受影响（令牌仅指向该 route 的一手协作视图）。
+      // 断点2 修复：省地接社提交成本建议并通知 → 带「可编辑」链接（原只读 shareRoute 改为可编辑），
+      // 与旅行社分支对称；成本①/利润①权限隔离不受影响（令牌仅指向该 route 的协作视图）。
       const s = await ensurePandakingShare(id)
       link = pandakingH5Url(s.token)
     }
@@ -1433,7 +1433,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
             </p>
           </div>
 
-          <!-- 一手：本轮变更摘要 + 补充说明（可选） -->
+          <!-- ：本轮变更摘要 + 补充说明（可选） -->
           <div v-if="isPk && !readonly" class="pk-extra">
             <div v-if="hasAnyChange" class="ch-summary">
               <h4>📋 本轮变更摘要</h4>
@@ -1445,7 +1445,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
             </div>
           </div>
 
-          <!-- 一手：省地接社协作三态状态条（分配 / 改派 入口，紧跟协作动作上方） -->
+          <!-- ：省地接社协作三态状态条（分配 / 改派 入口，紧跟协作动作上方） -->
           <div v-if="isPk && !readonly" class="pk-statusbar" :class="provAssigned ? 'assigned' : 'unassigned'">
             <template v-if="!provAssigned">
               <span class="pk-sb-icon">⚠️</span>
@@ -1459,7 +1459,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
             </template>
           </div>
 
-          <!-- 一手：发起询价 + 保存并报价（双主操作，弹 NotifyDialog 统一弹结构化文案+URL） -->
+          <!-- ：发起询价 + 保存并报价（双主操作，弹 NotifyDialog 统一弹结构化文案+URL） -->
           <div v-if="isPk && !readonly" class="pk-actions">
             <button class="d-btn primary block" :disabled="!provAssigned || savingDraft || savingNotify" :title="provAssigned ? '' : '请先在上方状态条分配省地接社'" @click="openInquireDialog">
               🤝 发起询价（{{ inquireTargetLabel }}）
@@ -1472,19 +1472,19 @@ const collabEvents = computed<CollabEvent[]>(() => {
             </button>
           </div>
 
-          <!-- 非一手：反馈建议输入框（提交给一手 PandaKing） -->
+          <!-- 非：反馈建议输入框（提交给 PandaKing） -->
           <div v-if="(isAgency || isProv) && !readonly" class="suggest">
             <label>补充说明（可选）</label>
             <textarea v-model="consSuggestion" rows="2" :placeholder="isAgency ? ('填写对报价 / 行程的补充说明，将随报价一并通知 ' + ownerName) : ('填写成本补充说明，将通知 ' + ownerName)"></textarea>
           </div>
 
-          <!-- 非一手：本轮变更摘要（旅行社加价 / 行程调整后实时展示） -->
+          <!-- 非：本轮变更摘要（旅行社加价 / 行程调整后实时展示） -->
           <div v-if="isAgency && hasAnyChange && !readonly" class="ch-summary">
             <h4>📋 本轮变更摘要</h4>
             <pre>{{ formatQuoteChanges(currentChanges) }}</pre>
           </div>
 
-          <!-- 非一手：保存栏（与一手对称：仅保存 + 提交建议并通知） -->
+          <!-- 非：保存栏（与对称：仅保存 + 提交建议并通知） -->
           <div v-if="!isPk && !readonly" class="savebar">
             <button class="d-btn ghost" :disabled="savingDraft || savingNotify" @click="onSaveDraft">
               {{ savingDraft ? '保存中…' : '仅保存' }}
@@ -1703,7 +1703,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
         </template>
       </div>
 
-      <!-- ============ 协作通知弹窗（一手复用）============ -->
+      <!-- ============ 协作通知弹窗（复用）============ -->
       <NotifyDialog
         v-model:open="inquireDialog"
         :title="'🤝 发起询价（' + inquireTargetLabel + '）'"
@@ -2123,7 +2123,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
   .token-hub { padding-bottom: 84px; }
 }
 
-/* ===== 省地接社协作三态状态条（一手）===== */
+/* ===== 省地接社协作三态状态条（）===== */
 .pk-statusbar {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 12px 14px; border-radius: var(--r-md, 10px); margin-bottom: 14px;

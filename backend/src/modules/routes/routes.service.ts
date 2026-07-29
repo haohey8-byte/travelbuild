@@ -24,7 +24,7 @@ export interface CreateRouteInput {
   customerNameCn?: string
   country: string
   agency: string
-  agencyId?: string // 一手创建时必须指定境外旅行社机构编号
+  agencyId?: string // 创建时必须指定境外旅行社机构编号
   destination: string
   groupSize?: number
   travelDate?: string
@@ -54,7 +54,7 @@ export class RoutesService {
   }
 
   // 列表（按角色字段级过滤 + 机构物理隔绝）
-  // 物理隔绝：一手见全部；境外旅行社仅见「本机构(agencyId)」路线；省地接社见「被分配(provincialId)」路线。
+  // 物理隔绝：见全部；境外旅行社仅见「本机构(agencyId)」路线；省地接社见「被分配(provincialId)」路线。
   async findAll(status?: string, principal?: RoutePrincipal) {
     const role = principal?.role ?? 'agency'
     const where: { statusKey?: string; agencyId?: string; provincialId?: string } = status
@@ -103,10 +103,10 @@ export class RoutesService {
     return this.serialize(route, effectiveRole)
   }
 
-  // 一手将路线分配给某省地接社：分配后该省地接社可见并参与协作规划与报价（成本询价）
+  // 将路线分配给某省地接社：分配后该省地接社可见并参与协作规划与报价（成本询价）
   async assignProvincial(routeId: string, provincialId: string, principal?: RoutePrincipal) {
     if (principal && principal.role !== 'pandaking') {
-      throw new ForbiddenException('仅一手 PandaKing 可分配省地接社')
+      throw new ForbiddenException('仅 PandaKing 可分配省地接社')
     }
     if (!provincialId?.trim()) throw new BadRequestException('必须指定省地接社机构')
     const target = await this.prisma.agency.findUnique({ where: { id: provincialId.trim() } })
@@ -124,12 +124,12 @@ export class RoutesService {
     return this.serialize(updated, principal?.role ?? 'pandaking')
   }
 
-  // 一手将路线改派给某境外旅行社：更新 route.agencyId/agency，并使旧 agency 协作令牌失效、
+  // 将路线改派给某境外旅行社：更新 route.agencyId/agency，并使旧 agency 协作令牌失效、
   // 生成指向最新版本的新 agency 协作令牌（agency H5 链接随之刷新）。
-  // 旅行社未变时幂等复用既有令牌。仅一手 PandaKing 可操作。
+  // 旅行社未变时幂等复用既有令牌。仅 PandaKing 可操作。
   async assignAgency(routeId: string, agencyId: string, principal?: RoutePrincipal) {
     if (principal && principal.role !== 'pandaking') {
-      throw new ForbiddenException('仅一手 PandaKing 可分配旅行社')
+      throw new ForbiddenException('仅 PandaKing 可分配旅行社')
     }
     if (!agencyId?.trim()) throw new BadRequestException('必须指定旅行社机构')
     const target = await this.prisma.agency.findUnique({ where: { id: agencyId.trim() } })
@@ -173,10 +173,10 @@ export class RoutesService {
     }
     let agencyId: string | null = null
     let agencyName: string = input.agency?.trim() || ''
-    // 一手创建：必须指定 agencyId（选择境外旅行社）
+    // 创建：必须指定 agencyId（选择境外旅行社）
     if (role === 'pandaking') {
       if (!input.agencyId?.trim()) {
-        throw new BadRequestException('一手创建路线必须指定旅行社（agencyId）')
+        throw new BadRequestException('创建路线必须指定旅行社（agencyId）')
       }
       const agencyOrg = await this.prisma.agency.findUnique({
         where: { id: input.agencyId.trim() },
@@ -200,7 +200,7 @@ export class RoutesService {
       const agencyOrg = await this.prisma.agency.findUnique({ where: { id: agencyId } })
       agencyName = agencyOrg?.name || agencyName
     }
-    // 协作模式由旅行社发起草案 → 初始「咨询中」（未提交）；一手 solo 直接「待报价」
+    // 协作模式由旅行社发起草案 → 初始「咨询中」（未提交）； solo 直接「待报价」
     const statusKey: StatusKey =
       modeKey === 'solo' ? STATUS.AWAITING_QUOTE : STATUS.CONSULTING
     const route = await this.prisma.route.create({
@@ -242,12 +242,12 @@ export class RoutesService {
     return this.serialize(created, principal?.role ?? 'pandaking')
   }
 
-  // 一手删除路线 + 归档备份：删除前把路线主记录及关联数据快照写入 RouteArchive 历史表，
-  // 再硬删（cascade 删 versions/shares，手动删 feedbacks/costInquiries）。仅一手 PandaKing 可操作。
+  // 删除路线 + 归档备份：删除前把路线主记录及关联数据快照写入 RouteArchive 历史表，
+  // 再硬删（cascade 删 versions/shares，手动删 feedbacks/costInquiries）。仅 PandaKing 可操作。
   async remove(id: string, principal?: RoutePrincipal) {
-    // 权限：仅一手 PandaKing 可删除路线（按 PRD 权限矩阵）
+    // 权限：仅 PandaKing 可删除路线（按 PRD 权限矩阵）
     if (principal && principal.role !== 'pandaking') {
-      throw new ForbiddenException('仅一手 PandaKing 可删除路线')
+      throw new ForbiddenException('仅 PandaKing 可删除路线')
     }
     const route = await this.prisma.route
       .findUnique({
@@ -311,7 +311,7 @@ export class RoutesService {
       })
     }
     // 报价按角色隔离写入：
-    //  - 一手(pandaking)：全量写入 cost1/cost2/markup
+    //  - (pandaking)：全量写入 cost1/cost2/markup
     //  - 旅行社(agency)：仅可改自身加价 markup，成本①/②取自上一版（旅行社不可见）并重算对客总价
     //  - 省地接社(provincial)：不写价，价格保留上一版（地接成本由成本询价闭环回填）
     let quote: any = null
@@ -320,7 +320,7 @@ export class RoutesService {
     } else if (role === 'provincial') {
       quote = (latest?.quote as object) ?? null
     } else {
-      // 一手 PandaKing：全量写入并据 items 重算 totals
+      // PandaKing：全量写入并据 items 重算 totals
       quote = recalcQuote(input.quote)
     }
     const version = await this.prisma.routeVersion.create({
@@ -392,10 +392,10 @@ export class RoutesService {
   }
 
   // 幂等获取「境外旅行社协作 H5」令牌：同一 route 复用已存在的非公开 agency 令牌，不重复创建。
-  // 用于一手在控制台「回传反馈 / 状态通知」时生成旅行社可编辑链接，形成多轮往返闭环。
+  // 用于在控制台「回传反馈 / 状态通知」时生成旅行社可编辑链接，形成多轮往返闭环。
   async ensureAgencyShare(routeId: string, principal?: RoutePrincipal) {
     if (principal && principal.role !== 'pandaking') {
-      throw new ForbiddenException('仅一手 PandaKing 可获取旅行社协作链接')
+      throw new ForbiddenException('仅 PandaKing 可获取旅行社协作链接')
     }
     const existing = await this.prisma.routeShare.findFirst({
       where: { routeId, role: 'agency', public: false, costInquiryId: null },
@@ -407,12 +407,12 @@ export class RoutesService {
     return { token: share.token, link: `/h5/route/${share.token}` }
   }
 
-  // 幂等获取「一手（PandaKing）协作 H5」令牌：同一 route 复用已存在的非公开 pandaking 令牌，不重复创建。
-  // 用于境外旅行社 / 省地接社在控制台「提交建议 / 状态通知」时生成一手可编辑链接，形成多轮往返闭环。
+  // 幂等获取「（PandaKing）协作 H5」令牌：同一 route 复用已存在的非公开 pandaking 令牌，不重复创建。
+  // 用于境外旅行社 / 省地接社在控制台「提交建议 / 状态通知」时生成可编辑链接，形成多轮往返闭环。
   async ensurePandakingShare(routeId: string, principal?: RoutePrincipal) {
-    // 一手自身无需获取自己的协作链接（H5 协作页内已持有 pandakingToken）
+    // 自身无需获取自己的协作链接（H5 协作页内已持有 pandakingToken）
     if (principal && principal.role === 'pandaking') {
-      throw new ForbiddenException('一手无需获取自身协作链接')
+      throw new ForbiddenException('无需获取自身协作链接')
     }
     const existing = await this.prisma.routeShare.findFirst({
       where: { routeId, role: 'pandaking', public: false, costInquiryId: null },
@@ -424,11 +424,11 @@ export class RoutesService {
     return { token: share.token, link: `/h5/route/${share.token}` }
   }
 
-  // 一手生成「省地接社协作 H5」令牌：同时完成分配 + 发起成本询价，
+  // 生成「省地接社协作 H5」令牌：同时完成分配 + 发起成本询价，
   // 一个 share 关联一个 CostInquiry，省地接社打开统一链接即可编辑行程并填写成本①。
   async createProvincialShare(routeId: string, provincialId?: string, principal?: RoutePrincipal) {
     if (principal && principal.role !== 'pandaking') {
-      throw new ForbiddenException('仅一手 PandaKing 可发起省地接社协作')
+      throw new ForbiddenException('仅 PandaKing 可发起省地接社协作')
     }
     const route = await this.prisma.route.findUniqueOrThrow({ where: { id: routeId } }).catch(() => {
       throw new NotFoundException('路线不存在')
@@ -474,11 +474,11 @@ export class RoutesService {
   }
 
   // 幂等获取「省地接社协作 H5」令牌：同一 route + 省地接社 复用已存在的令牌/成本询价，
-  // 不重复创建（避免一手多次点「保存并通知/发起协作」后省地接社收到多个链接与多条询价记录）。
+  // 不重复创建（避免多次点「保存并通知/发起协作」后省地接社收到多个链接与多条询价记录）。
   // 仅在尚不存在时新建（逻辑等同 createProvincialShare）。
   async ensureProvincialShare(routeId: string, provincialId?: string, principal?: RoutePrincipal) {
     if (principal && principal.role !== 'pandaking') {
-      throw new ForbiddenException('仅一手 PandaKing 可发起省地接社协作')
+      throw new ForbiddenException('仅 PandaKing 可发起省地接社协作')
     }
     const route = await this.prisma.route.findUniqueOrThrow({ where: { id: routeId } }).catch(() => {
       throw new NotFoundException('路线不存在')
@@ -592,7 +592,7 @@ export class RoutesService {
     return new Date(Date.now() + 30 * 24 * 3600 * 1000) // 默认 30 天
   }
 
-  // 已生成机构提交链接列表（按角色裁剪：一手见全部；境外社仅见自己机构；省地接社无）
+  // 已生成机构提交链接列表（按角色裁剪：见全部；境外社仅见自己机构；省地接社无）
   async listIntakeLinks(principal?: { role: Role; agencyId: string | null }) {
     // 省地接社无提交链接视角（提交链接仅境外社），返回空
     if (principal?.role === 'provincial') return []
@@ -643,7 +643,7 @@ export class RoutesService {
   }
 
   // 撤销提交链接（DELETE）：作废该 token，旧链接立即失效。
-  // 权限：一手可撤任意；境外社仅可撤自己机构的链接。
+  // 权限：可撤任意；境外社仅可撤自己机构的链接。
   async deleteIntakeLink(
     token: string,
     principal?: { role: Role; agencyId: string | null },
@@ -716,7 +716,7 @@ export class RoutesService {
   }
 
   // 机构凭提交链接（免登录）提交路线初稿 → 创建 Route（归属钉死 agencyId）+ 初始版本。
-  // createdById 记为发链接的 PandaKing（机构无账号）；modeKey=collab → 状态「咨询中（待一手确认）」。
+  // createdById 记为发链接的 PandaKing（机构无账号）；modeKey=collab → 状态「咨询中（待确认）」。
   async submitIntake(body: {
     token: string
     customerName: string
@@ -870,7 +870,7 @@ export class RoutesService {
           routeId: share.routeId,
           OR: [
             { id: share.id }, // 本端省地接社协作令牌
-            { role: 'pandaking', public: false, costInquiryId: null }, // 对端一手可编辑令牌
+            { role: 'pandaking', public: false, costInquiryId: null }, // 对端可编辑令牌
           ],
         },
         data: { versionId: syncedVersionId },
@@ -1013,7 +1013,7 @@ export class RoutesService {
     })
   }
 
-  // 一手 PandaKing 凭协作令牌在 H5 内全量编辑行程与价格（成本① + 利润① + 利润②），
+  // PandaKing 凭协作令牌在 H5 内全量编辑行程与价格（成本① + 利润① + 利润②），
   // 提交后生成新版本快照（与省地接社 provincialEdit 一致），并同步本端/对端令牌指向新版。
   async pandakingEdit(
     token: string,
@@ -1025,7 +1025,7 @@ export class RoutesService {
     }
     const base = await this.latestVersion(share.routeId)
     if (!base) throw new NotFoundException('路线暂无版本')
-    // 一手只改自身层（成本① + 利润①）；利润②归境外旅行社，必须从上一版保留，
+    // 只改自身层（成本① + 利润①）；利润②归境外旅行社，必须从上一版保留，
     // 绝不能由传入覆盖/清零（否则会误伤旅行社已设的对客加价）。
     const baseQuote = (base.quote as { items?: any[]; totals?: any }) || { items: [], totals: {} }
     const baseTotals = baseQuote.totals || {}
@@ -1057,7 +1057,7 @@ export class RoutesService {
     await this.prisma.routeShare.update({ where: { token }, data: { versionId: version.id } })
     await this.syncPeerVersion(share.routeId, 'agency', version.id)
     // 省地接社协作令牌（关联 costInquiryId，syncPeerVersion 不匹配）→ 独立同步，
-    // 确保 PandaKing 经「控制台省→一手通知」发来的可编辑链接改完行程后，
+    // 确保 PandaKing 经「控制台省→通知」发来的可编辑链接改完行程后，
     // 省地接社重开协作链接仍见最新版（PandaKing↔省地接社 多轮往返闭环）。
     await this.prisma.routeShare.updateMany({
       where: { routeId: share.routeId, role: 'provincial' },
@@ -1074,7 +1074,7 @@ export class RoutesService {
     }
   }
 
-  // 一手凭 pandaking 协作令牌在 H5 内直接分配/改派省地接社（免登录，与 pandakingEdit 同鉴权范式）。
+  // 凭 pandaking 协作令牌在 H5 内直接分配/改派省地接社（免登录，与 pandakingEdit 同鉴权范式）。
   // 仅校验 share.role==='pandaking' && !share.public（令牌即授权，不依赖控制台 JWT）。
   // 写入 route.provincialId（与控制台 assignProvincial 同一字段，无新建数据模型），
   // 返回刷新后的 getH5(token) 视图，便于前端直接刷新枢钮状态条、机构下拉与对端令牌。
@@ -1200,7 +1200,7 @@ export class RoutesService {
         )[0] ?? null
     }
     // 公开(对客)链接：仅暴露对客价 guestPrice，不泄漏内部成本①/利润；
-    // 其余按 share.role 做字段级可见性（省地接社仅成本①、旅行社见报价A、一手全见）。
+    // 其余按 share.role 做字段级可见性（省地接社仅成本①、旅行社见报价A、全见）。
     const visible = (share.public
       ? maskQuotePublic(version?.quote ?? null)
       : hideCostsForRole(version?.quote ?? null, effRole)) as {
@@ -1222,12 +1222,12 @@ export class RoutesService {
       role: effRole,
       // 无版本时给空行程，省地接社可新建第一天（provincialEdit 会自动落 v1）
       itinerary: version?.itinerary ?? { days: [] },
-      // 按角色字段级可见性返回报价：省地接社仅见成本①、旅行社见报价A、一手全见
+      // 按角色字段级可见性返回报价：省地接社仅见成本①、旅行社见报价A、全见
       quote: visible,
       guestPrice: (visible?.totals?.guestPrice as number) ?? null,
-      // 路线归属账号名（PandaKing 平台方），用于 H5 内替代「一手」字眼。
+      // 路线归属账号名（PandaKing 平台方），用于 H5 内显示具体注册名。
       // 路线可能由机构账号(agency/provincial)创建，其 createdById 并非 PandaKing，
-      // 此时回退到 PandaKing 平台账号，而非把上游机构名当作「一手」。
+      // 此时回退到 PandaKing 平台账号，而非把上游机构名当作归属账号。
       ownerName: await this.resolveOwnerName(route),
     }
     if (share.role === 'provincial' && share.costInquiry) {
@@ -1269,7 +1269,7 @@ export class RoutesService {
     if (share.role === 'provincial') {
       result.pandakingToken = await this.resolvePeerToken(route.id, 'pandaking', version?.id)
     }
-    // 一手枢纽视图（token 模式）：补充「分配/改派省地接社」所需的机构列表与当前已分配机构 id，
+    // 枢纽视图（token 模式）：补充「分配/改派省地接社」所需的机构列表与当前已分配机构 id，
     // 以及省地接协作令牌（token 模式「保存并回传省地接社」生成链接用）。
     // 仅对 pandaking 非公开令牌返回，避免向省地接/旅行社/对客链接泄漏内部机构信息。
     if (share.role === 'pandaking' && !share.public) {
@@ -1284,7 +1284,7 @@ export class RoutesService {
     return result
   }
 
-  // 解析路线归属的 PandaKing 账号名（H5 / 控制台替代「一手」字眼用）。
+  // 解析路线归属的 PandaKing 账号名（H5 / 控制台显示具体注册名用）。
   // 路线可能由机构账号(agency/provincial)创建，其 createdById 并非 PandaKing，
   // 此时回退到 PandaKing 平台账号；多 PandaKing 场景下取首个平台账号
   // （如需精确归属可后续在 Route 上挂 pandakingOwnerId，再按 agencyId 归属反查）。
@@ -1332,7 +1332,7 @@ export class RoutesService {
     }
   }
 
-  // 反馈记录（协作双方可见）：H5 链接提交的反馈 + 一手「回传反馈」(写在最新版本 itinerary.pkFeedback)
+  // 反馈记录（协作双方可见）：H5 链接提交的反馈 + 「回传反馈」(写在最新版本 itinerary.pkFeedback)
   // 角色隔离：agency 仅见 agency↔PandaKing 反馈；provincial 仅见 provincial↔PandaKing 反馈；
   // PandaKing 为枢纽，可见全部。所有协作均以 PandaKing 为接收方，故按 authorRole 过滤即可隔离两路叶子角色。
   private feedbackRoleWhere(role?: Role) {
@@ -1355,7 +1355,7 @@ export class RoutesService {
       content: f.content,
       createdAt: f.createdAt.toISOString(),
     }))
-    // 一手「回传反馈」写在最新版本的 itinerary.pkFeedback
+    // 「回传反馈」写在最新版本的 itinerary.pkFeedback
     const latest = await this.latestVersion(routeId)
     const pk = latest?.itinerary && (latest.itinerary as { pkFeedback?: unknown }).pkFeedback
     const consoleFb: {
@@ -1371,7 +1371,7 @@ export class RoutesService {
         id: `pk-${latest!.id}`,
         source: 'console',
         authorRole: 'pandaking',
-        authorName: '一手地接社',
+        authorName: '地接社',
         content: pk,
         createdAt: latest!.createdAt.toISOString(),
       })
@@ -1389,7 +1389,7 @@ export class RoutesService {
       throw new NotFoundException('协作链接已过期')
     }
     // 公开(对客)链接：面向终端客户。客户反馈 authorRole 存为 null（不归入任何内部角色），
-    // 故客户视图仅显示「一手 PandaKing 的回复」+「本链接客户自己提交的反馈(token 匹配)」，
+    // 故客户视图仅显示「 PandaKing 的回复」+「本链接客户自己提交的反馈(token 匹配)」，
     // 彻底杜绝客户看到 agency/provincial 内部反馈，也杜绝客户反馈泄漏到 agency/provincial 视图。
     const fbWhere = share.public
       ? { OR: [{ authorRole: 'pandaking' }, { token: share.token }] }
@@ -1408,8 +1408,8 @@ export class RoutesService {
     }))
   }
 
-  // 控制台协作反馈：境外旅行社 / 省地接社 在路线详情页把报价建议 / 成本说明提交给一手 PandaKing。
-  // 与「一手回传反馈」(pkFeedback) 不同，本接口不触发状态流转，仅落反馈记录（协作时间线可见）。
+  // 控制台协作反馈：境外旅行社 / 省地接社 在路线详情页把报价建议 / 成本说明提交给 PandaKing。
+  // 与「回传反馈」(pkFeedback) 不同，本接口不触发状态流转，仅落反馈记录（协作时间线可见）。
   async submitConsoleFeedback(
     routeId: string,
     content: string,
@@ -1419,7 +1419,7 @@ export class RoutesService {
   ) {
     if (principal) {
       if (principal.role === 'pandaking') {
-        throw new ForbiddenException('一手请使用「状态流转 → 回传反馈」提交修改意见')
+        throw new ForbiddenException('请使用「状态流转 → 回传反馈」提交修改意见')
       }
       await this.assertVisible(routeId, principal)
     }
@@ -1483,7 +1483,7 @@ export class RoutesService {
   }
 
   // 只读可见性断言（读接口：详情/版本/反馈）：境外旅行社见本机构路线；
-  // 省地接社见「被分配」路线（provincialId 命中自身机构）；一手全见。
+  // 省地接社见「被分配」路线（provincialId 命中自身机构）；全见。
   // 与 assertVisible（写操作守卫）区分——本方法放开省地接社只读，以支撑「我的路线」。
   private async assertReadable(routeId: string, principal?: RoutePrincipal) {
     if (!principal) return
@@ -1491,7 +1491,7 @@ export class RoutesService {
     if (!route) throw new NotFoundException('路线不存在')
     if (principal.role === 'pandaking') return
     if (principal.role === 'agency') {
-      // 旧 token 降级：缺 agencyId 视为一手，跳过隔离校验
+      // 旧 token 降级：缺 agencyId 视为，跳过隔离校验
       if (!principal.agencyId) return
       if (route.agencyId !== principal.agencyId) throw new NotFoundException('路线不存在')
       return
@@ -1505,15 +1505,15 @@ export class RoutesService {
   }
 
   // —— 双向协作回路 ——
-  // 旅行社提交草案 → 待一手确认
+  // 旅行社提交草案 → 待确认
   submitDraft(routeId: string, principal: RoutePrincipal) {
     return this.transition(routeId, ACTION.SUBMIT_DRAFT, principal)
   }
-  // 一手确认采用 → 待报价
+  // 确认采用 → 待报价
   pkConfirm(routeId: string, principal: RoutePrincipal) {
     return this.transition(routeId, ACTION.PK_CONFIRM, principal)
   }
-  // 一手回传修改反馈 → 待旅行社修订（反馈标注写回最新版本）
+  // 回传修改反馈 → 待旅行社修订（反馈标注写回最新版本）
   async pkFeedback(routeId: string, feedback: unknown, principal: RoutePrincipal) {
     const route = await this.transition(routeId, ACTION.PK_FEEDBACK, principal)
     const latest = await this.latestVersion(routeId)
@@ -1530,11 +1530,11 @@ export class RoutesService {
     }
     return route
   }
-  // 旅行社修订重交 → 待一手确认
+  // 旅行社修订重交 → 待确认
   reviseByAgency(routeId: string, principal: RoutePrincipal) {
     return this.transition(routeId, ACTION.SUBMIT_DRAFT, principal)
   }
-  // 一手发报价 v1 → 待反馈
+  // 发报价 v1 → 待反馈
   sendV1(routeId: string, principal: RoutePrincipal) {
     return this.transition(routeId, ACTION.SEND_V1, principal)
   }
@@ -1562,7 +1562,7 @@ export class RoutesService {
     if (principal.role === 'provincial') {
       throw new ForbiddenException('省地接社不参与商业状态流转，请通过行程编辑与成本询价协作')
     }
-    // 物理隔绝：境外旅行社只能操作「本机构」路线；一手可操作全部
+    // 物理隔绝：境外旅行社只能操作「本机构」路线；可操作全部
     if (principal.role === 'agency' && route.agencyId !== principal.agencyId) {
       throw new NotFoundException('路线不存在')
     }
@@ -1596,7 +1596,7 @@ export class RoutesService {
 
   // 按角色序列化（字段级可见性 + 机构物理隔绝）
   // 视线剥离：境外旅行社不返回 provincialId；省地接社不返回 agencyId 与 agency(旅行社名称)，
-  // 确保双方互不知道对方的存在与机构标识（一手保留全部）。
+  // 确保双方互不知道对方的存在与机构标识（保留全部）。
   private serialize(route: any, role: Role): any {
     const { versions, createdBy, ...rest } = route
     const safe: Record<string, unknown> = { ...rest }
@@ -1608,7 +1608,7 @@ export class RoutesService {
     }
     return {
       ...safe,
-      // 路线归属账号名（创建者，即 PandaKing 平台方），供控制台页替代「一手」字眼显示具体账号名
+      // 路线归属账号名（创建者，即 PandaKing 平台方），供控制台页显示具体账号名
       ownerName: createdBy?.name ?? null,
       versions: (versions ?? []).map((v: any) => this.serializeVersion(v, role)),
     }

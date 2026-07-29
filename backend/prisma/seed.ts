@@ -30,7 +30,7 @@ async function ensureUser(id: string, data: Record<string, unknown>) {
 async function main() {
   // 唯一管理员账号 seed-pk —— 仅首次创建；已改密的不覆盖（迁移兜底见下）
   const pandaking = await ensureUser('seed-pk', {
-    name: 'PandaKing 一手',
+    name: 'PandaKing9',
     role: 'pandaking',
     level: 'admin',
     phone: SEED_ADMIN_PHONE,

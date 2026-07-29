@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 报价明细表（共用组件）：一手 / 境外旅行社 / 省地接社 共用同一套价格页面。
+// 报价明细表（共用组件）： / 境外旅行社 / 省地接社 共用同一套价格页面。
 // - pandaking：全编辑（成本① + 利润①=报价A + 利润②=对客价）
 // - agency：   只读报价A 作为自身成本，可改利润②生成对客价
 // - provincial：仅填成本①（利润列隐藏）；手机/PC 同页
@@ -32,7 +32,7 @@ const isProv = computed(() => props.role === 'provincial')
 
 const canEditCost1 = computed(() => (isPk.value || isProv.value) && !props.readOnly)
 const canEditProfit1 = computed(() => isPk.value && !props.readOnly)
-// 利润②归境外旅行社，一手 PandaKing 永远不可编辑（仅旅行社视图可改）
+// 利润②归境外旅行社， PandaKing 永远不可编辑（仅旅行社视图可改）
 const canEditProfit2 = computed(() => isAgency.value && !props.readOnly)
 const canEditName = computed(() => (isPk.value || isProv.value) && !props.readOnly)
 const canAdd = computed(() => (isPk.value || isProv.value) && !props.readOnly)

@@ -34,7 +34,7 @@ export class AuthController {
     return this.svc.exchangeCode(body.code)
   }
 
-  // 创建邀请（两层级：一手邀请机构管理员 → 管理员/一手邀请机构员工）
+  // 创建邀请（两层级：邀请机构管理员 → 管理员/邀请机构员工）
   @Post('invites')
   @UseGuards(JwtAuthGuard)
   createInvite(
@@ -141,7 +141,7 @@ export class AuthController {
     return this.svc.createAgency(body, user as AuthPrincipal)
   }
 
-  // 删除机构：硬删 + 前置校验（仅一手）
+  // 删除机构：硬删 + 前置校验（仅）
   @Delete('agencies/:id')
   @UseGuards(JwtAuthGuard)
   deleteAgency(@Param('id') id: string, @CurrentUser() user: AuthUser) {
@@ -154,7 +154,7 @@ export class AuthController {
     return this.svc.listAgencies(user as AuthPrincipal)
   }
 
-  // 修改旅行社档案 / 切换启用禁用（name / contact / disabled 部分更新，仅一手）
+  // 修改旅行社档案 / 切换启用禁用（name / contact / disabled 部分更新，仅）
   @Patch('agencies/:id')
   @UseGuards(JwtAuthGuard)
   updateAgency(
@@ -165,7 +165,7 @@ export class AuthController {
     return this.svc.updateAgency(id, body, user as AuthPrincipal)
   }
 
-  // 改成员角色（仅一手）
+  // 改成员角色（仅）
   @Put('members/:id/role')
   @UseGuards(JwtAuthGuard)
   updateMemberRole(
@@ -176,7 +176,7 @@ export class AuthController {
     return this.svc.updateMemberRole(id, body.role, user as AuthPrincipal)
   }
 
-  // 停用成员（仅一手）
+  // 停用成员（仅）
   @Post('members/:id/disable')
   @UseGuards(JwtAuthGuard)
   disableMember(@Param('id') id: string, @CurrentUser() user: AuthUser) {

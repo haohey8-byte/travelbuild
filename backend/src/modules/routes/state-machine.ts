@@ -5,10 +5,10 @@
 
 export const STATUS = {
   CONSULTING: 'consulting', // 咨询中（草稿，未提交）
-  AWAITING_PK_CONFIRM: 'awaiting_pk_confirm', // 待一手确认
+  AWAITING_PK_CONFIRM: 'awaiting_pk_confirm', // 待确认
   AWAITING_AGENCY_REVISION: 'awaiting_agency_revision', // 待旅行社修订
   AWAITING_QUOTE: 'awaiting_quote', // 待报价
-  AWAITING_FEEDBACK: 'awaiting_feedback', // 待反馈（一手已发 v1，等旅行社）
+  AWAITING_FEEDBACK: 'awaiting_feedback', // 待反馈（已发 v1，等旅行社）
   AWAITING_CONFIRM: 'awaiting_confirm', // 待确认（旅行社已加价）
   CONFIRMED: 'confirmed', // 已确认
   BOOKED: 'booked', // 已成单
@@ -21,9 +21,9 @@ export type StatusKey = (typeof STATUS)[keyof typeof STATUS]
 // 状态转移动作
 export const ACTION = {
   SUBMIT_DRAFT: 'submit_draft', // 旅行社提交草案（含修订重交）
-  PK_CONFIRM: 'pk_confirm', // 一手确认采用
-  PK_FEEDBACK: 'pk_feedback', // 一手回传修改反馈
-  SEND_V1: 'send_v1', // 一手发报价 v1（待报价 → 待反馈）
+  PK_CONFIRM: 'pk_confirm', // 确认采用
+  PK_FEEDBACK: 'pk_feedback', // 回传修改反馈
+  SEND_V1: 'send_v1', // 发报价 v1（待报价 → 待反馈）
   AGENCY_MARKUP: 'agency_markup', // 旅行社加价（待反馈 → 待确认）
   TOURIST_CONFIRM: 'tourist_confirm', // 游客确认（待确认 → 已确认）
   PAY: 'pay', // 付款（已确认 → 已成单）

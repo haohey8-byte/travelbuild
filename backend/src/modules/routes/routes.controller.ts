@@ -46,7 +46,7 @@ export class RoutesController {
     )
   }
 
-  // 一手删除路线：删除前归档快照到 RouteArchive 备份历史库（仅一手 PandaKing 可操作）
+  // 删除路线：删除前归档快照到 RouteArchive 备份历史库（仅 PandaKing 可操作）
   @Delete(':id')
   remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.svc.remove(id, user)
@@ -57,7 +57,7 @@ export class RoutesController {
     return this.svc.getVersions(id, user)
   }
 
-  // 反馈记录（H5 链接反馈 + 一手回传反馈），供协作双方查看
+  // 反馈记录（H5 链接反馈 + 回传反馈），供协作双方查看
   @Get(':id/feedback')
   getFeedback(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.svc.getFeedback(id, user)
@@ -94,19 +94,19 @@ export class RoutesController {
     return this.svc.createShare(id, body?.role ?? user.role, undefined, body?.public ?? true)
   }
 
-  // 旅行社提交草案 → 待一手确认
+  // 旅行社提交草案 → 待确认
   @Post(':id/submit')
   submit(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.svc.submitDraft(id, user)
   }
 
-  // 一手确认采用 → 待报价
+  // 确认采用 → 待报价
   @Post(':id/confirm')
   pkConfirm(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.svc.pkConfirm(id, user)
   }
 
-  // 一手回传修改反馈 → 待旅行社修订
+  // 回传修改反馈 → 待旅行社修订
   @Post(':id/feedback')
   pkFeedback(
     @Param('id') id: string,
@@ -116,7 +116,7 @@ export class RoutesController {
     return this.svc.pkFeedback(id, body?.feedback, user)
   }
 
-  // 控制台协作反馈：境外旅行社 / 省地接社 把建议提交给一手（不触发状态流转）
+  // 控制台协作反馈：境外旅行社 / 省地接社 把建议提交给（不触发状态流转）
   @Post(':id/feedback-console')
   feedbackConsole(
     @Param('id') id: string,
@@ -132,19 +132,19 @@ export class RoutesController {
     )
   }
 
-  // 旅行社修订重交 → 待一手确认
+  // 旅行社修订重交 → 待确认
   @Post(':id/revise')
   revise(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.svc.reviseByAgency(id, user)
   }
 
-  // 一手发报价 v1 → 待反馈
+  // 发报价 v1 → 待反馈
   @Post(':id/send-v1')
   sendV1(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.svc.sendV1(id, user)
   }
 
-  // 一手向省地接社发起成本询价（指定省地接社机构编号）→ 返回 H5 链接
+  // 向省地接社发起成本询价（指定省地接社机构编号）→ 返回 H5 链接
   @Post(':id/cost-inquiry')
   createCostInquiry(
     @Param('id') id: string,
@@ -154,7 +154,7 @@ export class RoutesController {
     return this.costInquiry.create(id, body?.provincialId, user as any)
   }
 
-  // 一手将某路线分配给省地接社（分配后该省地接社可见并参与协作）
+  // 将某路线分配给省地接社（分配后该省地接社可见并参与协作）
   @Post(':id/assign-provincial')
   assignProvincial(
     @Param('id') id: string,
@@ -164,7 +164,7 @@ export class RoutesController {
     return this.svc.assignProvincial(id, body?.provincialId, user as any)
   }
 
-  // 一手将路线改派给某境外旅行社：更新归属机构并使旧 agency 协作令牌失效、生成新令牌。
+  // 将路线改派给某境外旅行社：更新归属机构并使旧 agency 协作令牌失效、生成新令牌。
   @Post(':id/assign-agency')
   assignAgency(
     @Param('id') id: string,
@@ -174,7 +174,7 @@ export class RoutesController {
     return this.svc.assignAgency(id, body?.agencyId, user as any)
   }
 
-  // 一手发起「省地接社协作 H5」：一次操作完成分配省地接社 + 发起成本询价，
+  // 发起「省地接社协作 H5」：一次操作完成分配省地接社 + 发起成本询价，
   // 生成的统一链接可让省地接社同时编辑行程并填写成本①。
   @Post(':id/provincial-share')
   createProvincialShare(
@@ -196,7 +196,7 @@ export class RoutesController {
   }
 
   // 幂等获取「境外旅行社协作 H5」令牌：同一 route 复用已有令牌，不重复创建。
-  // 一手在控制台「回传反馈 / 状态通知」时用它生成旅行社可编辑链接。
+  // 在控制台「回传反馈 / 状态通知」时用它生成旅行社可编辑链接。
   @Post(':id/agency-share/ensure')
   ensureAgencyShare(
     @Param('id') id: string,
@@ -205,8 +205,8 @@ export class RoutesController {
     return this.svc.ensureAgencyShare(id, user)
   }
 
-  // 幂等获取「一手（PandaKing）协作 H5」令牌：同一 route 复用已有令牌，不重复创建。
-  // 境外旅行社 / 省地接社在控制台「提交建议 / 状态通知」时用它生成一手可编辑链接。
+  // 幂等获取「（PandaKing）协作 H5」令牌：同一 route 复用已有令牌，不重复创建。
+  // 境外旅行社 / 省地接社在控制台「提交建议 / 状态通知」时用它生成可编辑链接。
   @Post(':id/pandaking-share/ensure')
   ensurePandakingShare(
     @Param('id') id: string,

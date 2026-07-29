@@ -1,7 +1,7 @@
 // 角色字段级可见性 + 报价重算 —— 对应 PRD 权限矩阵 Q4.1–Q4.5 与 doc/04-接口契约/权限矩阵.md
 // 报价统一形状：{ items: QuoteLevel[], totals: { cost1, profit1, quoteA, profit2, guestPrice } }
 //   - cost1   = 省地接社成本（成本①）
-//   - profit1 = 一手 PandaKing 利润（元或 %，默认 0）
+//   - profit1 = PandaKing 利润（元或 %，默认 0）
 //   - quoteA  = PandaKing 报价合计 = Σ(cost1 + profit1)
 //   - profit2 = 境外旅行社利润（元或 %，默认 0）
 //   - guestPrice = 对客总价 = profit2Mode==='percent' ? quoteA*(1+profit2/100) : quoteA+profit2
@@ -9,7 +9,7 @@
 //   PandaKing 层： 报价A = 成本① + 利润1（元/%）
 //   境外旅行社层： 对客价 = 报价A + 利润2（元/%）  （旅行社的「成本」是报价A，不是省地接社成本①）
 // 可见性规则：
-//   - pandaking（一手）：全见 cost1/profit1/quoteA/profit2/guestPrice
+//   - pandaking（）：全见 cost1/profit1/quoteA/profit2/guestPrice
 //   - agency（境外旅行社）：见 quoteA/guestPrice，隐藏内部成本 cost1/profit1（也隐藏自身利润细节外的内部）
 //   - provincial（省地接社）：仅见 cost1（自身成本），隐藏 PandaKing 报价与对客价（agency↔provincial 物理隔绝）
 //   - 公开 H5：仅 guestPrice（maskQuotePublic）

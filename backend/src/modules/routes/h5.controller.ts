@@ -70,7 +70,7 @@ export class H5Controller {
     return this.svc.agencyQuote(token, body)
   }
 
-  // 一手 PandaKing 协作 H5：凭 pandaking 令牌全量编辑行程 + 价格（成本① + 利润① + 利润②），
+  // PandaKing 协作 H5：凭 pandaking 令牌全量编辑行程 + 价格（成本① + 利润① + 利润②），
   // 免登录鉴权，提交后生成新版本并同步对端(agency)令牌指向新版，支撑 PandaKing↔旅行社 反复往返。
   @Post('route/:token/pandaking-edit')
   pandakingEdit(
@@ -90,7 +90,7 @@ export class H5Controller {
     return this.svc.agencyEdit(token, body)
   }
 
-  // 一手 PandaKing 协作 H5：凭 pandaking 令牌直接分配/改派省地接社（免登录，与 pandaking-edit 同鉴权范式）。
+  // PandaKing 协作 H5：凭 pandaking 令牌直接分配/改派省地接社（免登录，与 pandaking-edit 同鉴权范式）。
   // 这是「移动端枢纽也要能直接分配省地接社」的必要条件：token 模式无控制台 JWT，
   // 不能走 @CurrentUser 鉴权的 /routes/:id/assign-provincial，须由本端点认 pandakingToken。
   @Post('route/:token/pandaking-assign-provincial')

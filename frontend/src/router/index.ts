@@ -22,16 +22,16 @@ const router = createRouter({
     { path: '/route-archives/:id', name: 'route-archive-detail', component: () => import('@/views/RouteArchiveDetail.vue'), props: true },
     // 协作 H5（公开，免登录，隐藏主导航）
     { path: '/h5/route/:token', name: 'h5-route', component: () => import('@/views/H5Route.vue'), meta: { h5: true } },
-    // 一手 PandaKing 移动枢纽：复用控制台 RouteDetail 组件（tokenMode 认 pandakingToken，免登录）。
+    // PandaKing 移动枢纽：复用控制台 RouteDetail 组件（tokenMode 认 pandakingToken，免登录）。
     // 用于接收省地接/境外社回传通知后，PandaKing 在微信里直接打开该订单的可编辑枢纽页。
     { path: '/h5/pk-route/:token', name: 'h5-pk-route', component: () => import('@/views/RouteDetail.vue'), meta: { h5: true } },
-    // 邀请接受 H5（一手/管理员复制链接发到微信群，受邀者打开后接受）
+    // 邀请接受 H5（/管理员复制链接发到微信群，受邀者打开后接受）
     { path: '/h5/invite/:token', name: 'h5-invite', component: () => import('@/views/H5Invite.vue'), meta: { h5: true } },
     // 成本询价 H5 已退役：统一由「省地接社协作 H5」(H5ProvincialRoute) 承接。
     // 旧 /h5/cost-inquiry/:token 链接（含历史省地接社收到的询价链接）重定向到省地接社协作页；
     // 后端 getH5 会把成本询价令牌兜底解析到其关联的省地接社共享，故旧链接仍可正常打开。
     { path: '/h5/cost-inquiry/:token', redirect: '/h5/provincial-route/:token' },
-    // 省地接社协作 H5（一手复制链接发微信群，省地接社打开可编辑分配给自己的行程并反馈）
+    // 省地接社协作 H5（复制链接发微信群，省地接社打开可编辑分配给自己的行程并反馈）
     { path: '/h5/provincial-route/:token', name: 'h5-provincial-route', component: () => import('@/views/H5ProvincialRoute.vue'), meta: { h5: true } },
     // 机构提交链接 H5（外部旅行社凭 PandaKing 预发链接免登录提交路线初稿）
     { path: '/h5/intake/:token', name: 'h5-intake', component: () => import('@/views/H5Intake.vue'), meta: { h5: true } },

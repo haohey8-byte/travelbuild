@@ -168,7 +168,7 @@ function metaOf(r: Route): string {
   return parts.join(' · ')
 }
 
-// 机构列表（一手创建路线时用于选择境外旅行社）
+// 机构列表（创建路线时用于选择境外旅行社）
 const agencies = ref<Agency[]>([])
 const loadingAgencies = ref(false)
 const agencyError = ref<string | null>(null)
@@ -270,7 +270,7 @@ async function onCreate() {
       travelDate: form.value.travelDate || undefined,
       modeKey: form.value.modeKey,
     }
-    // 一手必须传 agencyId；旅行社不传，后端自动取本机构
+    // 必须传 agencyId；旅行社不传，后端自动取本机构
     if (user.value?.role === 'pandaking') {
       payload.agencyId = form.value.agencyId.trim()
     }
@@ -309,7 +309,7 @@ async function onCreate() {
   }
 }
 
-// 一手删除路线（删除前后端归档快照到 RouteArchive 备份历史库）
+// 删除路线（删除前后端归档快照到 RouteArchive 备份历史库）
 const isPandaking = computed(() => user.value?.role === 'pandaking')
 const pendingDelete = ref<Route | null>(null)
 const deleting = ref(false)
@@ -520,7 +520,7 @@ async function confirmDelete() {
       </div>
     </div>
 
-    <!-- 删除确认浮层（仅一手可见触发） -->
+    <!-- 删除确认浮层（仅可见触发） -->
     <div v-if="pendingDelete" class="modal-backdrop" @click.self="pendingDelete = null">
       <div class="modal">
         <h2>确认删除路线？</h2>

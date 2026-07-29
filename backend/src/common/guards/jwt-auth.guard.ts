@@ -16,7 +16,7 @@ interface AuthUser {
 
 // JWT 守卫：
 // - 携带有效 Bearer 时校验并注入 req.user（role/agencyId/level 取自 token，决定字段级可见性与隔离）
-// - 无 token / 无效 且 DEV_BYPASS_AUTH=true（开发态）时注入默认一手用户，便于联调
+// - 无 token / 无效 且 DEV_BYPASS_AUTH=true（开发态）时注入默认用户，便于联调
 // - 生产且无有效 token 时返回 401
 @Injectable()
 export class JwtAuthGuard implements CanActivate {

@@ -8,7 +8,7 @@ interface AuthUser {
 }
 
 // 知识库 —— 对应 doc/04-接口契约/知识库.md
-// 读公开；写需登录（一手/管理员维护沉淀）
+// 读公开；写需登录（/管理员维护沉淀）
 @Controller('knowledge')
 export class KbController {
   constructor(private readonly svc: KbService) {}

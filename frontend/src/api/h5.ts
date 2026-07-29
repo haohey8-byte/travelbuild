@@ -41,7 +41,7 @@ export async function submitH5AgencyQuote(
   return data
 }
 
-// 一手 PandaKing 协作 H5：凭 pandaking 令牌全量编辑行程 + 价格（成本①+利润①+利润②），
+// PandaKing 协作 H5：凭 pandaking 令牌全量编辑行程 + 价格（成本①+利润①+利润②），
 // 免登录鉴权（对应后端 POST /h5/route/:token/pandaking-edit），提交后生成新版本并同步对端令牌。
 export async function submitH5PandakingEdit(
   token: string,
@@ -57,7 +57,7 @@ export async function submitH5PandakingEdit(
   return data
 }
 
-// 一手 PandaKing 协作 H5：凭 pandaking 令牌直接分配/改派省地接社（免登录，对应后端
+// PandaKing 协作 H5：凭 pandaking 令牌直接分配/改派省地接社（免登录，对应后端
 // POST /h5/route/:token/pandaking-assign-provincial）。移动端枢纽也要能直接分配而不仅回控制台。
 // 返回刷新后的完整 H5 视图（与 getH5 一致），便于前端直接刷新枢纽状态条、机构下拉与对端令牌。
 export async function assignProvincialByToken(

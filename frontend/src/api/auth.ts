@@ -87,13 +87,13 @@ export async function createAgency(body: {
   return data
 }
 
-// D5：硬删机构（前置校验：无进行中路线、无未过期提交链接），仅一手
+// D5：硬删机构（前置校验：无进行中路线、无未过期提交链接），仅
 export async function deleteAgency(id: string): Promise<{ ok: boolean }> {
   const { data } = await client.delete(`/auth/agencies/${id}`)
   return data
 }
 
-// 修改旅行社档案 / 切换启用禁用（name / contact / disabled 部分更新），仅一手
+// 修改旅行社档案 / 切换启用禁用（name / contact / disabled 部分更新），仅
 export async function updateAgency(
   id: string,
   body: { name?: string; contact?: string; disabled?: boolean },

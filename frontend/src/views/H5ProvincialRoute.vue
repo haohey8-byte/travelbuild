@@ -22,7 +22,7 @@ const data = ref<H5Route | null>(null)
 const notFound = ref(false)
 const loading = ref(true)
 
-// —— PandaKing 登录检测（一手打开省地接社回传 URL 时显示「回传确认+加价」视图）——
+// —— PandaKing 登录检测（打开省地接社回传 URL 时显示「回传确认+加价」视图）——
 const auth = useAuthStore()
 const isPk = computed(() => auth.user?.role === 'pandaking')
 // PandaKing 视角预览开关：默认停留在 PandaKing 回传/编辑视图（PandaKing 的本职协作动作），
@@ -118,7 +118,7 @@ function removeMeal(d: Day, i: number) {
   d.meals.splice(i, 1)
 }
 
-// —— 回传说明（随「保存并回传一手」一并提交给一手）——
+// —— 回传说明（随「保存并回传」一并提交给）——
 const feedbackList = ref<RouteFeedbackItem[]>([])
 const fbText = ref('')
 const fbErr = ref('')
@@ -126,18 +126,18 @@ const provFbName = ref('') // 填写人（省地接社视图，预填机构名�
 const provFbSubmitting = ref(false) // 独立提交补充说明 loading
 const provFbStandaloneErr = ref('') // 独立提交补充说明错误
 
-// —— 成本①（省地接社按项目填写；与一手/旅行社共用同一报价表组件，利润默认 0）——
+// —— 成本①（省地接社按项目填写；与/旅行社共用同一报价表组件，利润默认 0）——
 const quoteItems = ref<QuoteLevel[]>([])
 const alreadySubmitted = ref(false)
 const costInquiryId = ref<string | null>(null)
 // 后端 getH5 返回的省地接社机构名（用于两条回传微信文案个性化展示，需求：文案带具体机构名）
 const provAgencyName = computed(() => data.value?.costInquiry?.agencyName || '')
-// 路线归属账号名（创建者，即 PandaKing 平台方）：用于 H5 内替代「一手」字眼，显示具体注册名
+// 路线归属账号名（创建者，即 PandaKing 平台方）：用于 H5 内显示具体注册名
 const ownerName = computed(() => data.value?.ownerName || 'PandaKing')
 // 省地接社回传反馈的作者名：仅显示机构名（如「新疆河马旅行社」），角色由历史记录徽章单独标「省地接社」
 const provAuthorName = computed(() => provAgencyName.value || '省地接社')
 const totalCost = computed(() => quoteItems.value.reduce((s, it) => s + (Number(it.cost1) || 0), 0))
-// 回传前的基线快照：用于多轮回传时计算「关键变更摘要」（与一手逐轮核对）
+// 回传前的基线快照：用于多轮回传时计算「关键变更摘要」（与逐轮核对）
 const initialCostItems = ref<{ name: string; cost1: number }[]>([])
 const initialItinerary = ref<{ days: { day: number; city: string; spots: string[]; hotel: string; meals: string[]; notes?: string }[] }>({ days: [] })
 function normalizeCostItems(): { name: string; cost1: number }[] {
@@ -352,7 +352,7 @@ async function onSubmitHandoff() {
   try {
     const items = normalizeCostItems()
     const payload: { itinerary: unknown; items?: { name: string; cost1: number }[] } = { itinerary: itinerary.value }
-    // 多轮协作：每轮都回传成本①（含变更），让一手逐轮核对价格变化，而非仅首次
+    // 多轮协作：每轮都回传成本①（含变更），让逐轮核对价格变化，而非仅首次
     if (items.length > 0) {
       payload.items = items.map((it) => ({ name: it.name, cost1: it.cost1 }))
     }
@@ -392,7 +392,7 @@ async function onSubmitHandoff() {
       ? `行程、报价与变更记录已保存并同步给 ${ownerName.value} ✅`
       : `行程与报价已保存并同步给 ${ownerName.value} ✅`
     if (data.value) {
-      // 多轮协作：计算本轮关键变更摘要，让一手一眼看清改了哪些价格/行程
+      // 多轮协作：计算本轮关键变更摘要，让一眼看清改了哪些价格/行程
       const afterItinerary = { days: itinerary.value.days }
       const changes = diffProvincialChanges({
         beforeItems: initialCostItems.value,
@@ -524,7 +524,7 @@ async function onPkGenerateLink() {
 }
 
 // PandaKing 在「回传确认」视图内，把调整后的行程与报价（成本①+利润①）「保存并回传省地接社」，
-// 形成微信 H5 链路 一手→省地接社 的多轮往返闭环。
+// 形成微信 H5 链路 →省地接社 的多轮往返闭环。
 // 走 pandakingEdit（pandaking 令牌）：写完整报价、保留利润②、并同步省地接社令牌指向新版
 // （见 routes.service.ts 的版本同步逻辑），省地接社重开协作链接即见本轮改动。
 async function onPkHandoffToProvincial() {
@@ -700,7 +700,7 @@ function goRouteDetail() {
           <!-- ════ 右栏：生成链接 + 文案 ════ -->
           <div class="prov-right">
 
-            <!-- ── 保存并回传省地接社（一手→省地接社 多轮往返；保存完整报价）── -->
+            <!-- ── 保存并回传省地接社（→省地接社 多轮往返；保存完整报价）── -->
             <button class="btn btn-primary pk-handoff-btn" :disabled="pkHandoffLoading" @click="onPkHandoffToProvincial">
               {{ pkHandoffLoading ? '回传中…' : (provAgencyName ? `💾 保存并回传省地接社（${provAgencyName}）` : '💾 保存并回传省地接社') }}
             </button>
@@ -1060,8 +1060,8 @@ function goRouteDetail() {
       </div>
     </div>
     <div v-else class="prov-content center">
-      <p>该询价已被一手改派给其他省地接社，本链接已失效。</p>
-      <p class="muted">请使用一手重新发送的最新询价链接参与协作。</p>
+      <p>该询价已被改派给其他省地接社，本链接已失效。</p>
+      <p class="muted">请使用重新发送的最新询价链接参与协作。</p>
       <button class="btn btn-primary" @click="goHome">返回工作台</button>
     </div>
 </template>

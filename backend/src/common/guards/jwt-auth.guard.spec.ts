@@ -10,7 +10,7 @@ function ctxWith(header?: string) {
 }
 
 describe('JwtAuthGuard', () => {
-  it('DEV_BYPASS_AUTH=true 注入默认一手用户', async () => {
+  it('DEV_BYPASS_AUTH=true 注入默认用户', async () => {
     process.env.DEV_BYPASS_AUTH = 'true'
     const guard = new JwtAuthGuard(new JwtService({ secret: 'x' }))
     const { req, ctx } = ctxWith()

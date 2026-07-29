@@ -103,7 +103,7 @@ onMounted(loadAdmins)
 <template>
   <div>
     <h2 class="section-title">管理员</h2>
-    <p class="muted">仅一手 PandaKing 可访问。管理员以手机号 + 密码登录控制台，支持多管理员与首次强制改密。</p>
+    <p class="muted">仅 PandaKing 可访问。管理员以手机号 + 密码登录控制台，支持多管理员与首次强制改密。</p>
 
     <div class="card">
       <div class="card-head">

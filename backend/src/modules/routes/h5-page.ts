@@ -21,7 +21,7 @@ function safeCust(cn?: string | null, en?: string | null): string {
 
 const STATUS_LABEL: Record<string, string> = {
   consulting: '咨询中',
-  awaiting_pk_confirm: '待一手确认',
+  awaiting_pk_confirm: '待确认',
   awaiting_agency_revision: '待旅行社修订',
   awaiting_quote: '待报价',
   awaiting_feedback: '待反馈',
@@ -168,7 +168,7 @@ export function renderH5Page(
         <p class="tip" id="tip"></p>
       </div>
     </div>
-    <div class="foot">本方案由 PandaKing9 一手定制 · 仅供受邀客户查看</div>
+    <div class="foot">本方案由 PandaKing9 定制 · 仅供受邀客户查看</div>
   </div>
   <script>
     function sendFb(){

@@ -11,19 +11,19 @@ interface AuthUser {
   level: RoleLevel
 }
 
-// 成本询价（一手 ↔ 省地接社）—— 对应 doc/04-接口契约/H5协作链接.md
+// 成本询价（ ↔ 省地接社）—— 对应 doc/04-接口契约/H5协作链接.md
 @Controller('cost-inquiries')
 @UseGuards(JwtAuthGuard)
 export class CostInquiryController {
   constructor(private readonly svc: CostInquiryService) {}
 
-  // 列表（按权限隔离）：一手全部；省地接社仅本机构；旅行社不可见
+  // 列表（按权限隔离）：全部；省地接社仅本机构；旅行社不可见
   @Get()
   list(@Query('routeId') routeId: string, @CurrentUser() user: AuthUser) {
     return this.svc.list(routeId || undefined, user as AuthPrincipal)
   }
 
-  // 一手将询价成本①写入路线报价
+  // 将询价成本①写入路线报价
   @Post(':id/apply')
   apply(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.svc.applyToRoute(id, user as AuthPrincipal)

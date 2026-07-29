@@ -39,7 +39,7 @@ export function inviteH5Url(token: string): string {
 }
 
 // 旅行社 H5 链接：指向前端 SPA 的协作页（hash 路由），与 shareH5Url（SSR 静态页）区分。
-// 一手「生成对旅行社链接」使用此 URL：旅行社在微信里打开 SPA，可看行程 + 加利润② → 生成对客链接。
+// 「生成对旅行社链接」使用此 URL：旅行社在微信里打开 SPA，可看行程 + 加利润② → 生成对客链接。
 // 区别：shareH5Url 指向 SSR 页（仅对客总价、不可编辑，用于微信分享卡片 OG 预览）；
 //      agencyH5Url 指向 SPA 页（可加利润②，旅行社交互入口）。
 export function agencyH5Url(token: string): string {
@@ -47,7 +47,7 @@ export function agencyH5Url(token: string): string {
   return `${base}#/h5/route/${token}`
 }
 
-// 一手 PandaKing 协作 H5 链接：指向 SPA 的「移动枢纽」页（/h5/pk-route/:token，由 RouteDetail 组件
+// PandaKing 协作 H5 链接：指向 SPA 的「移动枢纽」页（/h5/pk-route/:token，由 RouteDetail 组件
 // 以 tokenMode 渲染，免登录全量编辑行程与价格）。与 agencyH5Url 共用同一组件、按 role 渲染不同权限。
 // PandaKing 凭此链接在微信/H5 内直接当移动控制台用，与省地接/旅行社反复往返协作。
 export function pandakingH5Url(token: string): string {
@@ -62,7 +62,7 @@ export function costInquiryH5Url(token: string): string {
   return `${base}#/h5/provincial-route/${token}`
 }
 
-// 省地接社协作 H5 链接：指向前端 SPA 的协作编辑页（hash 路由），一手复制后发微信群给省地接社。
+// 省地接社协作 H5 链接：指向前端 SPA 的协作编辑页（hash 路由），复制后发微信群给省地接社。
 export function provincialRouteH5Url(token: string): string {
   const base = window.location.origin + (import.meta.env.VITE_BASE || '/')
   return `${base}#/h5/provincial-route/${token}`
@@ -83,7 +83,7 @@ export function shareH5Caption(
   const dest = safeText(route?.destination)
   const date = formatTravelDate(route?.travelDate)
   const head = [who, dest, date].filter(Boolean).join(' · ')
-  // 标题后缀按角色区分：境外旅行社为「规划路线及报价」，省地接社/默认（含一手）为「规划路线审核及询价」
+  // 标题后缀按角色区分：境外旅行社为「规划路线及报价」，省地接社/默认（含）为「规划路线审核及询价」
   const suffix = role === 'agency' ? '规划路线及报价' : '规划路线审核及询价'
   if (head) return `${head} ${suffix}`
   return `${suffix}方案`
@@ -104,10 +104,10 @@ function formatTravelDate(d?: string | null): string {
 // 两种事件都生成可直接粘贴到微信群的「主题 + 结构化信息 + H5 链接」文案。
 export type CollabKind = 'plan' | 'feedback'
 
-// —— 省地接社↔一手多轮协作：回传时生成「关键变更摘要」——
-// 现状：省地接社与一手就行程编辑与成本价格存在多轮反复沟通（非一次性回传），
+// —— 省地接社↔多轮协作：回传时生成「关键变更摘要」——
+// 现状：省地接社与就行程编辑与成本价格存在多轮反复沟通（非一次性回传），
 // 因此每次回传的通知文案需自动汇总「修改了哪些价格 / 行程有哪些关键变更」，
-// 让一手在微信里一眼看清本轮改动，无需逐页比对。
+// 让在微信里一眼看清本轮改动，无需逐页比对。
 export type ChangeField = 'cost1' | 'profit1' | 'quoteA' | 'guestPrice' | 'profit2'
 export interface ProvincialCostChange {
   name: string

@@ -13,25 +13,25 @@ describe('路线状态机', () => {
     expect(() => validateStateMachine()).not.toThrow()
   })
 
-  it('旅行社提交草案：咨询中 → 待一手确认', () => {
+  it('旅行社提交草案：咨询中 → 待确认', () => {
     expect(nextStatus(STATUS.CONSULTING, ACTION.SUBMIT_DRAFT)).toBe(
       STATUS.AWAITING_PK_CONFIRM,
     )
   })
 
-  it('修订重交：待旅行社修订 → 待一手确认', () => {
+  it('修订重交：待旅行社修订 → 待确认', () => {
     expect(
       nextStatus(STATUS.AWAITING_AGENCY_REVISION, ACTION.SUBMIT_DRAFT),
     ).toBe(STATUS.AWAITING_PK_CONFIRM)
   })
 
-  it('一手确认采用：待一手确认 → 待报价', () => {
+  it('确认采用：待确认 → 待报价', () => {
     expect(
       nextStatus(STATUS.AWAITING_PK_CONFIRM, ACTION.PK_CONFIRM),
     ).toBe(STATUS.AWAITING_QUOTE)
   })
 
-  it('一手回传反馈：待一手确认 → 待旅行社修订', () => {
+  it('回传反馈：待确认 → 待旅行社修订', () => {
     expect(
       nextStatus(STATUS.AWAITING_PK_CONFIRM, ACTION.PK_FEEDBACK),
     ).toBe(STATUS.AWAITING_AGENCY_REVISION)
@@ -62,7 +62,7 @@ describe('路线状态机', () => {
     ).toThrow(InvalidTransitionError)
   })
 
-  it('待一手确认不能直接发报价 v1（需先确认/反馈）', () => {
+  it('待确认不能直接发报价 v1（需先确认/反馈）', () => {
     expect(
       nextStatus(STATUS.AWAITING_PK_CONFIRM, ACTION.SEND_V1),
     ).toBeNull()

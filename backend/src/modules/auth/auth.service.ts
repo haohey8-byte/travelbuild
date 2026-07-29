@@ -86,7 +86,7 @@ export class AuthService {
     }
   }
 
-  // 微信 code 换 token（MVP：未配 WX_SECRET 时回退到一手演示账号；正式环境用 code 换 openid 再查/建用户）
+  // 微信 code 换 token（MVP：未配 WX_SECRET 时回退到演示账号；正式环境用 code 换 openid 再查/建用户）
   async exchangeCode(code: string) {
     if (!code) throw new UnauthorizedException('缺少 code')
     if (!process.env.WECHAT_SECRET) {
@@ -101,7 +101,7 @@ export class AuthService {
   }
 
   // 创建邀请（两层级邀请模型）
-  // - 一手 PandaKing 可邀请任意机构的 admin，以及任意机构的 staff
+  // - PandaKing 可邀请任意机构的 admin，以及任意机构的 staff
   // - 机构 admin 仅可邀请「本机构」的 staff
   // 物理隔绝：agencyId 锁定受邀者归属机构；staff 邀请强制继承邀请人的 agencyId
   async createInvite(
@@ -117,10 +117,10 @@ export class AuthService {
     const level: RoleLevel =
       body.level ?? (inviter.role === 'pandaking' ? 'admin' : 'staff')
 
-    // 一手互邀（枢纽内部）
+    // 互邀（枢纽内部）
     if (body.role === 'pandaking') {
       if (inviter.role !== 'pandaking') {
-        throw new UnauthorizedException('仅一手 PandaKing 可邀请一手账号')
+        throw new UnauthorizedException('仅 PandaKing 可邀请账号')
       }
       return this.prisma.invite.create({
         data: {
@@ -142,17 +142,17 @@ export class AuthService {
     }
 
     if (level === 'admin') {
-      // 仅一手可邀请机构管理员
+      // 仅可邀请机构管理员
       if (inviter.role !== 'pandaking') {
-        throw new UnauthorizedException('仅一手 PandaKing 可邀请机构管理员')
+        throw new UnauthorizedException('仅 PandaKing 可邀请机构管理员')
       }
     } else {
-      // staff：邀请人须为「一手」或「本机构 admin」（强制同机构，物理隔绝）
+      // staff：邀请人须为 PandaKing 管理员 或「本机构 admin」（强制同机构，物理隔绝）
       const sameOrg = inviter.agencyId === body.agencyId
       const isOrgAdmin =
         inviter.role === body.role && inviter.level === 'admin' && sameOrg
       if (inviter.role !== 'pandaking' && !isOrgAdmin) {
-        throw new UnauthorizedException('仅一手或本机构管理员可邀请员工')
+        throw new UnauthorizedException('仅或本机构管理员可邀请员工')
       }
     }
 
@@ -206,7 +206,7 @@ export class AuthService {
     return { token: await this.signToken(user), user: this.toUserView(user) }
   }
 
-  // 邀请列表（按权限）：一手可见全部；机构仅见本机构邀请
+  // 邀请列表（按权限）：可见全部；机构仅见本机构邀请
   listInvites(caller: AuthPrincipal) {
     if (caller.role === 'pandaking') {
       return this.prisma.invite.findMany({ orderBy: { createdAt: 'desc' } })
@@ -305,7 +305,7 @@ export class AuthService {
       if (agency?.disabled) {
         throw new UnauthorizedException({
           code: 'AGENCY_DISABLED',
-          message: '该旅行社账号已被管理员禁用，暂时无法登录。如有疑问请联系一手 PandaKing 管理员。',
+          message: '该旅行社账号已被管理员禁用，暂时无法登录。如有疑问请联系 PandaKing 管理员。',
         })
       }
     }
@@ -341,7 +341,7 @@ export class AuthService {
 
   async createAdmin(input: { name: string; phone: string; initPwd: string }, caller: AuthPrincipal) {
     if (caller.role !== 'pandaking') {
-      throw new UnauthorizedException('仅一手 PandaKing 可管理管理员')
+      throw new UnauthorizedException('仅 PandaKing 可管理管理员')
     }
     if (!input.name?.trim()) throw new BadRequestException({ code: 'VALIDATION', message: '名称必填' })
     if (!/^1[3-9]\d{9}$/.test(input.phone || '')) {
@@ -368,7 +368,7 @@ export class AuthService {
 
   async resetAdminPwd(id: string, initPwd: string, caller: AuthPrincipal) {
     if (caller.role !== 'pandaking') {
-      throw new UnauthorizedException('仅一手 PandaKing 可管理管理员')
+      throw new UnauthorizedException('仅 PandaKing 可管理管理员')
     }
     if (!initPwd || initPwd.length < 8) {
       throw new BadRequestException({ code: 'VALIDATION', message: '新密码至少 8 位' })
@@ -384,7 +384,7 @@ export class AuthService {
 
   async disableAdmin(id: string, caller: AuthPrincipal) {
     if (caller.role !== 'pandaking') {
-      throw new UnauthorizedException('仅一手 PandaKing 可管理管理员')
+      throw new UnauthorizedException('仅 PandaKing 可管理管理员')
     }
     if (id === caller.id) throw new BadRequestException('不可禁用当前账号自身')
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id } })
@@ -434,7 +434,7 @@ export class AuthService {
     return this.toUserView(user)
   }
 
-  // 成员列表（物理隔绝）：一手可见全部；机构成员仅可见「本机构」成员
+  // 成员列表（物理隔绝）：可见全部；机构成员仅可见「本机构」成员
   listMembers(caller: AuthPrincipal) {
     if (caller.role === 'pandaking') {
       return this.prisma.user.findMany({
@@ -456,7 +456,7 @@ export class AuthService {
         { field: '客户档案', pandaking: '✓', agency: '✓(自身)', provincial: '✗' },
         { field: '行程草案(旅行社)', pandaking: '✓', agency: '✓', provincial: '✓(被分配路线)' },
         { field: '成本①(省地接社成本)', pandaking: '✓', agency: '✗', provincial: '✓(自身)' },
-        { field: '成本②(一手利润)', pandaking: '✓', agency: '✗', provincial: '✗' },
+        { field: '成本②(利润)', pandaking: '✓', agency: '✗', provincial: '✗' },
         { field: '旅行社加价', pandaking: '✓', agency: '✓', provincial: '✗' },
         { field: '游客报价', pandaking: '✓', agency: '✓', provincial: '✗' },
         { field: '自身被询价成本价', pandaking: '✓', agency: '✗', provincial: '✓(自身)' },
@@ -469,14 +469,14 @@ export class AuthService {
   }
 
   // 机构管理（Agency）：替换裸 agencyId 字符串，支持真实机构档案
-  // 一手：全部可管理；机构用户：只读本机构
+  // ：全部可管理；机构用户：只读本机构
   // D1/D4：建机构时一并建该机构的控制台登录账号（User），phone 为登录键、初始密码强制改密。
   async createAgency(
     body: { id?: string; name: string; role: Role; contact?: string; phone: string; initPwd?: string },
     caller: AuthPrincipal,
   ) {
     if (caller.role !== 'pandaking') {
-      throw new UnauthorizedException('仅一手 PandaKing 可创建机构')
+      throw new UnauthorizedException('仅 PandaKing 可创建机构')
     }
     if (!body.name?.trim()) {
       throw new BadRequestException('机构名称必填')
@@ -525,7 +525,7 @@ export class AuthService {
   // 仍在协作中的路线（非终态）由 active-routes 检查兜底，确保不会误删进行中的合作。
   async deleteAgency(id: string, caller: AuthPrincipal) {
     if (caller.role !== 'pandaking') {
-      throw new UnauthorizedException('仅一手 PandaKing 可删除机构')
+      throw new UnauthorizedException('仅 PandaKing 可删除机构')
     }
     const agency = await this.prisma.agency.findUnique({ where: { id } })
     if (!agency) throw new NotFoundException({ code: 'AGENCY_NOT_FOUND', message: '机构不存在' })
@@ -590,7 +590,7 @@ export class AuthService {
       )
   }
 
-  // 修改旅行社档案 / 切换启用禁用（仅一手）
+  // 修改旅行社档案 / 切换启用禁用（仅）
   // 仅允许改 name / contact / disabled；role 为结构性字段（决定编号前缀语义）保持锁定。
   // disabled=true 仅让该旅行社从各选择下拉框消失，不阻断其登录账号（按需求范围）。
   async updateAgency(
@@ -599,7 +599,7 @@ export class AuthService {
     caller: AuthPrincipal,
   ) {
     if (caller.role !== 'pandaking') {
-      throw new UnauthorizedException('仅一手 PandaKing 可管理机构')
+      throw new UnauthorizedException('仅 PandaKing 可管理机构')
     }
     const agency = await this.prisma.agency.findUnique({ where: { id } })
     if (!agency) throw new NotFoundException({ code: 'AGENCY_NOT_FOUND', message: '旅行社不存在' })
@@ -624,7 +624,7 @@ export class AuthService {
 
   async updateMemberRole(id: string, role: Role, caller: AuthPrincipal) {
     if (caller.role !== 'pandaking') {
-      throw new UnauthorizedException('仅一手 PandaKing 可调整成员角色')
+      throw new UnauthorizedException('仅 PandaKing 可调整成员角色')
     }
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id } })
     const updated = await this.prisma.user.update({
@@ -634,10 +634,10 @@ export class AuthService {
     return this.toUserView(updated)
   }
 
-  // 停用成员（失效其 token；仅一手）
+  // 停用成员（失效其 token；仅）
   async disableMember(id: string, caller: AuthPrincipal) {
     if (caller.role !== 'pandaking') {
-      throw new UnauthorizedException('仅一手 PandaKing 可停用成员')
+      throw new UnauthorizedException('仅 PandaKing 可停用成员')
     }
     if (id === caller.id) throw new BadRequestException('不可停用当前账号自身')
     const updated = await this.prisma.user.update({

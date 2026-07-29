@@ -7,7 +7,7 @@ const prisma = new PrismaClient()
 // 按 createdById 映射机构：seed-agency → org-agency-seed
 const CREATOR_TO_AGENCY: Record<string, string> = {
   'seed-agency': 'org-agency-seed',
-  'seed-pk': 'org-agency-seed', // 一手代发的也归属演示机构
+  'seed-pk': 'org-agency-seed', // 代发的也归属演示机构
 }
 
 async function main() {
