@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
@@ -93,6 +94,15 @@ export class IntakeController {
   @UseGuards(ShareTokenGuard)
   submitIntake(@Body() body: any) {
     return this.svc.submitIntake(body)
+  }
+
+  // 提交页 meta（免登录）：返回该链接归属机构名，供 H5 提交页显示「机构名标题 + 全屏水印」。
+  // token 从 query 读取（ShareTokenGuard 已校验存在/未过期），agencyId 由守卫注入 req.intake。
+  // token 失效/无效 → 守卫抛 INTAKE_INVALID/INTAKE_EXPIRED，前端降级为通用品牌名、不显水印。
+  @Get('meta')
+  @UseGuards(ShareTokenGuard)
+  getIntakeMeta(@Req() req: any) {
+    return this.svc.getIntakeAgencyName(req.intake?.agencyId)
   }
 
   // 已生成链接列表：见全部；境外社仅见自己机构的链接；省地接社无

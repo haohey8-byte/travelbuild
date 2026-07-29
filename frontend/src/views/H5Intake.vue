@@ -1,12 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { submitIntake } from '@/api/routes'
+import { submitIntake, getIntakeMeta } from '@/api/routes'
 import { copyText } from '@/utils/share'
 import type { IntakeDraft, ItineraryDay } from '@/types'
 
 const route = useRoute()
 const token = route.params.token as string
+
+// 提交链接归属机构名：用于顶部品牌条标题 + 全屏平印水印（强归属 / 防截图冒用）
+const agencyName = ref('')
+const displayAgency = computed(() => agencyName.value?.trim() || 'PandaKing9 合作机构')
+// 平铺水印文本：机构名重复填充，配合 CSS 旋转 + 低透明度铺满全屏
+const watermarkText = computed(() => Array(160).fill(displayAgency.value).join('   ·   '))
 
 const customerName = ref('')
 const customerNameCn = ref('')
@@ -144,15 +150,36 @@ async function onCopySummary() {
   setTimeout(() => (copied.value = false), 2000)
 }
 
-onMounted(() => {
+onMounted(async () => {
   document.title = '提交路线初稿 · PandaKing9'
+  // 拉取提交链接归属机构名（免登录）；失效/无效 → 静默降级为通用品牌名
+  try {
+    const meta = await getIntakeMeta(token)
+    if (meta?.agencyName) {
+      agencyName.value = meta.agencyName
+      document.title = `${meta.agencyName} · 提交路线初稿 · PandaKing9`
+    }
+  } catch {
+    /* 保持默认品牌名，不显式报错（表单仍可正常提交，token 真伪由提交时校验） */
+  }
 })
 </script>
 
 <template>
   <div class="h5">
+    <!-- 全屏平铺水印：机构名，强归属 / 防截图冒用；pointer-events:none 不挡表单交互 -->
+    <div class="wm" aria-hidden="true">{{ watermarkText }}</div>
+
+    <!-- 品牌条：机构名 + 提交/成功 状态（提交成功页同步沿用） -->
+    <div class="h5-brand">
+      <span class="brand-ico">🧳</span>
+      <div class="brand-txt">
+        <div class="brand-name">{{ displayAgency }}</div>
+        <div class="brand-sub">{{ submitted ? '提交成功' : '提交路线初稿' }}</div>
+      </div>
+    </div>
+
     <div v-if="submitted" class="h5-card">
-      <h1 class="h5-title">✅ 提交成功</h1>
       <p class="hint">您的路线初稿已提交给 PandaKing，我们将尽快确认并规划。</p>
       <div v-if="summary" class="notify-box">
         <div class="notify-head">
@@ -169,7 +196,6 @@ onMounted(() => {
     </div>
 
     <div v-else class="h5-card">
-      <h1 class="h5-title">提交路线初稿</h1>
       <p class="hint">请填写路线基本信息，提交后 PandaKing 将收到并进入规划确认流程。</p>
 
       <label class="h5-label">客户名称（外文）*</label>
@@ -228,10 +254,51 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.h5 { max-width: 480px; margin: 0 auto; padding: 16px; font-family: -apple-system, "PingFang SC", sans-serif; }
+.h5 { position: relative; max-width: 480px; margin: 0 auto; padding: 16px; font-family: -apple-system, "PingFang SC", sans-serif; }
 .h5-card { background: var(--card); border-radius: 14px; padding: 18px; box-shadow: 0 2px 12px rgba(0,0,0,.06); }
-.h5-title { font-size: 20px; margin: 0 0 10px; }
 .hint { color: var(--ink); font-size: 14px; line-height: 1.6; margin: 0 0 14px; }
+
+/* —— 顶部品牌条：机构名 + 提交/成功 状态 —— */
+.h5-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  background: #E6F1FB;
+  border: 1px solid #CFE3FA;
+  border-radius: 12px;
+}
+.brand-ico { font-size: 26px; line-height: 1; flex: none; }
+.brand-txt { min-width: 0; }
+.brand-name {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--brand);
+  line-height: 1.2;
+  word-break: break-word;
+}
+.brand-sub { font-size: 13px; color: #3B6EA5; margin-top: 2px; }
+
+/* —— 全屏平铺水印：机构名防截图冒用；不挡交互 —— */
+.wm {
+  position: fixed;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  transform: rotate(-20deg);
+  font-size: 20px;
+  line-height: 2.4;
+  letter-spacing: 1px;
+  color: var(--brand);
+  opacity: 0.06;
+  white-space: pre-wrap;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  z-index: 50;
+}
 .h5-label { font-size: 13px; color: var(--muted); display: block; margin: 12px 0 6px; }
 .h5-input { width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 15px; box-sizing: border-box; font-family: inherit; }
 .h5-input.invalid { border-color: var(--danger); background: #FCEBEB; }

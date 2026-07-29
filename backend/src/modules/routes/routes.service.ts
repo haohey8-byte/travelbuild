@@ -715,6 +715,15 @@ export class RoutesService {
     }
   }
 
+  // 提交链接 meta（免登录）：返回该链接归属机构名，供 H5 提交页显示「机构名标题 + 全屏水印」。
+  // agencyId 由 ShareTokenGuard 校验 token 后注入 req.intake，此处无需二次查 token；
+  // 机构名缺失 → 兜底「PandaKing9 合作机构」，前端再据此降级显示。
+  async getIntakeAgencyName(agencyId: string | undefined): Promise<{ agencyName: string }> {
+    if (!agencyId) return { agencyName: 'PandaKing9 合作机构' }
+    const agency = await this.prisma.agency.findUnique({ where: { id: agencyId } })
+    return { agencyName: agency?.name ?? 'PandaKing9 合作机构' }
+  }
+
   // 机构凭提交链接（免登录）提交路线初稿 → 创建 Route（归属钉死 agencyId）+ 初始版本。
   // createdById 记为发链接的 PandaKing（机构无账号）；modeKey=collab → 状态「咨询中（待确认）」。
   async submitIntake(body: {

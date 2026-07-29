@@ -71,6 +71,13 @@ export async function copyIntakeLink(token: string): Promise<{ copies: number; l
   return data
 }
 
+// 提交页 meta（免登录）：取该提交链接归属机构名，用于 H5 提交页「机构名标题 + 全屏水印」。
+// token 失效/无效 → 后端抛 INTAKE_INVALID/INTAKE_EXPIRED，调用方降级处理。
+export async function getIntakeMeta(token: string): Promise<{ agencyName: string }> {
+  const { data } = await client.get('/intake/meta', { params: { token } })
+  return data
+}
+
 // 原地编辑提交链接（PATCH）：改有效期 / 备注，不改 token
 export async function updateIntakeLink(token: string, opts: IntakeLinkOpts): Promise<IntakeLinkView> {
   const { data } = await client.patch(`/intake/intake-link/${token}`, opts)
