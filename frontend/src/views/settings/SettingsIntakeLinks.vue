@@ -30,12 +30,15 @@ const issueCustomDate = ref('')
 const intakeLinks = ref<IntakeLinkView[]>([])
 const loadingIntakeLinks = ref(false)
 const listErr = ref('')
-const copiedToken = ref('')
 
-// 「复制给旅行社」成功后的友好引导弹窗：告诉用户下一步去微信粘贴给合作旅行社
+// 「复制给旅行社」弹窗：预填微信话术（含 URL），用户可编辑后一键复制整段
 const showCopiedDialog = ref(false)
+const copiedDialogToken = ref('')
 const copiedDialogUrl = ref('')
 const copiedDialogAgency = ref('')
+const copiedDialogText = ref('')
+const copiedFullOk = ref(false)
+const copiedUrlOk = ref(false)
 
 const today = new Date().toISOString().slice(0, 10)
 
@@ -114,23 +117,44 @@ async function onIssueIntake() {
   }
 }
 
-async function copyToAgency(item: IntakeLinkView) {
+// 给旅行社的微信话术模板（方案 A · 话术 A 简洁正式）。机构名与 URL 自动代入。
+function buildAgencyWeChatCopy(agency: string, url: string): string {
+  return [
+    `【${agency} 专属】路线初稿提交通道`,
+    `您好！这是为您定制的免登录提交链接，点开即可直接填报路线初稿（无需注册、无需账号）：`,
+    ``,
+    `🔗 ${url}`,
+    ``,
+    `📝 提交什么？`,
+    `客户姓名、国家、目的地、人数、出行日期——按天填行程（城市/景点/酒店/餐）即可，可分段保存。`,
+    ``,
+    `📦 提交后会怎样？`,
+    `① 系统自动建单，您会立即看到一份「提交摘要 + 贵社专属协作链接」，转发给我即可同步；`,
+    `② 我收到后会确认细节、进入正式规划报价；`,
+    `③ 后续所有版本更新、加价、确认都在 PandaKing9 系统里走，再单独通知您。`,
+    ``,
+    `⚠️ 本链接仅供贵社使用，请勿外传或转发；链接长期有效，可重复使用。`,
+    `有问题随时微信我。`,
+  ].join('\n')
+}
+
+// 点击「复制给旅行社」→ 打开话术弹窗（不直接复制，复制动作交给弹窗内按钮，确保发生在用户点击手势内）
+function openCopyDialog(item: IntakeLinkView) {
   const url = fullLink(item.link)
-  const ok = await copyText(url)
-  if (!ok) {
-    // 剪贴板不可用（如微信非安全上下文）→ 仍弹出友好提示，引导用户长按手动复制
-    copiedDialogUrl.value = url
-    copiedDialogAgency.value = item.agencyName
-    showCopiedDialog.value = true
-    return
-  }
-  copiedToken.value = item.token
-  setTimeout(() => {
-    if (copiedToken.value === item.token) copiedToken.value = ''
-  }, 2000)
+  copiedDialogToken.value = item.token
+  copiedDialogUrl.value = url
+  copiedDialogAgency.value = item.agencyName
+  copiedDialogText.value = buildAgencyWeChatCopy(item.agencyName, url)
+  copiedFullOk.value = false
+  copiedUrlOk.value = false
+  showCopiedDialog.value = true
+}
+
+// 复制计数：与后端对齐（复制成功才计一次）
+async function countCopy(token: string) {
   try {
-    const res = await copyIntakeLink(item.token)
-    const row = intakeLinks.value.find((x) => x.token === item.token)
+    const res = await copyIntakeLink(token)
+    const row = intakeLinks.value.find((x) => x.token === token)
     if (row) {
       row.copies = res.copies
       row.lastCopiedAt = res.lastCopiedAt
@@ -138,15 +162,22 @@ async function copyToAgency(item: IntakeLinkView) {
   } catch {
     /* 复制仍成功，仅计数失败不影响使用 */
   }
-  // 复制成功 → 弹出友好引导，告诉用户下一步去微信粘贴给合作旅行社
-  copiedDialogUrl.value = url
-  copiedDialogAgency.value = item.agencyName
-  showCopiedDialog.value = true
 }
 
-// 弹窗内「再复制一次」：纯复制，不重复计数
-async function copyAgain() {
-  await copyText(copiedDialogUrl.value)
+// 弹窗主按钮：复制完整话术（话术 + URL 整段）
+async function copyWeChatFull() {
+  const ok = await copyText(copiedDialogText.value)
+  copiedFullOk.value = ok
+  setTimeout(() => (copiedFullOk.value = false), 2000)
+  if (ok) await countCopy(copiedDialogToken.value)
+}
+
+// 弹窗次按钮：仅复制 URL（简单场景）
+async function copyWeChatUrl() {
+  const ok = await copyText(copiedDialogUrl.value)
+  copiedUrlOk.value = ok
+  setTimeout(() => (copiedUrlOk.value = false), 2000)
+  if (ok) await countCopy(copiedDialogToken.value)
 }
 
 function closeCopiedDialog() {
@@ -265,8 +296,8 @@ onMounted(() => {
               <td data-label="最近复制">{{ fmt(it.lastCopiedAt) }}</td>
               <td data-label="创建于">{{ fmt(it.createdAt) }}</td>
               <td data-label="操作" class="ops">
-                <button class="btn ghost sm" type="button" :disabled="it.expired" @click="copyToAgency(it)">
-                  {{ copiedToken === it.token ? '已复制 ✓' : '复制给旅行社' }}
+                <button class="btn ghost sm" type="button" :disabled="it.expired" @click="openCopyDialog(it)">
+                  复制给旅行社
                 </button>
                 <button class="btn danger sm" type="button" @click="deleteLink(it)">删除</button>
               </td>
@@ -277,26 +308,34 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- 复制成功友好引导：告诉用户下一步去微信粘贴给合作旅行社 -->
+    <!-- 复制给旅行社：预填微信话术（含 URL），可编辑后一键复制整段 -->
     <transition name="fade">
       <div v-if="showCopiedDialog" class="modal-backdrop" @click.self="closeCopiedDialog">
         <div class="modal copy-modal" role="dialog" aria-modal="true" aria-labelledby="copyDlgTitle">
           <div class="copy-modal-icon">✓</div>
-          <h2 id="copyDlgTitle" class="copy-modal-title">链接已复制成功</h2>
+          <h2 id="copyDlgTitle" class="copy-modal-title">话术已备好，去微信粘贴</h2>
           <p class="copy-modal-sub">
-            已为「{{ copiedDialogAgency }}」复制免登录提交链接，下一步请把链接粘贴到微信，发给对应的合作旅行社联系人。
+            已为「{{ copiedDialogAgency }}」生成专属微信话术（含提交链接）。可直接复制，也可按需修改后再复制。
           </p>
-          <div class="copy-modal-url">
-            <code>{{ copiedDialogUrl }}</code>
-            <button class="btn ghost sm" type="button" @click="copyAgain">再复制一次</button>
+          <textarea
+            class="copy-modal-textarea"
+            v-model="copiedDialogText"
+            rows="14"
+            spellcheck="false"
+          ></textarea>
+          <div class="copy-modal-actions">
+            <button class="btn btn-primary" type="button" @click="copyWeChatFull">
+              {{ copiedFullOk ? '已复制完整话术 ✓' : '📋 复制完整话术（话术+URL）' }}
+            </button>
+            <button class="btn ghost sm" type="button" @click="copyWeChatUrl">
+              {{ copiedUrlOk ? '已复制 URL ✓' : '📋 仅复制 URL' }}
+            </button>
           </div>
-          <ol class="copy-modal-steps">
-            <li><b>打开微信</b>，进入与该旅行社联系人的聊天窗口</li>
-            <li>长按输入框 <b>粘贴</b> 刚才复制的链接并发送</li>
-            <li>对方点开链接即可 <b>免登录</b> 提交路线初稿，自动进入协作流程</li>
-          </ol>
+          <p class="copy-modal-tip">
+            微信里长按输入框粘贴即可发送；链接长期有效、仅供该旅行社使用，请勿外传。
+          </p>
           <div class="modal-actions">
-            <button class="btn btn-primary" type="button" @click="closeCopiedDialog">我知道了</button>
+            <button class="btn" type="button" @click="closeCopiedDialog">关闭</button>
           </div>
         </div>
       </div>
@@ -354,8 +393,8 @@ onMounted(() => {
   padding: 7px 9px;
 }
 
-/* —— 复制成功友好引导弹窗 —— */
-.copy-modal { max-width: 440px; text-align: center; }
+/* —— 复制给旅行社：话术弹窗 —— */
+.copy-modal { max-width: 520px; text-align: center; }
 .copy-modal-icon {
   width: 48px;
   height: 48px;
@@ -371,34 +410,36 @@ onMounted(() => {
 }
 .copy-modal-title { margin: 0 0 8px; font-size: 18px; font-weight: 700; }
 .copy-modal-sub { margin: 0 0 14px; font-size: 13px; line-height: 1.6; color: var(--muted); }
-.copy-modal-url {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 14px;
-  padding: 8px 10px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
+.copy-modal-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
   border-radius: 10px;
-  text-align: left;
-}
-.copy-modal-url code {
-  flex: 1;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.5;
-  word-break: break-all;
+  background: var(--surface-2);
   color: var(--ink);
-}
-.copy-modal-steps {
-  margin: 0 0 18px;
-  padding-left: 20px;
-  text-align: left;
   font-size: 13px;
-  line-height: 1.8;
-  color: var(--muted);
+  line-height: 1.7;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  resize: vertical;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
-.copy-modal-steps b { color: var(--ink); }
+.copy-modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.copy-modal-tip {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 14px;
+  text-align: center;
+  line-height: 1.6;
+}
 .copy-modal .modal-actions { justify-content: center; }
 
 /* 弹窗淡入淡出（premium 微交互） */
