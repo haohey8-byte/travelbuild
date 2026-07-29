@@ -513,7 +513,7 @@ async function onPkGenerateLink() {
     // 4) 自动复制到剪贴板
     const ok = await copyText(text)
     pkGeneratedTip.value = ok
-      ? '✅ 通知文案已复制，去微信粘贴发给境外旅行社'
+      ? '✅ 通知文案已复制，去微信粘贴发给旅行社'
       : '已生成，请手动复制下方文案'
   } catch (e: any) {
     pkGeneratedTip.value = `生成失败：${e?.response?.data?.message || e.message || '未知错误'}`

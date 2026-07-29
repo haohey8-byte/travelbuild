@@ -15,6 +15,7 @@ import {
   ensureProvincialShare,
   ensureAgencyShare,
   ensurePandakingShare,
+  assignAgency,
 } from '@/api/routes'
 import { fetchH5Route, fetchH5Feedback, assignProvincialByToken, submitH5Feedback, submitH5PandakingEdit } from '@/api/h5'
 import { fetchAgencies } from '@/api/auth'
@@ -453,8 +454,35 @@ const inquireSubtitle = computed(() =>
 )
 // 「保存并报价」弹窗副标题：解释这个动作是什么
 const quoteSubtitle = computed(() =>
-  '向境外旅行社发报价：自动保存当前报价（含省地接社成本①与您的利润①），生成对旅行社的 H5 链接（含报价A）。请在弹窗内点「复制（含链接）」按钮，去微信粘贴发给境外旅行社。',
+  '向旅行社发报价：自动保存当前报价（含省地接社成本①与您的利润①），生成对旅行社的 H5 链接（含报价A）。请在弹窗内点「复制（含链接）」按钮，去微信粘贴发给旅行社。',
 )
+
+// 「保存并报价」弹窗内选定的境外旅行社机构 ID（需求：生成报价链接前先选旅行社）
+const quoteAgencyId = ref('')
+const quoteAgencies = ref<Agency[]>([])
+const loadingQuoteAgencies = ref(false)
+const quoteErr = ref('')
+async function loadQuoteAgencies() {
+  loadingQuoteAgencies.value = true
+  try {
+    const all = await fetchAgencies()
+    quoteAgencies.value = all.filter((a) => a.role === 'agency' && !a.disabled)
+  } catch {
+    quoteAgencies.value = []
+  } finally {
+    loadingQuoteAgencies.value = false
+  }
+}
+// 已关联旅行社机构名：用于弹窗「当前已关联」提示与标题个性化
+const linkedAgencyName = computed(() => {
+  const aid = data.value?.agencyId
+  if (!aid) return ''
+  return quoteAgencies.value.find((a) => a.id === aid)?.name || data.value?.agency || ''
+})
+const quoteTargetLabel = computed(() => {
+  const name = linkedAgencyName.value
+  return name ? `向"${name}"发报价` : '（未关联旅行社）'
+})
 
 // 一手「🏢 分配 / 改派省地接社」—— 轻量弹窗：仅改 route.provincialId，不发通知、不生成 CostInquiry/RouteShare
 function openAssignDialog(isReassign: boolean) {
@@ -548,27 +576,53 @@ async function openQuoteDialog() {
         .join('\n\n')
       dialogText.value = notifyBody
       dialogSubtitle.value = quoteSubtitle.value
-      actionOk.value = '报价链接已生成，请在弹窗内点「复制（含链接）」按钮，去微信粘贴发给境外旅行社'
+      actionOk.value = '报价链接已生成，请在弹窗内点「复制（含链接）」按钮，去微信粘贴发给旅行社'
       quoteDialog.value = true
       pkSuggestion.value = ''
       await loadTokenMode(token) // 重新拉取最新（含对端令牌）
     } else {
+      // console 模式：先打开带「选择旅行社」下拉的弹窗，由用户点「生成报价链接」触发 doQuote
+      await loadQuoteAgencies()
+      quoteAgencyId.value = data.value?.agencyId || ''
+      quoteErr.value = ''
+      dialogText.value = ''
+      dialogSubtitle.value = quoteSubtitle.value
+      quoteDialog.value = true
+    }
+  } catch (e: any) {
+    if (detectStale(e)) { savingNotify.value = false; return }
+    actionErr.value = e?.response?.data?.message || '生成报价链接失败'
+  } finally {
+    savingNotify.value = false
+  }
+}
+
+// 「保存并报价」弹窗内用户点「生成报价链接」（先选好旅行社后）—— 由弹窗内按钮触发
+async function doQuote() {
+  if (!quoteAgencyId.value.trim()) {
+    quoteErr.value = '请先选择旅行社机构'
+    return
+  }
+  if (!data.value) return
+  savingNotify.value = true
+  actionErr.value = ''
+  actionOk.value = ''
+  try {
     // 1) 自动保存（写入当前行程 + 报价 + 利润①）
-    const res = (await saveVersion(id, {
+    await saveVersion(id, {
       itinerary: itinerary.value,
       quote: buildQuote(),
       draft: false,
-      notify: false, // 不在此处触发 share（链接由 shareRoute 单独生成）
+      notify: false, // 不在此处触发 share（链接由 assignAgency 单独生成）
       baseVersionId: baseVersionId.value,
-    })) as { shareToken?: string; shareLink?: string; version?: any }
+    })
 
-    // 2) 生成 agency 分享（role='agency', public=false，让旅行社看到 quoteA + 可加利润②）
-    const share = await shareRoute(id, 'agency', false)
+    // 2) 改派/确认旅行社并生成 agency 分享（role='agency', public=false，让旅行社看到 quoteA + 可加利润②）
+    const share = await assignAgency(id, quoteAgencyId.value.trim())
     const link = agencyH5Url(share.token)
 
-    // 3) 构造结构化文案（仅主题 + 报价 + URL，**不暴露**「成本① / 利润①」等内部信息）
+    // 3) 构造结构化文案（仅主题 + 报价 + URL，不暴露内部信息）
     const caption = shareH5Caption(data.value, 'agency')
-    const profitLabel = profit2Mode.value === 'percent' ? `${profit2.value || 0}%` : `¥${(Number(profit2.value) || 0).toLocaleString()}`
     const d = calcDerived(quoteItems.value)
     const qa = Math.round(d.quoteA)
     const text = `${caption}\n报价 ¥${qa.toLocaleString()}\n\n👉 查看路线及报价：${link}`
@@ -594,13 +648,11 @@ async function openQuoteDialog() {
     dialogSubtitle.value = quoteSubtitle.value
 
     // 4) 复制交由 NotifyDialog：打开弹窗时尽力自动复制 + 提供「复制（含链接）」按钮兜底
-    actionOk.value = '报价链接已生成，请在弹窗内点「复制（含链接）」按钮，去微信粘贴发给境外旅行社'
+    actionOk.value = '报价链接已生成，请在弹窗内点「复制（含链接）」按钮，去微信粘贴发给旅行社'
 
-    // 5) 弹 NotifyDialog
-    quoteDialog.value = true
+    // 5) 弹 NotifyDialog（dialogText 已赋，slot 内下拉随之隐藏）
     pkSuggestion.value = ''
     await load()
-    }
   } catch (e: any) {
     if (detectStale(e)) { savingNotify.value = false; return }
     actionErr.value = e?.response?.data?.message || '生成报价链接失败'
@@ -1048,7 +1100,7 @@ async function onSubmitSuggestion(who: 'agency' | 'provincial') {
       const relayBody = [note, relayItinerary].filter(Boolean).join('\n')
       if (relayBody) {
         try {
-          await submitH5Feedback(s.token, `📨 境外旅行社协调意见：\n${relayBody}`, user.value?.name || roleLabel(role.value), 'pandaking')
+          await submitH5Feedback(s.token, `📨 旅行社协调意见：\n${relayBody}`, user.value?.name || roleLabel(role.value), 'pandaking')
         } catch {
           /* 透传省地接社失败不阻断主流程 */
         }
@@ -1377,7 +1429,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
             </p>
             <QuoteTable v-model:items="quoteItems" v-model:profit2Mode="profit2Mode" v-model:profit2="profit2" :role="role" :read-only="readonly" />
             <p v-if="isPk" class="tip">
-              境外旅行社打开同一页面（角色=旅行社）时，报价A 即为其成本，加利润生成对客价。agency 与 provincial 价格彼此不可见。
+              旅行社打开同一页面（角色=旅行社）时，报价A 即为其成本，加利润生成对客价。agency 与 provincial 价格彼此不可见。
             </p>
           </div>
 
@@ -1413,7 +1465,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
               🤝 发起询价（{{ inquireTargetLabel }}）
             </button>
             <button class="d-btn primary block" :disabled="savingDraft || savingNotify" @click="openQuoteDialog">
-              💼 保存并报价（向境外旅行社报价）
+              💼 保存并报价（向旅行社报价）
             </button>
             <button class="d-btn ghost block" :disabled="savingDraft || savingNotify" @click="onSaveDraft">
               {{ savingDraft ? '保存中…' : '💾 仅保存（不通知任何人）' }}
@@ -1454,7 +1506,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
 
           <div class="note">
             简单逻辑：<span class="formula">报价 = 成本 + 利润</span>。利润可按 <b>金额（元）</b> 或 <b>比例（%）</b> 填写，报价自动计算。
-            境外旅行社沿用同一公式：<span class="formula">对客价 = 本报价(成本) + 利润</span>。
+            旅行社沿用同一公式：<span class="formula">对客价 = 本报价(成本) + 利润</span>。
           </div>
         </div>
       </div>
@@ -1554,7 +1606,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
               <span class="pill st-lock">🔒 PandaKing 专享</span>
             </div>
             <div class="panel-body">
-              <div class="lock-sub">🔒 PandaKing 专享 · 省地接社 / 境外旅行社 不可查看</div>
+              <div class="lock-sub">🔒 PandaKing 专享 · 省地接社 / 旅行社 不可查看</div>
 
               <!-- 价格回调链路 -->
               <h3 class="sub-h">价格回调链路</h3>
@@ -1578,7 +1630,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
                   <div class="cap">报价 A</div>
                 </div>
                 <div class="node ag">
-                  <div class="role">境外旅行社 成本</div>
+                  <div class="role">旅行社 成本</div>
                   <div class="amt">{{ yuan(derivedTotals.quoteA) }}</div>
                   <div class="lbl">+ 利润 → 对客价 {{ yuan(guestTotal) }}</div>
                 </div>
@@ -1722,10 +1774,30 @@ const collabEvents = computed<CollabEvent[]>(() => {
 
       <NotifyDialog
         v-model:open="quoteDialog"
-        :title="'💼 保存并报价（向境外旅行社报价）'"
+        :title="'💼 保存并报价（向旅行社报价）'"
         :subtitle="quoteSubtitle"
         :text="dialogText"
-      />
+        generate-label="📋 生成报价链接"
+        @generate="doQuote"
+      >
+        <div v-if="!dialogText">
+          <div v-if="quoteAgencies.length === 0" class="nd-empty">
+            暂无旅行社机构，请先在「账号」页新建一个「旅行社」机构。
+          </div>
+          <div v-else class="nd-agency-pick">
+            <p v-if="linkedAgencyName" class="nd-cur">
+              当前已关联旅行社：<b>{{ linkedAgencyName }}</b>
+              <span class="nd-cur-tip">（如需改派，请在下方重新选择）</span>
+            </p>
+            <label>选择 / 更换旅行社机构：</label>
+            <select v-model="quoteAgencyId" :class="{ 'nd-select-err': quoteErr }" :disabled="loadingQuoteAgencies">
+              <option value="" disabled>{{ loadingQuoteAgencies ? '加载中…' : '请选择' }}</option>
+              <option v-for="a in quoteAgencies" :key="a.id" :value="a.id">{{ a.name }}（{{ a.id }}）</option>
+            </select>
+            <p v-if="quoteErr" class="nd-err">{{ quoteErr }}</p>
+          </div>
+        </div>
+      </NotifyDialog>
 
       <!-- 移动枢纽吸底操作栏（仅 token 模式 + 移动端显示；桌面隐藏，且移动端隐藏面板内 .pk-actions 避免重复操作） -->
       <div v-if="tokenMode" class="pk-sticky">

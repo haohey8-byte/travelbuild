@@ -124,6 +124,45 @@ export class RoutesService {
     return this.serialize(updated, principal?.role ?? 'pandaking')
   }
 
+  // 一手将路线改派给某境外旅行社：更新 route.agencyId/agency，并使旧 agency 协作令牌失效、
+  // 生成指向最新版本的新 agency 协作令牌（agency H5 链接随之刷新）。
+  // 旅行社未变时幂等复用既有令牌。仅一手 PandaKing 可操作。
+  async assignAgency(routeId: string, agencyId: string, principal?: RoutePrincipal) {
+    if (principal && principal.role !== 'pandaking') {
+      throw new ForbiddenException('仅一手 PandaKing 可分配旅行社')
+    }
+    if (!agencyId?.trim()) throw new BadRequestException('必须指定旅行社机构')
+    const target = await this.prisma.agency.findUnique({ where: { id: agencyId.trim() } })
+    if (!target || target.role !== 'agency') {
+      throw new BadRequestException('旅行社机构不存在或角色不是旅行社')
+    }
+    const route = await this.prisma.route.findUniqueOrThrow({ where: { id: routeId } }).catch(() => {
+      throw new NotFoundException('路线不存在')
+    })
+    // 机构未变：幂等复用既有 agency 协作令牌，避免无谓失效
+    if (route.agencyId === target.id) {
+      const existing = await this.prisma.routeShare.findFirst({
+        where: { routeId, role: 'agency', public: false, costInquiryId: null },
+        orderBy: { createdAt: 'desc' },
+      })
+      if (existing) return { token: existing.token, link: `/h5/route/${existing.token}` }
+    }
+    // 更新路线归属机构（机构名同步，便于 H5 / 文案展示具体是哪家旅行社）
+    await this.prisma.route.update({
+      where: { id: routeId },
+      data: { agencyId: target.id, agency: target.name },
+    })
+    // 旧 agency 协作令牌置为立即过期，使其 H5 链接失效（防止旧旅行社继续编辑）
+    await this.prisma.routeShare.updateMany({
+      where: { routeId, role: 'agency', public: false, costInquiryId: null },
+      data: { expiresAt: new Date() },
+    })
+    // 生成指向最新版本的新 agency 协作令牌
+    const latest = await this.latestVersion(routeId)
+    const share = await this.createShare(routeId, 'agency', latest?.id, false)
+    return { token: share.token, link: `/h5/route/${share.token}` }
+  }
+
   // 新建路线 + 客户档案
   async create(input: CreateRouteInput, principal?: RoutePrincipal) {
     const modeKey = input.modeKey ?? 'collab'
@@ -137,13 +176,13 @@ export class RoutesService {
     // 一手创建：必须指定 agencyId（选择境外旅行社）
     if (role === 'pandaking') {
       if (!input.agencyId?.trim()) {
-        throw new BadRequestException('一手创建路线必须指定境外旅行社（agencyId）')
+        throw new BadRequestException('一手创建路线必须指定旅行社（agencyId）')
       }
       const agencyOrg = await this.prisma.agency.findUnique({
         where: { id: input.agencyId.trim() },
       })
       if (!agencyOrg || agencyOrg.role !== 'agency') {
-        throw new BadRequestException('指定的境外旅行社机构不存在')
+        throw new BadRequestException('指定的旅行社机构不存在')
       }
       agencyId = agencyOrg.id
       agencyName = agencyOrg.name
@@ -516,7 +555,7 @@ export class RoutesService {
   ) {
     const agency = await this.prisma.agency.findUnique({ where: { id: agencyId } })
     if (!agency || agency.role !== 'agency') {
-      throw new BadRequestException('机构不存在或不是境外旅行社（agency）')
+      throw new BadRequestException('机构不存在或不是旅行社（agency）')
     }
     // 每机构单条常驻：重复预发 = 作废旧链接（旧 token 立即失效），实现「可重复生成替换」
     await this.prisma.routeIntake.deleteMany({ where: { agencyId } })
@@ -951,7 +990,14 @@ export class RoutesService {
   // 用于 PandaKing 视图返回 agency 令牌、agency 视图返回 pandaking 令牌，形成可反复往返的协作回路。
   private async resolvePeerToken(routeId: string, peerRole: Role, versionId: string | null | undefined): Promise<string> {
     const existing = await this.prisma.routeShare.findFirst({
-      where: { routeId, role: peerRole, public: false, costInquiryId: null },
+      where: {
+        routeId,
+        role: peerRole,
+        public: false,
+        costInquiryId: null,
+        // 排除已失效（过期）令牌，避免改派后旧旅行社令牌被误取
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
       orderBy: { createdAt: 'desc' },
     })
     if (existing) return existing.token
@@ -1200,6 +1246,13 @@ export class RoutesService {
         costItems: (share.costInquiry.costItems as { name: string; amount: number }[] | undefined) ?? [],
         agencyName,
       }
+    }
+    if (share.role === 'agency') {
+      // agency 协作视图：返回归属旅行社机构名，供 H5 展示「具体是哪家旅行社」
+      const ag = route.agencyId
+        ? await this.prisma.agency.findUnique({ where: { id: route.agencyId } })
+        : null
+      result.agencyName = ag?.name ?? route.agency ?? null
     }
     // 协作回路：返回「对端」可编辑令牌，便于双方直接在 H5 内互相发送可编辑链接。
     // - agency（非公开）视图 → 返回 pandaking 令牌（PandaKing 全编辑入口）

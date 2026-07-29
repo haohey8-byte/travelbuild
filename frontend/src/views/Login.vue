@@ -25,7 +25,7 @@ const rememberDev = computed(() => import.meta.env.DEV)
 
 const roles: { key: Role; label: string }[] = [
   { key: 'pandaking', label: 'PandaKing' },
-  { key: 'agency', label: '境外旅行社' },
+  { key: 'agency', label: '旅行社' },
   { key: 'provincial', label: '省地接社' },
 ]
 

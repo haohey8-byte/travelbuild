@@ -142,6 +142,13 @@ export async function assignProvincial(routeId: string, provincialId: string): P
   return data
 }
 
+// 一手将路线改派给某境外旅行社：更新归属机构并使旧 agency 协作令牌失效、生成新令牌。
+// 返回新的 agency H5 令牌与链接（用于重新生成微信文案与 URL）。
+export async function assignAgency(routeId: string, agencyId: string): Promise<{ token: string; link: string }> {
+  const { data } = await client.post(`/routes/${routeId}/assign-agency`, { agencyId })
+  return data
+}
+
 // 一手向省地接社发起成本询价 → 返回 H5 链接（复制发微信群）
 export async function createCostInquiry(
   routeId: string,

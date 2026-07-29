@@ -66,7 +66,7 @@ const canEditItinerary = computed(() => isPkView.value || isAgencyView.value)
 const roleBadgeClass = computed(() => (isPkView.value ? 'rb-pk' : isAgencyView.value ? 'rb-ag' : 'rb-pub'))
 const roleBadgeText = computed(() => {
   if (isPkView.value) return '👑 PandaKing · 全量编辑行程与报价'
-  if (isAgencyView.value) return '🧳 境外旅行社 · 可编辑行程与加价'
+  if (isAgencyView.value) return '🧳 旅行社 · 可编辑行程与加价'
   return '👀 客户预览 · 只读'
 })
 
@@ -383,7 +383,7 @@ async function onAgSave() {
     const relayItinerary = formatItineraryChanges(changes)
     const relayBody = [manual, relayItinerary].filter(Boolean).join('\n')
     if (relayBody) {
-      const relayContent = `📨 境外旅行社协调意见：\n${relayBody}`
+      const relayContent = `📨 旅行社协调意见：\n${relayBody}`
       try {
         await submitH5Feedback(token, relayContent, agFbName.value.trim() || authorName.value.trim() || undefined, 'pandaking')
       } catch {
@@ -506,8 +506,20 @@ async function onAgTranslate() {
       if (notesTr) lines.push(`  ${t('th', 'col_notes')}: ${notesTr}`)
       lines.push('')
     }
+    // 报价明细 + 合计（逐项列出报价A，并给出合计；需求 #4：泰语翻译由「仅对客总价」改为「报价明细+合计」）
     lines.push('────────────────────')
-    lines.push(`${t('th', 'col_guestPrice')}: ¥${agGuestPrice.value.toLocaleString()}`)
+    lines.push(`【${t('th', 'quoteTitle')}】`)
+    lines.push('')
+    if (agItems.value.length === 0) {
+      lines.push(t('th', 'noQuote'))
+    } else {
+      for (const it of agItems.value) {
+        const typeLabel = t('th', `type_${it.type}`) || it.type
+        lines.push(`${it.name}（${typeLabel}）: ¥${it.cost.toLocaleString()}`)
+      }
+    }
+    lines.push('────────────────────')
+    lines.push(`${t('th', 'col_totals')}: ¥${agQuoteA.value.toLocaleString()}`)
     agThText.value = lines.join('\n')
   } catch (e: any) {
     agThErr.value = e?.message || '翻译失败'
@@ -637,7 +649,7 @@ async function onSend() {
   // 旅行社视角的纯反馈，也需透传省地接社（一手转达），不含任何报价/利润②
   if (isAgencyView.value) {
     try {
-      await submitH5Feedback(token, `📨 境外旅行社协调意见：\n${content}`, authorName.value.trim() || undefined, 'pandaking')
+      await submitH5Feedback(token, `📨 旅行社协调意见：\n${content}`, authorName.value.trim() || undefined, 'pandaking')
     } catch {
       /* 透传省地接社失败不阻断主流程 */
     }
@@ -703,9 +715,12 @@ function goHome() {
         <span>人数: {{ data.groupSize }}</span>
       </div>
       <div class="role-badge" :class="roleBadgeClass">{{ roleBadgeText }}</div>
+      <!-- 旅行社协作视图：显示本链接归属的具体旅行社机构名（需求：agency H5 明示「具体是哪家旅行社」） -->
+      <div v-if="isAgencyView && data.agencyName" class="h5-agency-name">🏢 本协作链接归属旅行社：<b>{{ data.agencyName }}</b></div>
 
       <!-- PandaKing 视角切换条：默认收件方预览，显式切换才进入 PandaKing 全量编辑 -->
-      <div v-if="isPkLoggedIn" class="pk-view-switch">
+      <!-- 仅在非「旅行社视角」页显示：旅行社视角页不暴露 PandaKing 控制台切换条（需求 #3） -->
+      <div v-if="isPkLoggedIn && !isAgencyView" class="pk-view-switch">
         <span class="pk-view-switch-label">PandaKing 控制台 · 视角</span>
         <div class="pk-view-switch-tabs">
           <button :class="{ active: pkViewMode === 'recipient' }" @click="switchPkView('recipient')">收件方预览</button>
@@ -842,10 +857,10 @@ function goHome() {
           <button class="btn ghost share-btn" @click="copyPeerLink">📋 复制对 {{ ownerName }} 链接发微信</button>
           <p v-if="agPeerTip" class="share-tip">{{ agPeerTip }}</p>
 
-          <!-- AI 翻译为泰语版（行程+对客总价）—— 折叠面板，点击展开/收起 -->
+          <!-- AI 翻译为泰语版（行程+报价明细+合计）—— 折叠面板，点击展开/收起 -->
           <div class="h5-ag-translate">
             <button class="btn ghost th-toggle" @click="toggleTh">
-              {{ agThOpen ? '🔼 收起泰语报价单' : (agThBusy ? '翻译中…' : '🌐 翻译为泰语版（行程+报价）▾') }}
+              {{ agThOpen ? '🔼 收起报价明细+合计' : (agThBusy ? '翻译中…' : '🌐 报价明细+合计 ▾') }}
             </button>
             <p v-if="!hasTranslate && agThOpen" class="muted" style="font-size: 12px;">
               ⚠️ 未配置翻译服务，将以原文显示（如需配置请联系管理员设置 VITE_TMT_ENDPOINT）
@@ -853,7 +868,7 @@ function goHome() {
             <p v-if="agThErr" class="err">{{ agThErr }}</p>
             <div v-if="agThOpen" class="notify-box th-panel">
               <div class="notify-head">
-                <span>🇹🇭 泰语报价单（复制粘贴发客户）</span>
+                <span>🇹🇭 报价明细+合计（复制粘贴发客户）</span>
                 <button class="btn ghost sm" @click="copyText(agThText)">📋 复制</button>
               </div>
               <pre class="notify-text">{{ agThText }}</pre>
@@ -1000,7 +1015,7 @@ function goHome() {
                 <span class="fb-time">{{ fmtTime(fb.createdAt) }}</span>
               </template>
               <template v-else>
-                <b>{{ fb.authorName || (fb.authorRole === 'pandaking' ? 'PandaKing' : fb.authorRole === 'agency' ? '境外旅行社' : '协作方') }}</b>
+                <b>{{ fb.authorName || (fb.authorRole === 'pandaking' ? 'PandaKing' : fb.authorRole === 'agency' ? '旅行社' : '协作方') }}</b>
                 <span
                   class="fb-role"
                   :class="fb.authorRole === 'pandaking' ? 'rb-pk' : fb.authorRole === 'agency' ? 'rb-ag' : 'rb-pub'"
@@ -1034,6 +1049,10 @@ function goHome() {
 .rb-pk { background: var(--brand-50); color: var(--brand); border: 1px solid var(--brand); }
 .rb-ag { background: #e9f1fe; color: #1e40af; border: 1px solid #c2dafe; }
 .rb-pub { background: #f4f6fa; color: #3c4655; border: 1px solid #e6e8eb; }
+
+/* 旅行社协作视图：本链接归属的具体旅行社机构名（需求：agency H5 明示「具体是哪家旅行社」） */
+.h5-agency-name { margin: 6px 0 4px; font-size: 13px; color: #1e40af; background: #e9f1fe; border: 1px solid #c2dafe; border-radius: 8px; padding: 6px 10px; }
+.h5-agency-name b { color: #14307a; }
 
 /* PandaKing 视角切换条 */
 .pk-view-switch { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 10px 0 4px; padding: 8px 10px; background: var(--brand-50); border: 1px solid var(--brand); border-radius: 10px; }

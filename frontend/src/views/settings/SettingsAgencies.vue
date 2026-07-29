@@ -43,7 +43,7 @@ const editSaving = ref(false)
 // —— 禁用 / 启用切换（仅从下拉框移除，不阻断登录）——
 const togglingId = ref('')
 
-const ROLE_LABEL: Record<string, string> = { agency: '境外旅行社', provincial: '省地接社' }
+const ROLE_LABEL: Record<string, string> = { agency: '旅行社', provincial: '省地接社' }
 
 // 用后端返回的最新旅行社就地替换本地列表项（避免整表重拉闪烁）
 function replaceLocal(updated: Agency) {
@@ -210,7 +210,7 @@ onMounted(load)
         <div class="row"><label>旅行社名称</label><input v-model="newAgency.name" class="input" placeholder="环球旅行社" /></div>
         <div class="row"><label>角色</label>
           <select v-model="newAgency.role" class="input">
-            <option value="agency">境外旅行社</option>
+            <option value="agency">旅行社</option>
             <option value="provincial">省地接社</option>
           </select>
         </div>

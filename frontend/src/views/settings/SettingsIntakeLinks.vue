@@ -178,7 +178,7 @@ onMounted(() => {
       {{
         isAgency
           ? '为本机构预发一条常驻提交链接，对方凭链接免登录提交路线初稿；可设为永久有效或自定义有效期，可随时复制给旅行社或删除。'
-          : '为某家境外旅行社预发一条常驻提交链接，对方凭链接免登录提交路线初稿；可设为永久有效或自定义有效期（游客常提前一年咨询），可重复生成替换、可随时复制给旅行社或删除。'
+          : '为某家旅行社预发一条常驻提交链接，对方凭链接免登录提交路线初稿；可设为永久有效或自定义有效期（游客常提前一年咨询），可重复生成替换、可随时复制给旅行社或删除。'
       }}
     </p>
 
@@ -186,7 +186,7 @@ onMounted(() => {
       <div class="row">
         <label>选择机构</label>
         <select v-model="intakeAgencyId" class="input" :disabled="loadingAgencies || isAgency">
-          <option value="">请选择境外旅行社</option>
+          <option value="">请选择旅行社</option>
           <option v-for="a in agencyOptions" :key="a.id" :value="a.id">{{ a.name }} ({{ a.id }})</option>
         </select>
       </div>

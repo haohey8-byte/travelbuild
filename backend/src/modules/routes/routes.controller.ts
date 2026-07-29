@@ -164,6 +164,16 @@ export class RoutesController {
     return this.svc.assignProvincial(id, body?.provincialId, user as any)
   }
 
+  // 一手将路线改派给某境外旅行社：更新归属机构并使旧 agency 协作令牌失效、生成新令牌。
+  @Post(':id/assign-agency')
+  assignAgency(
+    @Param('id') id: string,
+    @Body() body: { agencyId: string },
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.svc.assignAgency(id, body?.agencyId, user as any)
+  }
+
   // 一手发起「省地接社协作 H5」：一次操作完成分配省地接社 + 发起成本询价，
   // 生成的统一链接可让省地接社同时编辑行程并填写成本①。
   @Post(':id/provincial-share')

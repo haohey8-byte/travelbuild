@@ -255,7 +255,7 @@ async function onCreate() {
     return
   }
   if (user.value?.role === 'pandaking' && !form.value.agencyId.trim()) {
-    createErr.value = 'PandaKing 创建路线必须选择境外旅行社'
+    createErr.value = 'PandaKing 创建路线必须选择旅行社'
     return
   }
     creating.value = true
@@ -457,9 +457,9 @@ async function confirmDelete() {
             <input v-model="form.country" type="text" placeholder="China" autocomplete="off" />
           </label>
           <label v-if="user?.role === 'pandaking'">
-            <span>境外旅行社 *</span>
+            <span>旅行社 *</span>
             <select v-model="form.agencyId" :disabled="loadingAgencies">
-              <option value="" disabled>{{ loadingAgencies ? '加载中…' : agencyError ? '机构加载失败' : '请选择境外旅行社' }}</option>
+              <option value="" disabled>{{ loadingAgencies ? '加载中…' : agencyError ? '机构加载失败' : '请选择旅行社' }}</option>
               <option v-for="a in agencies.filter(x => x.role === 'agency' && !x.disabled)" :key="a.id" :value="a.id">{{ a.name }}</option>
             </select>
             <small v-if="agencyError" class="err-hint">{{ agencyError }} <a href="#" @click.prevent="loadAgencies()">重试</a></small>

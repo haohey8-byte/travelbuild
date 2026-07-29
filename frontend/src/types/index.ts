@@ -183,6 +183,8 @@ export interface H5Route {
   provincialToken?: string | null
   // 路线归属账号名（创建者，即 PandaKing 平台方），用于 H5 内替代「一手」字眼显示具体注册名
   ownerName?: string | null
+  // 旅行社协作 H5（role=agency）归属的具体旅行社机构名（后端 getH5 解析，用于明示「具体是哪家旅行社」）
+  agencyName?: string | null
   // 净化报价：仅含对客报价（guestPrice），不含成本①/②/加价（公开 H5 不泄漏内部成本）
   // 旅行社视角（role=agency, public=false）下 totals 还会返回 quoteA/profit2Mode/profit2，便于 H5 旅行社视图加利润②
   // 一手视角（role=pandaking, public=false）下返回全量：items 含 cost1/profit1Mode/profit1/quoteA，totals 含 quoteA/profit2
