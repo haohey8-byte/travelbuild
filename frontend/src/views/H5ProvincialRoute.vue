@@ -779,9 +779,14 @@ function goRouteDetail() {
               <ul v-if="feedbackList.length" class="fb-list">
                 <li v-for="fb in feedbackList" :key="fb.id" class="fb-item">
                   <div class="fb-meta">
-                    <b>{{ fb.authorName || (fb.authorRole === 'pandaking' ? 'PandaKing' : fb.authorRole === 'provincial' ? '省地接社' : '协作方') }}</b>
-                    <span class="pill xs" :class="fb.authorRole === 'pandaking' ? 'st-role' : 'st-awaiting_quote'">{{ roleLabel(fb.authorRole) }}</span>
-                    <span class="fb-time">{{ fmtTime(fb.createdAt) }}</span>
+                    <template v-if="fb.content?.startsWith('📨')">
+                      <span class="fb-time">{{ fmtTime(fb.createdAt) }}</span>
+                    </template>
+                    <template v-else>
+                      <b>{{ fb.authorName || (fb.authorRole === 'pandaking' ? 'PandaKing' : fb.authorRole === 'provincial' ? '省地接社' : '协作方') }}</b>
+                      <span class="pill xs" :class="fb.authorRole === 'pandaking' ? 'st-role' : 'st-awaiting_quote'">{{ roleLabel(fb.authorRole) }}</span>
+                      <span class="fb-time">{{ fmtTime(fb.createdAt) }}</span>
+                    </template>
                   </div>
                   <p class="fb-content">{{ fb.content }}</p>
                 </li>
@@ -1036,9 +1041,14 @@ function goRouteDetail() {
             <ul v-if="feedbackList.length" class="fb-list">
               <li v-for="fb in feedbackList" :key="fb.id" class="fb-item">
                 <div class="fb-meta">
-                  <b>{{ fb.authorName || (fb.authorRole === 'pandaking' ? 'PandaKing' : fb.authorRole === 'provincial' ? '省地接社' : '协作方') }}</b>
-                  <span class="pill xs" :class="fb.authorRole === 'pandaking' ? 'st-role' : 'st-awaiting_quote'">{{ roleLabel(fb.authorRole) }}</span>
-                  <span class="fb-time">{{ fmtTime(fb.createdAt) }}</span>
+                  <template v-if="fb.content?.startsWith('📨')">
+                    <span class="fb-time">{{ fmtTime(fb.createdAt) }}</span>
+                  </template>
+                  <template v-else>
+                    <b>{{ fb.authorName || (fb.authorRole === 'pandaking' ? 'PandaKing' : fb.authorRole === 'provincial' ? '省地接社' : '协作方') }}</b>
+                    <span class="pill xs" :class="fb.authorRole === 'pandaking' ? 'st-role' : 'st-awaiting_quote'">{{ roleLabel(fb.authorRole) }}</span>
+                    <span class="fb-time">{{ fmtTime(fb.createdAt) }}</span>
+                  </template>
                 </div>
                 <p class="fb-content">{{ fb.content }}</p>
               </li>

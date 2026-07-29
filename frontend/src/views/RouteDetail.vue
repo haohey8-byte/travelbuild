@@ -1040,14 +1040,15 @@ async function onSubmitSuggestion(who: 'agency' | 'provincial') {
       // 旅行社提交建议并通知一手 → 带一手「可编辑」链接，对称形成多轮往返闭环
       const s = await ensurePandakingShare(id)
       link = pandakingH5Url(s.token)
-      // 透传省地接社（一手 PandaKing 转达）：用同一 route 的 pandaking 令牌提交 source='h5' 反馈，
+      // 透传省地接社：用同一 route 的 pandaking 令牌提交 source='h5' 反馈，
       // authorRole='pandaking' 使其落入省地接社可见通道（provincial 仅见 authorRole ∈ {provincial, pandaking}）。
+      // 前端展示层：content 以「📨」开头时不显身份标签，省地接社只看到协调意见本身。
       // 必须用 submitH5Feedback（source='h5'）——省地接社 H5 页的 getFeedbackByToken 只返回 source='h5' 记录。
       const relayItinerary = formatItineraryChanges(changesForAgency.value)
       const relayBody = [note, relayItinerary].filter(Boolean).join('\n')
       if (relayBody) {
         try {
-          await submitH5Feedback(s.token, `📨 境外旅行社协调意见（一手 PandaKing 转达）：\n${relayBody}`, user.value?.name || roleLabel(role.value), 'pandaking')
+          await submitH5Feedback(s.token, `📨 境外旅行社协调意见：\n${relayBody}`, user.value?.name || roleLabel(role.value), 'pandaking')
         } catch {
           /* 透传省地接社失败不阻断主流程 */
         }
@@ -1526,11 +1527,17 @@ const collabEvents = computed<CollabEvent[]>(() => {
             <ul v-if="feedbackList.length" class="fb-list">
               <li v-for="fb in feedbackList" :key="fb.id" class="fb-item">
                 <div class="fb-meta">
-                  <b>{{ fb.authorName || (fb.source === 'h5' ? '协作方' : 'PandaKing') }}</b>
-                  <span class="pill xs" :class="fb.authorRole === 'pandaking' ? 'st-role' : (fb.authorRole === 'agency' ? 'st-awaiting_quote' : 'st-confirmed')">
-                    {{ fb.authorRole ? roleLabel(fb.authorRole) : (fb.source === 'h5' ? 'H5 链接反馈' : '回传反馈') }}
-                  </span>
-                  <span class="fb-time">{{ fmtTime(fb.createdAt) }}</span>
+                  <template v-if="fb.content?.startsWith('📨')">
+                    <b>协调意见</b>
+                    <span class="fb-time">{{ fmtTime(fb.createdAt) }}</span>
+                  </template>
+                  <template v-else>
+                    <b>{{ fb.authorName || (fb.source === 'h5' ? '协作方' : 'PandaKing') }}</b>
+                    <span class="pill xs" :class="fb.authorRole === 'pandaking' ? 'st-role' : (fb.authorRole === 'agency' ? 'st-awaiting_quote' : 'st-confirmed')">
+                      {{ fb.authorRole ? roleLabel(fb.authorRole) : (fb.source === 'h5' ? 'H5 链接反馈' : '回传反馈') }}
+                    </span>
+                    <span class="fb-time">{{ fmtTime(fb.createdAt) }}</span>
+                  </template>
                 </div>
                 <p class="fb-content">{{ fb.content }}</p>
               </li>

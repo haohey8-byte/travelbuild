@@ -376,13 +376,14 @@ async function onAgSave() {
       }
     }
     // 透传省地接社：境外旅行社的协调意见（行程变更 + 人工说明）需再次送达省地接社。
-    // 后端 feedbackRoleWhere 物理隔离 agency↔provincial，故以 authorRole='pandaking'（一手转达）
+    // 后端 feedbackRoleWhere 物理隔离 agency↔provincial，故以 authorRole='pandaking'
     // 写入同路线反馈，使该条落入省地接社可见通道（provincial 仅见 authorRole ∈ {provincial, pandaking}）。
+    // 前端展示层：content 以「📨」开头时不显身份名和角色标签，省地接社只看到协调意见本身。
     // 透传内容不含任何报价/利润②，仅行程调整 + 文字说明。
     const relayItinerary = formatItineraryChanges(changes)
     const relayBody = [manual, relayItinerary].filter(Boolean).join('\n')
     if (relayBody) {
-      const relayContent = `📨 境外旅行社协调意见（一手 PandaKing 转达）：\n${relayBody}`
+      const relayContent = `📨 境外旅行社协调意见：\n${relayBody}`
       try {
         await submitH5Feedback(token, relayContent, agFbName.value.trim() || authorName.value.trim() || undefined, 'pandaking')
       } catch {
@@ -636,7 +637,7 @@ async function onSend() {
   // 旅行社视角的纯反馈，也需透传省地接社（一手转达），不含任何报价/利润②
   if (isAgencyView.value) {
     try {
-      await submitH5Feedback(token, `📨 境外旅行社协调意见（一手 PandaKing 转达）：\n${content}`, authorName.value.trim() || undefined, 'pandaking')
+      await submitH5Feedback(token, `📨 境外旅行社协调意见：\n${content}`, authorName.value.trim() || undefined, 'pandaking')
     } catch {
       /* 透传省地接社失败不阻断主流程 */
     }
@@ -994,12 +995,18 @@ function goHome() {
         <ul v-if="feedbackList.length" class="h5-fb-list">
           <li v-for="fb in feedbackList" :key="fb.id" class="h5-fb-item">
             <div class="h5-fb-meta">
-              <b>{{ fb.authorName || (fb.authorRole === 'pandaking' ? 'PandaKing' : fb.authorRole === 'agency' ? '境外旅行社' : '协作方') }}</b>
-              <span
-                class="fb-role"
-                :class="fb.authorRole === 'pandaking' ? 'rb-pk' : fb.authorRole === 'agency' ? 'rb-ag' : 'rb-pub'"
-              >{{ fb.authorRole ? roleLabel(fb.authorRole) : '协作方' }}</span>
-              <span class="h5-fb-time">{{ fmtTime(fb.createdAt) }}</span>
+              <template v-if="fb.content?.startsWith('📨')">
+                <b>协调意见</b>
+                <span class="fb-time">{{ fmtTime(fb.createdAt) }}</span>
+              </template>
+              <template v-else>
+                <b>{{ fb.authorName || (fb.authorRole === 'pandaking' ? 'PandaKing' : fb.authorRole === 'agency' ? '境外旅行社' : '协作方') }}</b>
+                <span
+                  class="fb-role"
+                  :class="fb.authorRole === 'pandaking' ? 'rb-pk' : fb.authorRole === 'agency' ? 'rb-ag' : 'rb-pub'"
+                >{{ fb.authorRole ? roleLabel(fb.authorRole) : '协作方' }}</span>
+                <span class="h5-fb-time">{{ fmtTime(fb.createdAt) }}</span>
+              </template>
             </div>
             <p class="h5-fb-content">{{ fb.content }}</p>
           </li>
