@@ -14,6 +14,8 @@ const password = ref('')
 const busy = ref(false)
 const err = ref('')
 const showDev = ref(false)
+// 密码可见开关：默认密文，点击切换明文（仅改显示，不影响 v-model 绑定值）
+const showPwd = ref(false)
 
 // 手机号输入净化：仅保留数字并限制 11 位（避免移动端 tel 自动格式化占用 maxlength 额度）
 function onPhoneInput(e: Event) {
@@ -109,13 +111,31 @@ onMounted(() => {
           autocomplete="username"
         />
         <label class="lbl">密码</label>
-        <input
-          v-model="password"
-          class="input"
-          type="password"
-          placeholder="登录密码"
-          autocomplete="current-password"
-        />
+        <div class="pwd-wrap">
+          <input
+            v-model="password"
+            class="input"
+            :type="showPwd ? 'text' : 'password'"
+            placeholder="登录密码"
+            autocomplete="current-password"
+          />
+          <button
+            type="button"
+            class="pwd-toggle"
+            :aria-label="showPwd ? '隐藏密码' : '显示密码'"
+            @click="showPwd = !showPwd"
+          >
+            <!-- 睁眼：显示密码态；闭眼（带斜杠）：隐藏密码态 -->
+            <svg v-if="showPwd" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+              <line x1="1" y1="1" x2="23" y2="23" />
+            </svg>
+            <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+          </button>
+        </div>
         <p v-if="err" class="err">{{ err }}</p>
         <button class="btn btn-primary submit" type="submit" :disabled="busy">
           {{ busy ? '登录中…' : '登录' }}
@@ -150,6 +170,25 @@ onMounted(() => {
 .form { text-align: left; display: flex; flex-direction: column; gap: 6px; }
 .lbl { color: var(--muted); font-size: 13px; margin-top: 6px; }
 .input { padding: 11px 12px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); font-size: 15px; }
+/* —— 密码框可见开关：右侧内嵌眼睛按钮 —— */
+.pwd-wrap { position: relative; }
+.pwd-wrap .input { padding-right: 44px; }
+.pwd-toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.pwd-toggle:hover { color: var(--brand); }
 .submit { margin-top: 14px; }
 .err { color: var(--danger); font-size: 13px; margin: 8px 0 0; }
 .role-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; justify-content: center; }
