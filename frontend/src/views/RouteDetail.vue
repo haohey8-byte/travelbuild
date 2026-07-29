@@ -547,6 +547,12 @@ async function openQuoteDialog() {
   actionOk.value = ''
   try {
     if (tokenMode.value && token) {
+      // 防呆：报价为空则拦截，避免误发 ¥0 文案
+      if (calcDerived(quoteItems.value).quoteA <= 0) {
+        actionErr.value = '当前报价为 ¥0：请先在「报价明细」表填写成本①与利润①并保存，再生成链接'
+        savingNotify.value = false
+        return
+      }
       // token 模式：免登录保存编辑并生成对境外旅行社的「可编辑」链接
       const res = await submitH5PandakingEdit(token, {
         itinerary: itinerary.value,
@@ -580,6 +586,14 @@ async function openQuoteDialog() {
       quoteDialog.value = true
       pkSuggestion.value = ''
       await loadTokenMode(token) // 重新拉取最新（含对端令牌）
+      // 文案报价以「落库后的权威值」为准：loadTokenMode 后 quoteItems 已重填为已保存版本
+      const savedQuoteA = Math.round(calcDerived(quoteItems.value).quoteA)
+      if (savedQuoteA > 0) {
+        const refreshedText = `${caption}\n报价 ¥${savedQuoteA.toLocaleString()}\n\n👉 查看路线及报价：${link}`
+        dialogText.value = [refreshedText, hasAgencyChange.value ? autoNote : '', manual ? `【补充说明】${manual}` : '']
+          .filter(Boolean)
+          .join('\n\n')
+      }
     } else {
       // console 模式：先打开带「选择旅行社」下拉的弹窗，由用户点「生成报价链接」触发 doQuote
       await loadQuoteAgencies()
@@ -608,6 +622,13 @@ async function doQuote() {
   actionErr.value = ''
   actionOk.value = ''
   try {
+    // 0) 防呆：报价为空则拦截，避免误发 ¥0 文案（线上曾出现 items 未落库却生成 ¥0 的事故）
+    if (calcDerived(quoteItems.value).quoteA <= 0) {
+      quoteErr.value = '当前报价为 ¥0：请先在「报价明细」表填写成本①与利润①并保存，再生成链接'
+      savingNotify.value = false
+      return
+    }
+
     // 1) 自动保存（写入当前行程 + 报价 + 利润①）
     await saveVersion(id, {
       itinerary: itinerary.value,
@@ -621,11 +642,20 @@ async function doQuote() {
     const share = await assignAgency(id, quoteAgencyId.value.trim())
     const link = agencyH5Url(share.token)
 
-    // 3) 构造结构化文案（仅主题 + 报价 + URL，不暴露内部信息）
+    // 3) 重新加载权威落库数据（applyVersion 会把 quoteItems 重填为已保存版本），
+    //    文案报价以「落库后的真实值」为准，避免编辑态与落库态错位导致 ¥0/错价
+    await load()
+    const savedQuoteA = Math.round(calcDerived(quoteItems.value).quoteA)
+    // 二次防呆：落库后仍为空（极端情况：保存被协作方版本冲突静默覆盖），强制拦截
+    if (savedQuoteA <= 0) {
+      quoteErr.value = '保存后报价仍为 ¥0：可能协作方已更新此路线。请刷新页面，确认报价明细已填写，再重新生成链接'
+      savingNotify.value = false
+      return
+    }
+
+    // 4) 构造结构化文案（仅主题 + 报价 + URL，不暴露内部信息）
     const caption = shareH5Caption(data.value, 'agency')
-    const d = calcDerived(quoteItems.value)
-    const qa = Math.round(d.quoteA)
-    const text = `${caption}\n报价 ¥${qa.toLocaleString()}\n\n👉 查看路线及报价：${link}`
+    const text = `${caption}\n报价 ¥${savedQuoteA.toLocaleString()}\n\n👉 查看路线及报价：${link}`
 
     // 计算本轮关键变更摘要（面向境外旅行社：仅利润② + 行程，不含 PandaKing 内部利润①），合并为修改记录，并附到微信文案
     const changes = changesForAgency.value
@@ -647,14 +677,19 @@ async function doQuote() {
     dialogText.value = notifyBody
     dialogSubtitle.value = quoteSubtitle.value
 
-    // 4) 复制交由 NotifyDialog：打开弹窗时尽力自动复制 + 提供「复制（含链接）」按钮兜底
+    // 5) 复制交由 NotifyDialog：打开弹窗时尽力自动复制 + 提供「复制（含链接）」按钮兜底
     actionOk.value = '报价链接已生成，请在弹窗内点「复制（含链接）」按钮，去微信粘贴发给旅行社'
 
-    // 5) 弹 NotifyDialog（dialogText 已赋，slot 内下拉随之隐藏）
+    // 6) 弹 NotifyDialog（dialogText 已赋，slot 内下拉随之隐藏）
     pkSuggestion.value = ''
-    await load()
   } catch (e: any) {
-    if (detectStale(e)) { savingNotify.value = false; return }
+    if (detectStale(e)) {
+      // 乐观锁冲突（VERSION_CONFLICT 409）：协作方已更新路线，当前编辑基于过期数据被拒。
+      // 显式提示刷新重填，而非静默失败（否则用户会以为已发出 ¥0/旧价文案）。
+      quoteErr.value = '数据已过期：协作方已更新此路线的行程或报价，刚刚的保存被拒绝。请刷新页面，重新填写报价后再次生成链接'
+      savingNotify.value = false
+      return
+    }
     actionErr.value = e?.response?.data?.message || '生成报价链接失败'
   } finally {
     savingNotify.value = false
