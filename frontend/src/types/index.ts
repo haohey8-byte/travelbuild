@@ -187,6 +187,8 @@ export interface CaseItem {
   descTh?: string
   // 每日图文（脱敏派生，可覆盖）
   daysContent?: DayContent[]
+  // 案例主体 HTML（运营上传的单文件微站，服务端 sanitize 后存；含地图/天气/滚动等交互）
+  contentHtml?: string | null
   status: 'published' | 'draft' | 'offline' | 'unpublished'
   createdAt?: string
   publishedAt?: string | null
@@ -389,4 +391,24 @@ export interface IntakeLinkOpts {
   expiresInDays?: number
   customExpiresAt?: string
   note?: string
+}
+
+// —— 案例内容编辑器：上传结果（HTML sanitize / 图片上传） ——
+export interface UploadHtmlStats {
+  originalSize: number
+  keptSize: number
+  strippedTags: string[]
+  strippedAttrs: string[]
+}
+export interface UploadHtmlResult {
+  html: string
+  stats: UploadHtmlStats
+  error?: string
+}
+export interface UploadImageResult {
+  url: string
+  key: string
+  size: number
+  contentType: string
+  error?: string
 }

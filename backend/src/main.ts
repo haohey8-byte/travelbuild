@@ -17,6 +17,11 @@ async function bootstrap() {
   // 无需 history fallback，仅在无扩展名的 GET 上兜底返回 index.html，防直接访问深层路径 404。
   const spaRoot = join(__dirname, '..', '..', 'spa')
   app.use(express.static(spaRoot, { index: 'index.html' }))
+  // 本地磁盘存储驱动：对外提供 /uploads/* 静态资源（生产用 cos 时此目录为空，无害）
+  if ((process.env.STORAGE_DRIVER || 'local').toLowerCase() === 'local') {
+    const uploadsRoot = join(process.cwd(), 'uploads')
+    app.use('/uploads', express.static(uploadsRoot))
+  }
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (
       req.method === 'GET' &&

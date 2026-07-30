@@ -19,6 +19,7 @@ export interface CreateCaseInput {
   descEn?: string | null
   descTh?: string | null
   daysContent?: Prisma.InputJsonValue
+  contentHtml?: string | null // 案例主体 HTML（运营上传的单文件微站，服务端 sanitize 后存）
 }
 
 // 联合品牌档案（via=agencyId 时随案例详情返回）

@@ -145,6 +145,7 @@ model Case {
   descEn      String?   // 英文描述
   descTh      String?   // 泰文描述
   daysContent Json?     // 每日图文（脱敏派生，可覆盖）：{ day,city,spots[],hotel,meals[],notes,image? }[]
+  contentHtml  String?  // 案例主体 HTML（运营上传的单文件微站，服务端 sanitize 后存；含地图/天气/滚动等交互）
 }
 
 // 知识库条目
