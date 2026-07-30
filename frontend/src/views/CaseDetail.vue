@@ -6,6 +6,7 @@ import { fetchCase, updateCase, publishCase, unpublishCase, deleteCase } from '@
 import { useAuthStore } from '@/stores/auth'
 import { safeText } from '@/utils/name'
 import { copyText } from '@/utils/share'
+import ImageUploader from '@/components/ImageUploader.vue'
 import type { CaseItem, DayContent } from '@/types'
 
 const route = useRoute()
@@ -101,7 +102,7 @@ async function onSave() {
   try {
     const payload = {
       title: form.value.title.trim(),
-      cover: form.value.cover.trim() || undefined,
+      cover: form.value.cover?.trim() || undefined,
       highlights: form.value.highlights.split(/[、,，]/).map((s) => s.trim()).filter(Boolean),
       descZh: form.value.descZh,
       daysContent: form.value.daysContent,
@@ -223,8 +224,8 @@ const contactList = computed(() => {
         <div v-else class="edit-form">
           <label>标题</label>
           <input v-model="form.title" class="field" placeholder="案例标题" />
-          <label>封面图 URL</label>
-          <input v-model="form.cover" class="field" placeholder="https://…" />
+          <label>封面图</label>
+          <ImageUploader v-model="form.cover" hint="点击或拖拽上传封面（jpg/png/webp，自动压缩）" />
           <label>亮点（顿号/逗号分隔）</label>
           <input v-model="form.highlights" class="field" placeholder="如 亲子友好、含接送" />
           <label>描述</label>
