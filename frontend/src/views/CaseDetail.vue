@@ -8,7 +8,7 @@ import { safeText } from '@/utils/name'
 import { copyText } from '@/utils/share'
 import ImageUploader from '@/components/ImageUploader.vue'
 import HtmlUploader from '@/components/HtmlUploader.vue'
-import CaseHtmlView from '@/components/CaseHtmlView.vue'
+import CaseDetailView from '@/components/CaseDetailView.vue'
 import type { CaseItem, DayContent } from '@/types'
 
 const route = useRoute()
@@ -27,15 +27,50 @@ const notFound = ref(false)
 // 编辑态
 const editing = ref(false)
 const saving = ref(false)
+const tab = ref<'edit' | 'preview'>('edit')
+const newHighlight = ref('')
 const form = ref<{
   title: string
   cover: string
-  highlights: string
+  highlights: string[]
   descZh: string
   contentHtml: string
   daysContent: DayContent[]
-}>({ title: '', cover: '', highlights: '', descZh: '', contentHtml: '', daysContent: [] })
+}>({ title: '', cover: '', highlights: [], descZh: '', contentHtml: '', daysContent: [] })
 const msg = ref('')
+
+// 草稿 localStorage（防意外中断丢失）
+const draftKey = computed(() => `case-draft-${id.value}`)
+let draftTimer: ReturnType<typeof setTimeout> | null = null
+watch(
+  form,
+  () => {
+    if (!editing.value) return
+    if (draftTimer) clearTimeout(draftTimer)
+    draftTimer = setTimeout(() => {
+      try {
+        localStorage.setItem(draftKey.value, JSON.stringify(form.value))
+      } catch {
+        /* 忽略配额/隐私模式 */
+      }
+    }, 2000)
+  },
+  { deep: true },
+)
+
+// 预览用 CaseItem：把 form 合并进当前案例（保留 agencyBranding 等非编辑字段）
+const previewCase = computed<CaseItem | null>(() => {
+  if (!c.value) return null
+  return {
+    ...c.value,
+    title: form.value.title,
+    cover: form.value.cover,
+    highlights: form.value.highlights,
+    descZh: form.value.descZh,
+    contentHtml: form.value.contentHtml,
+    daysContent: form.value.daysContent,
+  }
+})
 
 async function load() {
   loading.value = true
@@ -89,11 +124,23 @@ function startEdit() {
   form.value = {
     title: x.title || '',
     cover: x.cover || '',
-    highlights: (x.highlights || []).join('、'),
+    highlights: x.highlights ? [...x.highlights] : [],
     descZh: x.descZh || '',
     contentHtml: x.contentHtml || '',
     daysContent: (x.daysContent || []).map((d) => ({ ...d, spots: [...(d.spots || [])], meals: [...(d.meals || [])] })),
   }
+  // 恢复未保存草稿（若有）
+  try {
+    const saved = localStorage.getItem(draftKey.value)
+    if (saved) {
+      const draft = JSON.parse(saved) as typeof form.value
+      form.value = { ...form.value, ...draft }
+      flash('已恢复上次未保存的草稿')
+    }
+  } catch {
+    /* 忽略 */
+  }
+  tab.value = 'edit'
   editing.value = true
   msg.value = ''
 }
@@ -107,7 +154,7 @@ async function onSave() {
     const payload = {
       title: form.value.title.trim(),
       cover: form.value.cover?.trim() || undefined,
-      highlights: form.value.highlights.split(/[、,，]/).map((s) => s.trim()).filter(Boolean),
+      highlights: form.value.highlights,
       descZh: form.value.descZh,
       contentHtml: form.value.contentHtml || undefined,
       daysContent: form.value.daysContent,
@@ -115,6 +162,8 @@ async function onSave() {
     const updated = await updateCase(id.value, payload)
     c.value = updated
     editing.value = false
+    // 保存成功清草稿
+    try { localStorage.removeItem(draftKey.value) } catch { /* */ }
     flash('已保存')
   } catch (e: any) {
     flash(e?.response?.data?.message || '保存失败')
@@ -136,17 +185,17 @@ async function onDelete() {
   router.push('/cases')
 }
 
-const contactList = computed(() => {
-  const ct = c.value?.agencyBranding?.contacts
-  if (!ct) return []
-  const arr: { label: string; value: string }[] = []
-  if (ct.wechat) arr.push({ label: '微信', value: ct.wechat })
-  if (ct.line) arr.push({ label: 'Line', value: ct.line })
-  if (ct.facebook) arr.push({ label: 'Facebook', value: ct.facebook })
-  if (ct.phone) arr.push({ label: '电话', value: ct.phone })
-  if (ct.email) arr.push({ label: '邮箱', value: ct.email })
-  return arr
-})
+// 亮点 chips 编辑
+function addHighlight() {
+  const v = newHighlight.value.trim()
+  if (v && !form.value.highlights.includes(v)) {
+    form.value.highlights.push(v)
+  }
+  newHighlight.value = ''
+}
+function removeHighlight(i: number) {
+  form.value.highlights.splice(i, 1)
+}
 </script>
 
 <template>
@@ -157,6 +206,11 @@ const contactList = computed(() => {
         <button class="btn sm" @click="onCopyLink">复制链接</button>
         <button class="btn ghost sm" @click="onCopyCaption">复制文案</button>
       </div>
+      <div v-else class="edit-head">
+        <span class="edit-title">编辑内容</span>
+        <button class="btn sm" :disabled="saving" @click="onSave">保存</button>
+        <button class="btn ghost sm" @click="cancelEdit">取消</button>
+      </div>
     </div>
 
     <p v-if="loading">加载中…</p>
@@ -164,85 +218,63 @@ const contactList = computed(() => {
     <p v-else-if="err" class="err">{{ err }}</p>
 
     <template v-else-if="c">
-      <!-- 联合品牌条 -->
-      <div v-if="c.agencyBranding" class="cobrand">
-        <img v-if="c.agencyBranding.logoUrl" :src="c.agencyBranding.logoUrl" class="logo" alt="logo" />
-        <div class="cobrand-text">
-          <span class="x">PandaKing</span> × <b>{{ c.agencyBranding.name }}</b>
-          <div v-if="contactList.length" class="contacts">
-            <span v-for="ct in contactList" :key="ct.label" class="contact">{{ ct.label }}: {{ ct.value }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- 封面 + 标题 -->
-      <div class="hero" :style="c.cover ? `background-image:url(${c.cover})` : ''">
-        <span v-if="!c.cover" class="hero-ph">{{ caseTitle().slice(0, 1) }}</span>
-        <div class="hero-mask">
-          <h1 class="title">{{ caseTitle() }}</h1>
-          <div class="meta">{{ c.destination }} · {{ c.days }} 天 · {{ c.theme }} · {{ c.priceRange }}</div>
-        </div>
-      </div>
-
-      <div v-if="c.highlights?.length" class="hl">
-        <span v-for="h in c.highlights" :key="h" class="chip">{{ h }}</span>
-      </div>
-
-      <p v-if="c.descZh" class="desc">{{ c.descZh }}</p>
-
-      <!-- 案例主体 HTML（运营上传的单文件微站，服务端 sanitize 后存；沙箱 iframe 渲染） -->
-      <CaseHtmlView v-if="!editing && c.contentHtml" :html="c.contentHtml" class="content-html" />
-
-      <!-- 每日图文 -->
-      <section v-if="c.daysContent?.length" class="days">
-        <h2>行程亮点（每日）</h2>
-        <div v-for="(d, i) in (editing ? form.daysContent : c.daysContent)" :key="d.day" class="day-card">
-          <img v-if="!editing && d.image" :src="d.image" class="day-img" alt="" />
-          <div class="day-head">第 {{ d.day }} 天 · {{ d.city }}</div>
-          <div v-if="d.spots?.length" class="day-row"><span class="k">景点</span>
-            <span class="chips"><span v-for="s in d.spots" :key="s" class="chip sm">{{ s }}</span></span>
-          </div>
-          <div v-if="d.hotel" class="day-row"><span class="k">酒店</span><b>{{ d.hotel }}</b></div>
-          <div v-if="d.meals?.length" class="day-row"><span class="k">餐饮</span>
-            <span class="chips"><span v-for="m in d.meals" :key="m" class="chip sm">{{ m }}</span></span>
-          </div>
-          <div v-if="!editing && d.notes" class="day-notes">{{ d.notes }}</div>
-          <!-- 编辑态：每日 image（上传组件）+ notes 可编辑 -->
-          <template v-if="editing">
-            <div class="day-img-edit">
-              <ImageUploader v-model="form.daysContent[i].image" hint="每日主图（自动压缩）" compact />
-            </div>
-            <textarea v-model="form.daysContent[i].notes" class="field area" placeholder="当日备注"></textarea>
-          </template>
-        </div>
-      </section>
-
-      <!-- 微信引导 -->
+      <!-- 非编辑态：公开视图（CaseDetailView）+ 管理按钮 -->
+      <CaseDetailView v-if="!editing" :c="c" />
       <p v-if="!editing" class="wechat-tip">复制链接或文案后，粘贴到微信发送给客户即可。</p>
 
-      <!-- 管理员编辑面板 -->
-      <div v-if="user" class="admin card">
-        <div v-if="!editing" class="admin-bar">
-          <button class="btn ghost sm" @click="startEdit">编辑内容</button>
-          <button v-if="c.status !== 'published'" class="btn sm" @click="onPublish">发布</button>
-          <button v-else class="btn ghost sm" @click="onUnpublish">下线</button>
-          <button class="btn ghost sm danger" @click="onDelete">删除</button>
-        </div>
+      <div v-if="!editing && user" class="admin-bar">
+        <button class="btn ghost sm" @click="startEdit">编辑内容</button>
+        <button v-if="c.status !== 'published'" class="btn sm" @click="onPublish">发布</button>
+        <button v-else class="btn ghost sm" @click="onUnpublish">下线</button>
+        <button class="btn ghost sm danger" @click="onDelete">删除</button>
+      </div>
 
-        <div v-else class="edit-form">
-          <label>标题</label>
-          <input v-model="form.title" class="field" placeholder="案例标题" />
-          <label>封面图</label>
-          <ImageUploader v-model="form.cover" hint="点击或拖拽上传封面（jpg/png/webp，自动压缩）" />
-          <label>亮点（顿号/逗号分隔）</label>
-          <input v-model="form.highlights" class="field" placeholder="如 亲子友好、含接送" />
-          <label>描述</label>
-          <textarea v-model="form.descZh" class="field area" placeholder="图文产品页正文"></textarea>
-          <label>内容 HTML（单文件微站）</label>
-          <HtmlUploader v-model="form.contentHtml" />
-          <div class="edit-actions">
-            <button class="btn sm" :disabled="saving" @click="onSave">保存</button>
-            <button class="btn ghost sm" @click="cancelEdit">取消</button>
+      <!-- 编辑态：双栏（桌面左编辑右预览 / 移动 Tab） -->
+      <div v-if="editing" class="edit-layout" :class="tab">
+        <div class="edit-tabs">
+          <button :class="{ active: tab === 'edit' }" @click="tab = 'edit'">编辑</button>
+          <button :class="{ active: tab === 'preview' }" @click="tab = 'preview'">预览</button>
+        </div>
+        <div class="edit-body">
+          <div class="edit-pane">
+            <label>标题</label>
+            <input v-model="form.title" class="field" placeholder="案例标题" />
+            <label>封面图</label>
+            <ImageUploader v-model="form.cover" hint="点击或拖拽上传封面（jpg/png/webp，自动压缩）" />
+            <label>亮点</label>
+            <div class="chips-edit">
+              <span v-for="(h, i) in form.highlights" :key="i" class="chip-edit">
+                {{ h }} <button type="button" class="chip-x" @click="removeHighlight(i)">×</button>
+              </span>
+              <input
+                v-model="newHighlight"
+                class="field chip-input"
+                placeholder="输入后回车添加"
+                @keydown.enter.prevent="addHighlight"
+              />
+            </div>
+            <label>描述</label>
+            <textarea v-model="form.descZh" class="field area" placeholder="图文产品页正文"></textarea>
+            <label>内容 HTML（单文件微站）</label>
+            <HtmlUploader v-model="form.contentHtml" />
+
+            <label>每日行程</label>
+            <div v-for="(d, i) in form.daysContent" :key="d.day" class="day-card edit">
+              <div class="day-head">第 {{ d.day }} 天 · {{ d.city }}</div>
+              <div v-if="d.spots?.length" class="day-row"><span class="k">景点</span>
+                <span class="chips"><span v-for="s in d.spots" :key="s" class="chip sm">{{ s }}</span></span>
+              </div>
+              <div v-if="d.hotel" class="day-row"><span class="k">酒店</span><b>{{ d.hotel }}</b></div>
+              <div class="day-img-edit">
+                <ImageUploader v-model="form.daysContent[i].image" hint="每日主图（自动压缩）" compact />
+              </div>
+              <textarea v-model="form.daysContent[i].notes" class="field area" placeholder="当日备注"></textarea>
+            </div>
+          </div>
+
+          <div class="preview-pane">
+            <div class="preview-label">实时预览</div>
+            <CaseDetailView v-if="previewCase" :c="previewCase" />
           </div>
         </div>
       </div>
@@ -254,49 +286,44 @@ const contactList = computed(() => {
 
 <style scoped>
 .detail-page { max-width: 920px; margin: 0 auto; }
-.topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 8px; }
 .back { color: var(--brand); text-decoration: none; }
 .share { display: flex; gap: 6px; }
-.cobrand {
-  display: flex; align-items: center; gap: 12px; padding: 10px 14px;
-  background: var(--brand-soft, #eef); border-radius: 12px; margin-bottom: 12px;
+.edit-head { display: flex; align-items: center; gap: 8px; }
+.edit-title { font-size: 14px; color: var(--muted); margin-right: auto; }
+.wechat-tip { color: var(--muted); font-size: 13px; margin: 14px 0; }
+.admin-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+
+/* 双栏编辑布局 */
+.edit-layout { margin-top: 4px; }
+.edit-tabs { display: none; }
+.edit-body { display: flex; gap: 16px; align-items: flex-start; }
+.edit-pane { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.preview-pane { flex: 1; min-width: 0; position: sticky; top: 12px; }
+.preview-label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.edit-pane label { font-size: 13px; color: var(--muted); margin-top: 10px; }
+.edit-pane label:first-child { margin-top: 0; }
+
+.chips-edit { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip-edit {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 12px;
+  background: var(--brand-soft, #eef); color: var(--brand); border-radius: 999px; padding: 3px 8px 3px 10px;
 }
-.cobrand .logo { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; }
-.cobrand .x { color: var(--brand); font-weight: 700; }
-.contacts { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--muted); }
-.contact { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
-.hero {
-  height: 280px; background: var(--brand-soft, var(--line)) center/cover no-repeat;
-  border-radius: 14px; position: relative; display: flex; align-items: flex-end; overflow: hidden;
-}
-.hero-ph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 64px; font-weight: 700; color: var(--brand); }
-.hero-mask { width: 100%; padding: 18px; background: linear-gradient(transparent, rgba(0,0,0,.55)); color: #fff; }
-.title { margin: 0; font-size: 24px; }
-.meta { margin-top: 6px; opacity: .92; font-size: 14px; }
-.hl { margin: 12px 0; display: flex; flex-wrap: wrap; gap: 6px; }
-.chip { font-size: 12px; background: var(--brand-soft, #eef); color: var(--brand); border-radius: 999px; padding: 2px 8px; }
-.chip.sm { font-size: 11px; }
-.desc { line-height: 1.7; white-space: pre-wrap; margin: 8px 0 18px; }
-.content-html { margin: 12px 0 18px; }
-.days h2 { font-size: 18px; margin: 8px 0; }
-.day-card { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 10px; background: var(--card); }
-.day-img { width: 100%; max-height: 220px; object-fit: cover; border-radius: 8px; margin-bottom: 8px; }
+.chip-x { background: none; border: none; color: var(--brand); cursor: pointer; font-size: 14px; line-height: 1; padding: 0; opacity: .6; }
+.chip-x:hover { opacity: 1; }
+.chip-input { flex: 1; min-width: 120px; padding: 5px 10px; font-size: 12px; }
+
+.day-card.edit { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 10px; background: var(--card); }
 .day-head { font-weight: 600; margin-bottom: 6px; }
 .day-row { display: flex; gap: 8px; align-items: flex-start; padding: 3px 0; }
 .day-row .k { color: var(--muted); width: 40px; flex: none; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.day-notes { color: var(--muted); font-size: 14px; white-space: pre-wrap; margin-top: 4px; }
-.day-row.edit { align-items: center; }
+.chip { font-size: 12px; background: var(--brand-soft, #eef); color: var(--brand); border-radius: 999px; padding: 2px 8px; }
+.chip.sm { font-size: 11px; }
 .day-img-edit { margin: 6px 0; }
-.wechat-tip { color: var(--muted); font-size: 13px; margin: 14px 0; }
-.admin { margin-top: 16px; padding: 12px; }
-.admin-bar { display: flex; gap: 8px; flex-wrap: wrap; }
-.edit-form { display: flex; flex-direction: column; gap: 6px; }
-.edit-form label { font-size: 13px; color: var(--muted); margin-top: 6px; }
-.edit-actions { display: flex; gap: 8px; margin-top: 10px; }
+
 .field { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--text); width: 100%; box-sizing: border-box; }
 .area { min-height: 80px; resize: vertical; }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
 .btn { padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--brand); color: #fff; cursor: pointer; }
 .btn.sm { padding: 3px 10px; font-size: 12px; }
 .btn.ghost { background: transparent; color: var(--text); }
@@ -305,7 +332,17 @@ const contactList = computed(() => {
 .err { color: var(--danger); }
 .msg { color: var(--ok); font-size: 13px; margin-top: 10px; }
 
-@media (max-width: 640px) {
-  .hero { height: 200px; }
+/* 移动端：Tab 切换，单栏 */
+@media (max-width: 768px) {
+  .edit-tabs { display: flex; gap: 8px; margin-bottom: 10px; }
+  .edit-tabs button {
+    flex: 1; padding: 8px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--card); color: var(--text); cursor: pointer; font-size: 13px;
+  }
+  .edit-tabs button.active { background: var(--brand); color: #fff; border-color: var(--brand); }
+  .edit-body { flex-direction: column; }
+  .preview-pane { position: static; }
+  .edit-layout.edit .preview-pane { display: none; }
+  .edit-layout.preview .edit-pane { display: none; }
 }
 </style>
