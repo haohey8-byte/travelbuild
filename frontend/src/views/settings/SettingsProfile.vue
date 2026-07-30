@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
-import type { Role, User } from '@/types'
+import { listIntakeLinks } from '@/api/routes'
+import { copyText } from '@/utils/share'
+import type { IntakeLinkView, Role, User } from '@/types'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -59,10 +61,10 @@ const showMatrixExtras = computed(() => role.value !== 'agency')
 const matrixTipText =
   '旅行社与省地接社在「价格与信息」上完全物理隔绝：互相不知道对方的存在与数据展示。'
 
-// —— 协作说明文案：agency 视角改写（去掉「省地接社」字样） ——
+// —— 协作说明文案：agency 视角改写（去掉「省地接社」「看不到 PandaKing 内部信息」等字样） ——
 const collabText = computed(() => {
   if (role.value === 'agency') {
-    return '本平台采用<b>物理隔绝</b>设计：您只能看到归属于本机构的数据，看不到 PandaKing 的内部信息，也无法知道其他合作方的存在。价格信息按角色严格裁剪，您看到的「我的路线 / 我的询价」仅包含归属于本旅行社的数据。'
+    return '本平台采用<b>物理隔绝</b>设计：您只能看到归属于本机构的数据，价格信息按角色严格裁剪，您看到的「我的路线 / 我的询价」仅包含归属于本旅行社的数据。'
   }
   // pandaking / provincial：原版
   return '本平台采用<b>物理隔绝</b>设计： PandaKing、旅行社、省地接社三方数据互不越权可见。旅行社与省地接社互相不知道对方的存在与数据；价格与成本信息按角色严格裁剪。你看到的「我的路线 / 我的询价」仅包含归属于本机构的数据。'
@@ -71,6 +73,43 @@ const collabText = computed(() => {
 function gotoChangePwd() {
   router.push('/change-pwd')
 }
+
+// —— 境外旅行社：在「我的」页只读展示其专属提交链接（URL + 使用说明 + 复制）——
+// 「提交链接」独立页已从 agency 视角移除（保留给 PandaKing 管理全部机构链接）；
+// agency 仅在此查看 PandaKing 预发给本机构的链接，不暴露增删 / 改期等管理操作。
+const agencyIntakeLink = ref<IntakeLinkView | null>(null)
+const agencyLinkCopied = ref(false)
+const agencyIntakeLoading = ref(false)
+function intakeFullUrl(link: string) {
+  const base = import.meta.env.VITE_BASE || '/'
+  return location.origin + base + '#' + link
+}
+const agencyIntakeFullUrl = computed(() =>
+  agencyIntakeLink.value ? intakeFullUrl(agencyIntakeLink.value.link) : '',
+)
+async function copyAgencyIntakeLink() {
+  if (!agencyIntakeLink.value) return
+  const ok = await copyText(agencyIntakeFullUrl.value)
+  if (ok) {
+    agencyLinkCopied.value = true
+    setTimeout(() => { agencyLinkCopied.value = false }, 2000)
+  }
+}
+onMounted(async () => {
+  if (role.value !== 'agency') return
+  agencyIntakeLoading.value = true
+  try {
+    const links = await listIntakeLinks()
+    if (links.length) {
+      // 优先展示未过期链接；全部过期则展示最近一条（前端标过期提示）
+      agencyIntakeLink.value = links.find((l) => !l.expired) || links[0]
+    }
+  } catch {
+    agencyIntakeLink.value = null
+  } finally {
+    agencyIntakeLoading.value = false
+  }
+})
 
 const ROLE_LABEL: Record<Role, string> = {
   pandaking: 'PandaKing',
@@ -95,6 +134,29 @@ const ROLE_LABEL: Record<Role, string> = {
         <button class="btn-pwd" type="button" @click="gotoChangePwd" aria-label="修改密码">🔑 修改密码</button>
       </div>
       <button class="btn btn-primary" @click="onLogout">退出登录</button>
+    </div>
+
+    <!-- 境外旅行社：只读展示本机构专属提交链接（URL + 使用说明 + 复制） -->
+    <div v-if="role === 'agency'" class="card" style="margin-top: 16px">
+      <h3>路线提交链接</h3>
+      <p class="muted">这是贵机构专用的路线初稿提交链接，免登录、仅贵机构可使用：</p>
+
+      <p v-if="agencyIntakeLoading" class="muted">加载中…</p>
+      <template v-else>
+        <div v-if="agencyIntakeLink" class="intake-box">
+          <code class="intake-url">{{ agencyIntakeFullUrl }}</code>
+          <button class="btn ghost sm" type="button" @click="copyAgencyIntakeLink">
+            {{ agencyLinkCopied ? '已复制 ✓' : '复制 URL' }}
+          </button>
+        </div>
+        <p v-if="agencyIntakeLink?.expired" class="warn">该链接已过期，请联系 PandaKing 重新获取。</p>
+        <p v-else-if="!agencyIntakeLink" class="muted">暂未获取到提交链接，请联系 PandaKing 为您生成。</p>
+      </template>
+
+      <p class="tip">
+        使用说明：将链接发给贵社对接人，对方点开即可免登录填报路线初稿（客户名、目的地、人数、出行日期、每日行程）。
+        提交后系统自动建单，您可在「我的路线」查看进展与反馈。
+      </p>
     </div>
 
     <div class="card" style="margin-top: 16px">
@@ -155,4 +217,19 @@ h3 { margin: 0 0 4px; }
   transition: background 0.15s;
 }
 .btn-pwd:hover { background: #E6F1FB; }
+/* 机构提交链接只读展示（agency 视角「我的」页） */
+.intake-box { display: flex; align-items: center; gap: 8px; margin: 10px 0 4px; }
+.intake-url {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-all;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--ink);
+}
+.warn { color: #c0392b; font-size: 12px; margin: 6px 0 0; }
 </style>
