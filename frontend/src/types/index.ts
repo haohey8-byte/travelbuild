@@ -100,11 +100,22 @@ export interface AdminView {
   createdAt: string
 }
 
+// 机构联系方式（联合品牌档案，P0）
+export interface AgencyContacts {
+  facebook?: string
+  line?: string
+  wechat?: string
+  phone?: string
+  email?: string
+}
+
 export interface Agency {
   id: string
   name: string
   role: Role
   contact?: string | null
+  logoUrl?: string | null // P0 联合品牌：机构 logo
+  contacts?: AgencyContacts | null // P0 联合品牌：联系方式
   disabled?: boolean // 禁用：仅从选择下拉框移除，不阻断登录
   createdAt: string
   loginAccount?: string | null // 关联登录账号的手机号（后台登录键）；无账号则 null
@@ -137,24 +148,50 @@ export interface LoginResult {
   requireChangePwd?: boolean
 }
 
+// 每日图文（脱敏派生，可覆盖）：仅城市/景点/酒店/餐饮/备注，绝不含客户名/证件/合同价
+export interface DayContent {
+  day: number
+  city: string
+  spots: string[]
+  hotel: string
+  meals: string[]
+  notes: string
+  image?: string | null
+}
+
+// 联合品牌档案（via=agencyId 访问详情时随案例返回）
+export interface AgencyBranding {
+  id: string
+  name: string
+  logoUrl: string | null
+  contacts: AgencyContacts | null
+}
+
+// 案例展示（公开化内容模型，P0）
+// 字段严格对齐后端 Case 模型：后端无对应字段的声明一律删除（防幻觉）。
 export interface CaseItem {
   id: string
   routeId?: string | null
   title?: string
+  titleEn?: string
+  titleTh?: string
   cover?: string
-  customerName?: string | null
-  customerNameCn?: string | null
+  highlights?: string[]
   destination: string
   days: number
   theme: string
-  themeTags?: string[]
-  highlights?: string[]
   priceRange: string
-  refPriceRange?: string
-  compliant?: boolean
+  // 多语言描述（P0 仅建模型 + zh 渲染）
+  descZh?: string
+  descEn?: string
+  descTh?: string
+  // 每日图文（脱敏派生，可覆盖）
+  daysContent?: DayContent[]
   status: 'published' | 'draft' | 'offline' | 'unpublished'
   createdAt?: string
   publishedAt?: string | null
+  // 联合品牌（仅带 via 访问详情时返回）
+  agencyBranding?: AgencyBranding | null
 }
 
 // —— 协作 H5（公开只读视图 / PandaKing↔旅行社双向编辑视图） ——

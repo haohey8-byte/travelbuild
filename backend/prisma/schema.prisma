@@ -33,6 +33,8 @@ model Agency {
   disabled   Boolean       @default(false) // 禁用：从各选择下拉框中移除，并禁止其登录账号（友好提示），由一手 PandaKing 控制
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
+  logoUrl    String?       // 联合品牌：机构 logo（P0 案例联合品牌条用）
+  contacts   Json?         // 联合品牌联系方式：{ facebook?, line?, wechat?, phone?, email? }
   users      User[]
   routes     Route[]       @relation("RouteAgency")
   provincialRoutes Route[] @relation("RouteProvincial")
@@ -133,6 +135,16 @@ model Case {
   createdById String
   createdAt   DateTime   @default(now())
   publishedAt DateTime?
+  // —— P0 案例展示公开化扩展字段 ——
+  title       String?   // 中文标题（发布校验非空）；沿用前端 CaseItem.title
+  titleEn     String?   // 英文标题（P0 仅模型，渲染 zh）
+  titleTh     String?   // 泰文标题（P0 仅模型，渲染 zh）
+  cover       String?   // 封面图 URL；沿用前端 CaseItem.cover（非 coverUrl）
+  highlights  String[]  // 亮点标签
+  descZh      String?   // 中文描述（图文产品页正文）
+  descEn      String?   // 英文描述
+  descTh      String?   // 泰文描述
+  daysContent Json?     // 每日图文（脱敏派生，可覆盖）：{ day,city,spots[],hotel,meals[],notes,image? }[]
 }
 
 // 知识库条目

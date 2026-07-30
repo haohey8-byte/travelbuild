@@ -17,7 +17,9 @@ const router = createRouter({
     { path: '/routes/:id', name: 'route-detail', component: () => import('@/views/RouteDetail.vue'), props: true },
     { path: '/kb', name: 'kb', component: () => import('@/views/KnowledgeBase.vue') },
     { path: '/settings', name: 'settings', component: () => import('@/views/settings/Settings.vue') },
-    { path: '/cases', name: 'cases', component: () => import('@/views/Cases.vue') },
+    { path: '/cases', name: 'cases', component: () => import('@/views/Cases.vue'), meta: { public: true } },
+    // 案例公开详情页（免登录；带 ?via=agencyId 时服务端内嵌联合品牌档案）
+    { path: '/cases/:id', name: 'case-detail', component: () => import('@/views/CaseDetail.vue'), meta: { public: true }, props: true },
     { path: '/route-archives', name: 'route-archives', component: () => import('@/views/RouteArchives.vue') },
     { path: '/route-archives/:id', name: 'route-archive-detail', component: () => import('@/views/RouteArchiveDetail.vue'), props: true },
     // 协作 H5（公开，免登录，隐藏主导航）

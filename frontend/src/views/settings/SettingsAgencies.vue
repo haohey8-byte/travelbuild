@@ -36,7 +36,12 @@ const lastDeleted = ref<{ name: string; id: string } | null>(null)
 
 // —— 修改旅行社（名称 / 联系方式；角色结构性锁定）——
 const editTarget = ref<Agency | null>(null)
-const editForm = ref({ name: '', contact: '' })
+const editForm = ref({
+  name: '',
+  contact: '',
+  logoUrl: '',
+  contacts: { facebook: '', line: '', wechat: '', phone: '', email: '' },
+})
 const editErr = ref('')
 const editSaving = ref(false)
 
@@ -54,7 +59,18 @@ function replaceLocal(updated: Agency) {
 
 async function onEdit(a: Agency) {
   editTarget.value = a
-  editForm.value = { name: a.name, contact: a.contact || '' }
+  editForm.value = {
+    name: a.name,
+    contact: a.contact || '',
+    logoUrl: a.logoUrl || '',
+    contacts: {
+      facebook: a.contacts?.facebook || '',
+      line: a.contacts?.line || '',
+      wechat: a.contacts?.wechat || '',
+      phone: a.contacts?.phone || '',
+      email: a.contacts?.email || '',
+    },
+  }
   editErr.value = ''
 }
 async function onSaveEdit() {
@@ -66,6 +82,14 @@ async function onSaveEdit() {
     const updated = await updateAgency(editTarget.value.id, {
       name: editForm.value.name.trim(),
       contact: editForm.value.contact.trim() || undefined,
+      logoUrl: editForm.value.logoUrl.trim() || undefined,
+      contacts: {
+        facebook: editForm.value.contacts.facebook.trim(),
+        line: editForm.value.contacts.line.trim(),
+        wechat: editForm.value.contacts.wechat.trim(),
+        phone: editForm.value.contacts.phone.trim(),
+        email: editForm.value.contacts.email.trim(),
+      },
     })
     replaceLocal(updated)
     editTarget.value = null
@@ -265,6 +289,16 @@ onMounted(load)
         <div class="row"><label>角色</label><input :value="ROLE_LABEL[editTarget.role] || editTarget.role" class="input" disabled /></div>
         <div class="row"><label>名称</label><input v-model="editForm.name" class="input" placeholder="旅行社名称" /></div>
         <div class="row"><label>联系方式</label><input v-model="editForm.contact" class="input" placeholder="邮箱 / 电话（可选）" /></div>
+        <div class="row"><label>Logo</label><input v-model="editForm.logoUrl" class="input" placeholder="https://… 机构 logo 图片 URL（联合品牌展示用，可选）" /></div>
+        <div class="row col"><label>联合品牌联系方式</label>
+          <div class="contacts-grid">
+            <input v-model="editForm.contacts.wechat" class="input" placeholder="微信（可选）" />
+            <input v-model="editForm.contacts.line" class="input" placeholder="Line（可选）" />
+            <input v-model="editForm.contacts.facebook" class="input" placeholder="Facebook（可选）" />
+            <input v-model="editForm.contacts.phone" class="input" placeholder="电话（可选）" />
+            <input v-model="editForm.contacts.email" class="input" placeholder="邮箱（可选）" />
+          </div>
+        </div>
         <p class="muted">角色为结构性字段（决定编号前缀语义），此处锁定不可修改。</p>
         <p v-if="editErr" class="err">{{ editErr }}</p>
         <div class="modal-actions">
@@ -306,6 +340,9 @@ onMounted(load)
 .badge-on { background: color-mix(in srgb, var(--brand) 16%, transparent); color: var(--brand); }
 .badge-off { background: var(--line); color: var(--muted); }
 .row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+.row.col { align-items: flex-start; }
+.row.col label { padding-top: 9px; }
+.contacts-grid { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .row label { color: var(--muted); width: 72px; flex: none; font-size: 13px; }
 .input { flex: 1; padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); font-size: 14px; }
 .input-wrap { position: relative; flex: 1; display: flex; align-items: center; }

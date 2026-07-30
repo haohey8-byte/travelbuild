@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
+import { Prisma } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service'
 
 export interface CreateCaseInput {
@@ -8,6 +9,24 @@ export interface CreateCaseInput {
   theme: string
   priceRange: string
   createdById: string
+  // —— P0 案例公开化扩展字段（均可空，运营后补全） ——
+  title?: string | null
+  titleEn?: string | null
+  titleTh?: string | null
+  cover?: string | null
+  highlights?: string[]
+  descZh?: string | null
+  descEn?: string | null
+  descTh?: string | null
+  daysContent?: Prisma.InputJsonValue
+}
+
+// 联合品牌档案（via=agencyId 时随案例详情返回）
+export interface AgencyBranding {
+  id: string
+  name: string
+  logoUrl: string | null
+  contacts: unknown
 }
 
 @Injectable()
@@ -27,10 +46,23 @@ export class CaseService {
     return this.prisma.case.findMany({ orderBy: { createdAt: 'desc' } })
   }
 
-  async getPublished(id: string) {
+  async getPublished(id: string, via?: string) {
     const c = await this.prisma.case.findUnique({ where: { id } })
     if (!c || c.status !== 'published') throw new NotFoundException('案例不存在或未发布')
-    return c
+    // 联合品牌：via 为有效且未禁用的机构 id 时内嵌其品牌档案；无效 via 静默忽略
+    let agencyBranding: AgencyBranding | null = null
+    if (via) {
+      const agency = await this.prisma.agency.findUnique({ where: { id: via } })
+      if (agency && !agency.disabled) {
+        agencyBranding = {
+          id: agency.id,
+          name: agency.name,
+          logoUrl: agency.logoUrl,
+          contacts: agency.contacts,
+        }
+      }
+    }
+    return { ...c, agencyBranding }
   }
 
   async getById(id: string) {
@@ -51,11 +83,22 @@ export class CaseService {
     })
     if (!route) throw new NotFoundException('路线不存在')
     const latest = route.versions[0]
-    const itinerary = latest?.itinerary as { days?: unknown[] } | null
-    const days = Array.isArray(itinerary?.days) ? itinerary!.days!.length : 0
+    const itinerary = latest?.itinerary as { days?: any[] } | null
+    const rawDays = Array.isArray(itinerary?.days) ? itinerary!.days! : []
+    const days = rawDays.length
     const quote = latest?.quote as { currency?: string; total?: number } | null
     const priceRange =
       quote?.currency && quote?.total ? `${quote.currency} ${quote.total}` : ''
+    // 脱敏每日图文（仅城市/景点/酒店/餐饮/备注，绝不含客户名/证件/合同价），运营后可覆盖
+    const daysContent = rawDays.map((d, i) => ({
+      day: typeof d?.day === 'number' ? d.day : i + 1,
+      city: d?.city ?? '',
+      spots: Array.isArray(d?.spots) ? d.spots : [],
+      hotel: d?.hotel ?? '',
+      meals: Array.isArray(d?.meals) ? d.meals : [],
+      notes: d?.notes ?? '',
+      image: null,
+    }))
     return this.prisma.case.create({
       data: {
         routeId,
@@ -63,6 +106,8 @@ export class CaseService {
         days,
         theme: '',
         priceRange,
+        title: '', // 默认空，运营在管理后台补全标题
+        daysContent,
         status: 'draft',
         createdById,
       },

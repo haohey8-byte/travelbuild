@@ -159,7 +159,13 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   updateAgency(
     @Param('id') id: string,
-    @Body() body: { name?: string; contact?: string; disabled?: boolean },
+    @Body() body: {
+      name?: string
+      contact?: string
+      disabled?: boolean
+      logoUrl?: string
+      contacts?: { facebook?: string; line?: string; wechat?: string; phone?: string; email?: string }
+    },
     @CurrentUser() user: AuthUser,
   ) {
     return this.svc.updateAgency(id, body, user as AuthPrincipal)

@@ -8,6 +8,7 @@ import {
 import { JwtService } from '@nestjs/jwt'
 import * as bcrypt from 'bcryptjs'
 import { PrismaService } from '../../prisma/prisma.service'
+import { Prisma } from '@prisma/client'
 import { genToken as genCryptoToken } from '../../common/utils/token.util'
 
 export type Role = 'pandaking' | 'agency' | 'provincial'
@@ -595,7 +596,13 @@ export class AuthService {
   // disabled=true 仅让该旅行社从各选择下拉框消失，不阻断其登录账号（按需求范围）。
   async updateAgency(
     id: string,
-    body: { name?: string; contact?: string; disabled?: boolean },
+    body: {
+      name?: string
+      contact?: string
+      disabled?: boolean
+      logoUrl?: string
+      contacts?: { facebook?: string; line?: string; wechat?: string; phone?: string; email?: string }
+    },
     caller: AuthPrincipal,
   ) {
     if (caller.role !== 'pandaking') {
@@ -604,7 +611,7 @@ export class AuthService {
     const agency = await this.prisma.agency.findUnique({ where: { id } })
     if (!agency) throw new NotFoundException({ code: 'AGENCY_NOT_FOUND', message: '旅行社不存在' })
 
-    const data: { name?: string; contact?: string | null; disabled?: boolean } = {}
+    const data: Prisma.AgencyUpdateInput = {}
     if (typeof body.name === 'string') {
       const n = body.name.trim()
       if (!n) throw new BadRequestException('旅行社名称不能为空')
@@ -615,6 +622,20 @@ export class AuthService {
     }
     if (typeof body.disabled === 'boolean') {
       data.disabled = body.disabled
+    }
+    // 联合品牌字段（P0）：logo + 联系方式
+    if (typeof body.logoUrl === 'string') {
+      data.logoUrl = body.logoUrl.trim() || null
+    }
+    if (body.contacts !== undefined) {
+      const c = body.contacts
+      const cleaned: Record<string, string> = {}
+      if (c.facebook?.trim()) cleaned.facebook = c.facebook.trim()
+      if (c.line?.trim()) cleaned.line = c.line.trim()
+      if (c.wechat?.trim()) cleaned.wechat = c.wechat.trim()
+      if (c.phone?.trim()) cleaned.phone = c.phone.trim()
+      if (c.email?.trim()) cleaned.email = c.email.trim()
+      data.contacts = Object.keys(cleaned).length ? cleaned : Prisma.JsonNull
     }
     if (Object.keys(data).length === 0) {
       return agency // 无可改字段，原样返回

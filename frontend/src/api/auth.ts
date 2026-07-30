@@ -96,7 +96,13 @@ export async function deleteAgency(id: string): Promise<{ ok: boolean }> {
 // 修改旅行社档案 / 切换启用禁用（name / contact / disabled 部分更新），仅
 export async function updateAgency(
   id: string,
-  body: { name?: string; contact?: string; disabled?: boolean },
+  body: {
+    name?: string
+    contact?: string
+    disabled?: boolean
+    logoUrl?: string
+    contacts?: { facebook?: string; line?: string; wechat?: string; phone?: string; email?: string }
+  },
 ): Promise<Agency> {
   const { data } = await client.patch(`/auth/agencies/${id}`, body)
   return data

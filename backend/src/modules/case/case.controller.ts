@@ -19,10 +19,10 @@ export class CaseController {
     return this.svc.listPublished()
   }
 
-  // 公开：已发布案例详情
+  // 公开：已发布案例详情（via=agencyId 时内嵌联合品牌档案）
   @Get(':id')
-  getPublic(@Param('id') id: string) {
-    return this.svc.getPublished(id)
+  getPublic(@Param('id') id: string, @Query('via') via?: string) {
+    return this.svc.getPublished(id, via)
   }
 
   // 管理：全量（含草稿/下线）

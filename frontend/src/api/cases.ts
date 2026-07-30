@@ -13,8 +13,8 @@ export async function createCaseFromRoute(routeId: string): Promise<CaseItem> {
   return data
 }
 
-export async function fetchCase(id: string): Promise<CaseItem> {
-  const { data } = await client.get(`/cases/${id}`)
+export async function fetchCase(id: string, via?: string): Promise<CaseItem> {
+  const { data } = await client.get(`/cases/${id}`, { params: via ? { via } : undefined })
   return data
 }
 
