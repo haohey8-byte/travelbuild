@@ -207,10 +207,10 @@ const contactList = computed(() => {
             <span class="chips"><span v-for="m in d.meals" :key="m" class="chip sm">{{ m }}</span></span>
           </div>
           <div v-if="!editing && d.notes" class="day-notes">{{ d.notes }}</div>
-          <!-- 编辑态：每日 image + notes 可编辑 -->
+          <!-- 编辑态：每日 image（上传组件）+ notes 可编辑 -->
           <template v-if="editing">
-            <div class="day-row edit"><span class="k">图片</span>
-              <input v-model="form.daysContent[i].image" class="field" placeholder="图片 URL" />
+            <div class="day-img-edit">
+              <ImageUploader v-model="form.daysContent[i].image" hint="每日主图（自动压缩）" compact />
             </div>
             <textarea v-model="form.daysContent[i].notes" class="field area" placeholder="当日备注"></textarea>
           </template>
@@ -287,6 +287,7 @@ const contactList = computed(() => {
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .day-notes { color: var(--muted); font-size: 14px; white-space: pre-wrap; margin-top: 4px; }
 .day-row.edit { align-items: center; }
+.day-img-edit { margin: 6px 0; }
 .wechat-tip { color: var(--muted); font-size: 13px; margin: 14px 0; }
 .admin { margin-top: 16px; padding: 12px; }
 .admin-bar { display: flex; gap: 8px; flex-wrap: wrap; }

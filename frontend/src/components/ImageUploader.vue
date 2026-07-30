@@ -9,6 +9,8 @@ const props = defineProps<{
   label?: string
   // 提示文案（如"封面图"或"每日主图"）
   hint?: string
+  // 紧凑变体：每日卡片内用，矮一点
+  compact?: boolean
 }>()
 const emit = defineEmits<{
   (e: 'update:modelValue', v: string | null): void
@@ -109,7 +111,7 @@ function compressImage(file: File, maxDim = 1920, quality = 0.85): Promise<Blob>
     <div v-if="label" class="iu-label">{{ label }}</div>
     <div
       class="iu-zone"
-      :class="{ loading }"
+      :class="{ loading, compact: compact }"
       @click="pick"
       @dragover.prevent
       @drop="onDrop"
@@ -140,6 +142,10 @@ function compressImage(file: File, maxDim = 1920, quality = 0.85): Promise<Blob>
 }
 .iu-zone:hover { border-color: var(--brand, #185FA5); }
 .iu-zone.loading { opacity: .7; cursor: wait; }
+.iu-zone.compact { min-height: 90px; }
+.iu-zone.compact .iu-preview { max-height: 140px; }
+.iu-zone.compact .iu-empty { padding: 10px; }
+.iu-zone.compact .iu-empty span { font-size: 11px; }
 .iu-preview { width: 100%; max-height: 220px; object-fit: cover; }
 .iu-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--muted, #888); font-size: 12px; padding: 16px; text-align: center; }
 .iu-loading { color: var(--brand, #185FA5); font-size: 13px; }
