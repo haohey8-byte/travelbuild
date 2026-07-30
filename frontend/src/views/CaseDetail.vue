@@ -7,6 +7,8 @@ import { useAuthStore } from '@/stores/auth'
 import { safeText } from '@/utils/name'
 import { copyText } from '@/utils/share'
 import ImageUploader from '@/components/ImageUploader.vue'
+import HtmlUploader from '@/components/HtmlUploader.vue'
+import CaseHtmlView from '@/components/CaseHtmlView.vue'
 import type { CaseItem, DayContent } from '@/types'
 
 const route = useRoute()
@@ -30,8 +32,9 @@ const form = ref<{
   cover: string
   highlights: string
   descZh: string
+  contentHtml: string
   daysContent: DayContent[]
-}>({ title: '', cover: '', highlights: '', descZh: '', daysContent: [] })
+}>({ title: '', cover: '', highlights: '', descZh: '', contentHtml: '', daysContent: [] })
 const msg = ref('')
 
 async function load() {
@@ -88,6 +91,7 @@ function startEdit() {
     cover: x.cover || '',
     highlights: (x.highlights || []).join('、'),
     descZh: x.descZh || '',
+    contentHtml: x.contentHtml || '',
     daysContent: (x.daysContent || []).map((d) => ({ ...d, spots: [...(d.spots || [])], meals: [...(d.meals || [])] })),
   }
   editing.value = true
@@ -105,6 +109,7 @@ async function onSave() {
       cover: form.value.cover?.trim() || undefined,
       highlights: form.value.highlights.split(/[、,，]/).map((s) => s.trim()).filter(Boolean),
       descZh: form.value.descZh,
+      contentHtml: form.value.contentHtml || undefined,
       daysContent: form.value.daysContent,
     }
     const updated = await updateCase(id.value, payload)
@@ -185,6 +190,9 @@ const contactList = computed(() => {
 
       <p v-if="c.descZh" class="desc">{{ c.descZh }}</p>
 
+      <!-- 案例主体 HTML（运营上传的单文件微站，服务端 sanitize 后存；沙箱 iframe 渲染） -->
+      <CaseHtmlView v-if="!editing && c.contentHtml" :html="c.contentHtml" class="content-html" />
+
       <!-- 每日图文 -->
       <section v-if="c.daysContent?.length" class="days">
         <h2>行程亮点（每日）</h2>
@@ -230,6 +238,8 @@ const contactList = computed(() => {
           <input v-model="form.highlights" class="field" placeholder="如 亲子友好、含接送" />
           <label>描述</label>
           <textarea v-model="form.descZh" class="field area" placeholder="图文产品页正文"></textarea>
+          <label>内容 HTML（单文件微站）</label>
+          <HtmlUploader v-model="form.contentHtml" />
           <div class="edit-actions">
             <button class="btn sm" :disabled="saving" @click="onSave">保存</button>
             <button class="btn ghost sm" @click="cancelEdit">取消</button>
@@ -267,6 +277,7 @@ const contactList = computed(() => {
 .chip { font-size: 12px; background: var(--brand-soft, #eef); color: var(--brand); border-radius: 999px; padding: 2px 8px; }
 .chip.sm { font-size: 11px; }
 .desc { line-height: 1.7; white-space: pre-wrap; margin: 8px 0 18px; }
+.content-html { margin: 12px 0 18px; }
 .days h2 { font-size: 18px; margin: 8px 0; }
 .day-card { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 10px; background: var(--card); }
 .day-img { width: 100%; max-height: 220px; object-fit: cover; border-radius: 8px; margin-bottom: 8px; }
