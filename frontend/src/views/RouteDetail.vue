@@ -1391,55 +1391,76 @@ const collabEvents = computed<CollabEvent[]>(() => {
             <span class="pill st-neutral sm">共 {{ itinerary.days.length }} 天</span>
           </div>
 
-          <p v-if="!hasItineraryContent" class="itinerary-empty">
+          <p v-if="!hasItineraryContent && !readonly" class="itinerary-empty">
             该路线暂未规划行程，可直接编辑下方第 1 天，或点「＋ 新增一天」开始排期。
+          </p>
+          <p v-else-if="!hasItineraryContent && readonly" class="itinerary-empty">
+            该路线暂未规划行程
           </p>
 
           <div v-for="(d, di) in itinerary.days" :key="di" class="day">
-            <div class="day-row" @click="toggleDay(di)">
-              <div class="day-badge">D{{ d.day }}</div>
-              <div class="day-main">
-                <div class="day-title">{{ d.city || ('第 ' + d.day + ' 天') }}</div>
-                <div class="day-sub">
-                  <span v-if="d.hotel" class="tag"><b>住宿</b>{{ d.hotel }}</span>
-                  <span class="tag"><b>景点</b>{{ spotCount(d) }} 处</span>
-                  <span class="tag"><b>用餐</b>{{ mealCount(d) }} 项</span>
-                  <span v-if="d.notes" class="tag"><b>备注</b>{{ d.notes }}</span>
+            <!-- 只读：直接静态展示 D1-Dn 行程，无展开 / 编辑逻辑 -->
+            <template v-if="readonly">
+              <div class="day-row ro">
+                <div class="day-badge">D{{ d.day }}</div>
+                <div class="day-main">
+                  <div class="day-title">{{ d.city || ('第 ' + d.day + ' 天') }}</div>
+                  <div class="day-sub">
+                    <span v-if="d.hotel" class="tag"><b>住宿</b>{{ d.hotel }}</span>
+                    <span v-if="d.spots && d.spots.length" class="tag"><b>景点</b>{{ d.spots.join('、') }}</span>
+                    <span v-if="d.meals && d.meals.length" class="tag"><b>用餐</b>{{ d.meals.join('、') }}</span>
+                    <span v-if="d.notes" class="tag"><b>备注</b>{{ d.notes }}</span>
+                  </div>
                 </div>
               </div>
-              <div class="chev" :class="{ open: openDays.has(di) }">▾</div>
-            </div>
+            </template>
+            <!-- 可编辑：展开 / 收起 + 编辑表单（PandaKing 视角） -->
+            <template v-else>
+              <div class="day-row" @click="toggleDay(di)">
+                <div class="day-badge">D{{ d.day }}</div>
+                <div class="day-main">
+                  <div class="day-title">{{ d.city || ('第 ' + d.day + ' 天') }}</div>
+                  <div class="day-sub">
+                    <span v-if="d.hotel" class="tag"><b>住宿</b>{{ d.hotel }}</span>
+                    <span class="tag"><b>景点</b>{{ spotCount(d) }} 处</span>
+                    <span class="tag"><b>用餐</b>{{ mealCount(d) }} 项</span>
+                    <span v-if="d.notes" class="tag"><b>备注</b>{{ d.notes }}</span>
+                  </div>
+                </div>
+                <div class="chev" :class="{ open: openDays.has(di) }">▾</div>
+              </div>
 
-            <div v-show="openDays.has(di)" class="day-edit">
-              <div class="grid">
-                <div class="field"><label>城市 / 区域</label><input v-model="d.city" placeholder="如 成都" /></div>
-                <div class="field"><label>住宿酒店</label><input v-model="d.hotel" placeholder="酒店" /></div>
-              </div>
-              <div class="field full">
-                <label>景点 / 活动</label>
-                <div v-for="(s, si) in d.spots" :key="si" class="inline">
-                  <input v-model="d.spots[si]" placeholder="景点名称" />
-                  <button class="mini-del" title="删除" @click="removeSpot(d, si)">×</button>
+              <div v-show="openDays.has(di)" class="day-edit">
+                <div class="grid">
+                  <div class="field"><label>城市 / 区域</label><input v-model="d.city" placeholder="如 成都" /></div>
+                  <div class="field"><label>住宿酒店</label><input v-model="d.hotel" placeholder="酒店" /></div>
                 </div>
-                <button class="mini-add" @click="addSpot(d)">＋ 景点</button>
-              </div>
-              <div class="field full">
-                <label>餐饮</label>
-                <div v-for="(m, mi) in d.meals" :key="mi" class="inline">
-                  <input v-model="d.meals[mi]" placeholder="餐饮安排（如 早 / 晚）" />
-                  <button class="mini-del" title="删除" @click="removeMeal(d, mi)">×</button>
+                <div class="field full">
+                  <label>景点 / 活动</label>
+                  <div v-for="(s, si) in d.spots" :key="si" class="inline">
+                    <input v-model="d.spots[si]" placeholder="景点名称" />
+                    <button class="mini-del" title="删除" @click="removeSpot(d, si)">×</button>
+                  </div>
+                  <button class="mini-add" @click="addSpot(d)">＋ 景点</button>
                 </div>
-                <button class="mini-add" @click="addMeal(d)">＋ 餐饮</button>
+                <div class="field full">
+                  <label>餐饮</label>
+                  <div v-for="(m, mi) in d.meals" :key="mi" class="inline">
+                    <input v-model="d.meals[mi]" placeholder="餐饮安排（如 早 / 晚）" />
+                    <button class="mini-del" title="删除" @click="removeMeal(d, mi)">×</button>
+                  </div>
+                  <button class="mini-add" @click="addMeal(d)">＋ 餐饮</button>
+                </div>
+                <div class="field full">
+                  <label>备注</label>
+                  <input v-model="d.notes" placeholder="当天备注（选填）" />
+                </div>
+                <div class="edit-bar">
+                  <button class="del" @click="removeDay(di)">删除当天</button>
+                  <button class="ok" @click="toggleDay(di)">收起</button>
+                </div>
               </div>
-              <div class="field full">
-                <label>备注</label>
-                <input v-model="d.notes" placeholder="当天备注（选填）" />
-              </div>
-              <div class="edit-bar">
-                <button class="del" @click="removeDay(di)">删除当天</button>
-                <button class="ok" @click="toggleDay(di)">收起</button>
-              </div>
-            </div>
+            </template>
           </div>
 
           <div class="add-day" v-if="!readonly">
@@ -1460,7 +1481,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
               省地接社只需填写<b>报价</b>（利润默认 0）；报价保存后即时回填 {{ ownerName }}。左侧行程规划可直接编辑。
             </p>
             <p v-else-if="isAgency" class="hint">
-              您看到的「报价A」是 {{ ownerName }} 的报价（即您的成本），在此加上<b>利润</b>即生成对客价。填好后点击下方「提交建议并通知 {{ ownerName }}」，即可把报价与修改建议一并发送给 {{ ownerName }}。
+              您看到的「报价A」是 {{ ownerName }} 的报价（即您的成本），在此加上<b>利润</b>即生成对客价。
             </p>
             <QuoteTable v-model:items="quoteItems" v-model:profit2Mode="profit2Mode" v-model:profit2="profit2" :role="role" :read-only="readonly" />
             <p v-if="isPk" class="tip">
@@ -1934,6 +1955,8 @@ const collabEvents = computed<CollabEvent[]>(() => {
 .itinerary-empty { margin: 12px 18px 0; padding: 10px 12px; background: var(--amber-50); border: 1px dashed var(--amber-200); border-radius: 9px; color: var(--amber-800); font-size: 13px; line-height: 1.6; }
 .day-row { display: flex; align-items: center; gap: 14px; padding: 14px 18px; cursor: pointer; }
 .day-row:hover { background: #fafbfc; }
+.day-row.ro { cursor: default; }
+.day-row.ro:hover { background: transparent; }
 .day-badge { width: 40px; height: 40px; border-radius: 10px; background: var(--teal-50); border: 1px solid var(--teal-200); color: var(--teal-600); font-weight: 800; font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .day-main { flex: 1; min-width: 0; }
 .day-title { font-weight: 700; font-size: 14px; }
