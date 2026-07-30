@@ -41,7 +41,8 @@ async function load() {
 
 function open(r: Route) {
   // 非：只读态打开（隐藏保存/提交/协作按钮）；：可编辑
-  router.push({ path: `/routes/${r.id}`, query: isReadonly ? { ro: '1' } : {} })
+  // from=settings 标记来源：行程详情页据此返回「系统设置-我的路线」而非路线管理看板
+  router.push({ path: `/routes/${r.id}`, query: { from: 'settings', ...(isReadonly ? { ro: '1' } : {}) } })
 }
 function verLabel(r: Route) {
   return r.versions?.[0]?.version ?? r.version ?? 'v1'

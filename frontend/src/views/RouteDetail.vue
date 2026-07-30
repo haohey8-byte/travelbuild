@@ -267,6 +267,16 @@ const readonly = computed(() => route.query.ro === '1')
 // 路线归属账号名（创建者 = PandaKing 平台方），用于显示具体注册名
 const ownerName = computed(() => data.value?.ownerName || 'PandaKing')
 
+// 返回逻辑（非 token 模式）：从「系统设置-我的路线」进入 → 回「我的路线」；
+// 否则（路线管理看板 / 路线列表进入）→ 回看板。避免从我的路线误返回到看板。
+function goBack() {
+  if (route.query.from === 'settings') {
+    router.push('/settings?tab=routes')
+  } else {
+    router.push('/routes/kanban')
+  }
+}
+
 // —— 状态流转 ——
 const STATUS_LABEL: Record<RouteStatusKey, string> = {
   consulting: '咨询中',
@@ -1325,7 +1335,7 @@ const collabEvents = computed<CollabEvent[]>(() => {
       <!-- 头部 -->
       <div class="head">
         <div class="left">
-          <button v-if="!tokenMode" class="back" title="返回看板" @click="router.push('/routes/kanban')">‹</button>
+          <button v-if="!tokenMode" class="back" :title="route.query.from === 'settings' ? '返回我的路线' : '返回看板'" @click="goBack">‹</button>
           <div>
             <h1>{{ displayName(data) }}</h1>
             <div class="chips">

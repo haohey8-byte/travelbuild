@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import type { Role } from '@/types'
 import SettingsProfile from './SettingsProfile.vue'
@@ -10,6 +11,7 @@ import SettingsAgencies from './SettingsAgencies.vue'
 import SettingsIntakeLinks from './SettingsIntakeLinks.vue'
 
 const auth = useAuthStore()
+const route = useRoute()
 
 interface Section {
   key: string
@@ -35,7 +37,10 @@ const activeKey = ref('profile')
 const activeSection = computed(() => sections.value.find((s) => s.key === activeKey.value) || sections.value[0])
 
 onMounted(() => {
-  activeKey.value = sections.value[0]?.key || 'profile'
+  // 支持从行程详情页「返回我的路线」时停留在「我的路线」tab（?tab=routes）
+  const tab = route.query.tab as string | undefined
+  activeKey.value =
+    tab && sections.value.some((s) => s.key === tab) ? tab : sections.value[0]?.key || 'profile'
 })
 </script>
 
