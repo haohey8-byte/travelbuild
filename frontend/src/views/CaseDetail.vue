@@ -99,15 +99,54 @@ onMounted(load)
 watch([id, via], load)
 
 // 复制「路线链接分享」文案（含出行时间/人数/用车 + 每日行程概览 + 详情链接）
+// 产品反馈闭环：成功 → 按钮变「✓ 已复制」+ 顶部提示；失败（微信 webview 常禁用 Clipboard）→
+// 弹出文案弹窗自动全选，引导长按手动复制 + 重试按钮，用户永远知道结果。
+const copying = ref(false)
+const copied = ref(false)
+const shareModal = ref(false)
+const shareText = ref('')
+
 async function onCopyShare() {
   const x = c.value
-  if (!x) return
-  const ok = await copyText(buildShareText(x))
-  flash(ok ? '路线链接分享已复制' : '复制失败，请长按手动复制')
+  if (!x || copying.value) return
+  copying.value = true
+  try {
+    const text = buildShareText(x)
+    const ok = await copyText(text)
+    if (ok) {
+      copied.value = true
+      flash('分享文案已复制，直接粘贴到微信发送即可')
+      setTimeout(() => (copied.value = false), 1800)
+    } else {
+      shareText.value = text
+      shareModal.value = true
+    }
+  } finally {
+    copying.value = false
+  }
 }
+
+async function onRetryCopy() {
+  const ok = await copyText(shareText.value)
+  if (ok) {
+    shareModal.value = false
+    flash('已复制！直接粘贴到微信发送即可')
+  } else {
+    flash('复制仍失败，请长按上方文字手动复制')
+  }
+}
+
+function onSelectShare(e: Event) {
+  // 点入文本区自动全选，方便长按复制
+  const ta = e.target as HTMLTextAreaElement
+  ta.focus()
+  ta.select()
+  try { ta.setSelectionRange(0, ta.value.length) } catch { /* */ }
+}
+
 function flash(m: string) {
   msg.value = m
-  setTimeout(() => { if (msg.value === m) msg.value = '' }, 2200)
+  setTimeout(() => { if (msg.value === m) msg.value = '' }, 2600)
 }
 
 function startEdit() {
@@ -216,7 +255,9 @@ function removeHighlight(i: number) {
     <div class="topbar">
       <router-link v-if="user" to="/cases" class="back">← 返回案例</router-link>
       <div class="share" v-if="!editing">
-        <button class="btn sm" @click="onCopyShare">复制路线链接分享</button>
+        <button class="btn sm" :class="{ copied }" :disabled="copying" @click="onCopyShare">
+          {{ copied ? '✓ 已复制' : '复制路线链接分享' }}
+        </button>
       </div>
       <div v-else class="edit-head">
         <span class="edit-title">编辑内容</span>
@@ -300,6 +341,30 @@ function removeHighlight(i: number) {
       <p v-if="msg" class="msg">{{ msg }}</p>
     </template>
   </div>
+
+  <!-- 复制分享文案弹窗（自动复制失败时的可靠兜底：全选 + 长按手动复制 + 重试） -->
+  <div v-if="shareModal" class="modal-mask" @click.self="shareModal = false">
+    <div class="modal">
+      <div class="modal-head">
+        <div class="modal-title">复制分享文案</div>
+        <div class="modal-close" @click="shareModal = false">✕</div>
+      </div>
+      <div class="modal-body">
+        <p class="share-tip">自动复制未成功，请<b>长按下方文字手动复制</b>，再粘贴到微信发送：</p>
+        <textarea
+          class="share-ta"
+          readonly
+          :value="shareText"
+          @focus="onSelectShare"
+          @click="onSelectShare"
+        ></textarea>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" @click="shareModal = false">关闭</button>
+        <button class="btn btn-primary" @click="onRetryCopy">重试复制</button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <style scoped>
@@ -347,8 +412,27 @@ function removeHighlight(i: number) {
 .btn.ghost { background: transparent; color: var(--text); }
 .btn.ghost.sm { padding: 3px 10px; font-size: 12px; }
 .btn.ghost.danger { color: var(--danger); border-color: var(--danger); }
+.btn.copied { background: var(--ok); border-color: var(--ok); }
 .err { color: var(--danger); }
 .msg { color: var(--ok); font-size: 13px; margin-top: 10px; }
+
+/* 复制分享文案弹窗 */
+.modal-mask { position: fixed; inset: 0; background: rgba(18, 26, 41, .45); display: flex; align-items: center; justify-content: center; z-index: 60; padding: 20px; }
+.modal { width: 560px; max-width: 100%; background: var(--surface); border-radius: 16px; box-shadow: var(--sh-lg, 0 18px 48px rgba(20,32,51,.16)); overflow: hidden; }
+.modal-head { padding: 16px 20px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
+.modal-title { font-size: 16px; font-weight: 700; }
+.modal-close { width: 26px; height: 26px; border-radius: 6px; color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.modal-close:hover { background: var(--surface-2); color: var(--ink); }
+.modal-body { padding: 18px 20px; }
+.share-tip { font-size: 13px; color: var(--ink-2); margin-bottom: 10px; }
+.share-tip b { color: var(--brand-600); }
+.share-ta {
+  width: 100%; min-height: 220px; padding: 12px; border: 1px solid var(--line-strong);
+  border-radius: 10px; font-size: 13px; line-height: 1.6; background: var(--surface-2);
+  color: var(--ink); font-family: inherit; resize: vertical; box-sizing: border-box;
+  white-space: pre-wrap;
+}
+.modal-foot { padding: 13px 20px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 8px; background: var(--surface-2); }
 
 /* 移动端：Tab 切换，单栏 */
 @media (max-width: 768px) {
