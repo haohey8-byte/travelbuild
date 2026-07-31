@@ -20,6 +20,10 @@ export interface CreateCaseInput {
   descTh?: string | null
   daysContent?: Prisma.InputJsonValue
   contentHtml?: string | null // 案例主体 HTML（运营上传的单文件微站，服务端 sanitize 后存）
+  // —— 行程参数（公开分享文案用；travelDate/groupSize 由源路线派生可覆盖，vehicle 运营手填）——
+  travelDate?: Date | string | null
+  groupSize?: number | null
+  vehicle?: string | null
 }
 
 // 联合品牌档案（via=agencyId 时随案例详情返回）
@@ -108,6 +112,10 @@ export class CaseService {
         theme: '',
         priceRange,
         title: '', // 默认空，运营在管理后台补全标题
+        // 行程参数：出行时间 / 人数由源路线带值（脱敏后仅展示，不含客户隐私），运营可在后台覆盖；
+        // vehicle（几座车）源路线无此字段，保持 NULL 由运营手填。
+        travelDate: route.travelDate ?? null,
+        groupSize: route.groupSize ?? null,
         daysContent,
         status: 'draft',
         createdById,

@@ -19,6 +19,13 @@ function onLogout() {
 const isH5 = computed(() => route.meta.h5 === true)
 const isAuthPage = computed(() => route.meta.authPage === true)
 const isPublic = computed(() => route.meta.public === true)
+// 案例区（/cases、/cases/:id）：公开访客独立渲染（无导航、无返回按钮）；
+// 登录用户回归控制台外壳（保留主导航菜单），由 CaseDetail 自身按登录态显示「返回」。
+const isCasesArea = computed(() => route.name === 'cases' || route.name === 'case-detail')
+// 独立渲染判定：H5 / 认证页 / 公开首页 永远独立；案例区仅「未登录」时独立。
+const isStandalone = computed(() =>
+  isH5.value || isAuthPage.value || route.name === 'home' || (isCasesArea.value && !auth.user),
+)
 const needsLogin = computed(() => !auth.token && !isH5.value && !isAuthPage.value && !isPublic.value)
 
 const nav = computed(() => {
@@ -49,8 +56,9 @@ function onNav(to: string) {
 }</script>
 
 <template>
-  <!-- 公开 H5、认证页（login/change-pwd）、公开首页：独立渲染，无控制台外壳与登录门 -->
-  <RouterView v-if="isH5 || isAuthPage || isPublic" :key="route.path" />
+  <!-- 独立渲染（无控制台外壳）：公开 H5、认证页、公开首页，以及「未登录」访问的案例区；
+       登录用户访问案例区则走下方 app-shell（保留主导航菜单） -->
+  <RouterView v-if="isStandalone" :key="route.path" />
 
   <!-- 未登录兜底：理论上守卫已重定向到 /login，这里仅作安全兜底 -->
   <div v-else-if="needsLogin" class="login-gate">

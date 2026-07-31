@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import CaseHtmlView from './CaseHtmlView.vue'
 import { safeText } from '@/utils/name'
+import { formatTravelDate } from '@/utils/share'
 import type { CaseItem } from '@/types'
 
 // 案例只读视图（公开页 + 编辑预览共用，防样式漂移）
@@ -21,6 +22,15 @@ const contactList = computed(() => {
   if (ct.facebook) arr.push({ label: 'Facebook', value: ct.facebook })
   if (ct.phone) arr.push({ label: '电话', value: ct.phone })
   if (ct.email) arr.push({ label: '邮箱', value: ct.email })
+  return arr
+})
+
+// 行程参数（出行时间 / 人数 / 用车）：公开案例页与分享文案保持一致；均可空，无值不展示
+const tripParams = computed(() => {
+  const arr: { k: string; v: string }[] = []
+  if (props.c.travelDate) arr.push({ k: '出行时间', v: formatTravelDate(props.c.travelDate) })
+  if (props.c.groupSize) arr.push({ k: '人数', v: `${props.c.groupSize}人` })
+  if (props.c.vehicle) arr.push({ k: '用车', v: safeText(props.c.vehicle) })
   return arr
 })
 </script>
@@ -49,6 +59,10 @@ const contactList = computed(() => {
 
     <div v-if="c.highlights?.length" class="hl">
       <span v-for="h in c.highlights" :key="h" class="chip">{{ h }}</span>
+    </div>
+
+    <div v-if="tripParams.length" class="params">
+      <span v-for="p in tripParams" :key="p.k" class="param"><b>{{ p.k }}</b> {{ p.v }}</span>
     </div>
 
     <p v-if="c.descZh" class="desc">{{ c.descZh }}</p>
@@ -93,6 +107,8 @@ const contactList = computed(() => {
 .title { margin: 0; font-size: 24px; }
 .meta { margin-top: 6px; opacity: .92; font-size: 14px; }
 .hl { margin: 12px 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.params { margin: 4px 0 12px; display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 13px; color: var(--ink-2); }
+.param b { color: var(--muted); font-weight: 600; margin-right: 4px; }
 .chip { font-size: 12px; background: var(--brand-soft, #eef); color: var(--brand); border-radius: 999px; padding: 2px 8px; }
 .chip.sm { font-size: 11px; }
 .desc { line-height: 1.7; white-space: pre-wrap; margin: 8px 0 18px; }

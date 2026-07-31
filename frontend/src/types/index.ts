@@ -172,6 +172,10 @@ export interface AgencyBranding {
 export interface CaseItem {
   id: string
   routeId?: string | null
+  // 行程参数（公开分享文案用；travelDate/groupSize 由源路线派生可覆盖，vehicle 运营手填；均可空）
+  travelDate?: string | null
+  groupSize?: number | null
+  vehicle?: string | null
   title?: string
   titleEn?: string
   titleTh?: string

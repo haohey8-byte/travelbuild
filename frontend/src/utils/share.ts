@@ -2,7 +2,7 @@
 // 分享页由后端服务端渲染（/share/route/:token，带 OG 注入），部署在后端域名下。
 // 因此分享链接必须指向「后端域名」而非前端静态托管域名（前端域名的 hash 路由无法被爬虫解析 token）。
 import { safeName, safeText } from '@/utils/name'
-import type { QuoteLevel, ProfitMode } from '@/types'
+import type { QuoteLevel, ProfitMode, CaseItem } from '@/types'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string) || '/api'
 
@@ -90,7 +90,7 @@ export function shareH5Caption(
 }
 
 // 出行日期格式化为「7月25日」等简短中文形式（兼容 ISO 与纯日期字符串）
-function formatTravelDate(d?: string | null): string {
+export function formatTravelDate(d?: string | null): string {
   if (!d) return ''
   const s = String(d).trim()
   if (!s) return ''
@@ -98,6 +98,27 @@ function formatTravelDate(d?: string | null): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return datePart
   const [, m, day] = datePart.split('-')
   return `${parseInt(m, 10)}月${parseInt(day, 10)}日`
+}
+
+// 案例「路线链接分享」文案：供 PandaKing 复制后粘贴到微信（客户/旅行社）。
+// 含出行时间 / 人数 / 用车三项可选行程参数（有值才显示，避免空字段），
+// 以及 D1..Dn 每日行程概要与详情链接（带 via 联合品牌参数）。
+export function buildShareText(c: CaseItem): string {
+  const title = safeText(c.title) || safeText(c.destination) || '未命名案例'
+  const lines: string[] = [`${title}（${safeText(c.destination)}）`]
+  if (c.travelDate) lines.push(`出行时间：${formatTravelDate(c.travelDate)}`)
+  if (c.groupSize) lines.push(`人数：${c.groupSize}人`)
+  if (c.vehicle) lines.push(`用车：${safeText(c.vehicle)}`)
+  lines.push(`共 ${c.days || 0} 天`)
+  for (const d of c.daysContent || []) {
+    const spots = (d.spots || []).filter(Boolean).join('、')
+    const head = `D${d.day} ${safeText(d.city)}`
+    lines.push(spots ? `${head}：${spots}` : head)
+  }
+  const base = window.location.origin + (import.meta.env.VITE_BASE || '/')
+  const link = `${base}#/cases/${c.id}${c.agencyBranding ? '?via=' + c.agencyBranding.id : ''}`
+  lines.push(`详情：${link}`)
+  return lines.join('\n')
 }
 
 // 统一协作通知文案构造：覆盖「规划提交（方案更新）」与「反馈意见」两类事件。

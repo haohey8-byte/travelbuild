@@ -127,6 +127,10 @@ model RouteVersion {
 model Case {
   id          String     @id @default(uuid())
   routeId     String?
+  // —— 行程参数（公开分享文案用；travelDate/groupSize 由源路线派生可覆盖，vehicle 运营手填；均可空）——
+  travelDate  DateTime?  // 出行时间（由源路线带值，可覆盖）
+  groupSize   Int?       // 人数（由源路线带值，可覆盖）
+  vehicle     String?    // 几座车（运营手填，如「15座中巴」）
   destination String
   days        Int
   theme       String

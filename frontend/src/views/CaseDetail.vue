@@ -4,8 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { fetchCase, updateCase, publishCase, unpublishCase, deleteCase } from '@/api/cases'
 import { useAuthStore } from '@/stores/auth'
-import { safeText } from '@/utils/name'
-import { copyText } from '@/utils/share'
+import { copyText, buildShareText } from '@/utils/share'
 import ImageUploader from '@/components/ImageUploader.vue'
 import HtmlUploader from '@/components/HtmlUploader.vue'
 import CaseDetailView from '@/components/CaseDetailView.vue'
@@ -36,7 +35,10 @@ const form = ref<{
   descZh: string
   contentHtml: string
   daysContent: DayContent[]
-}>({ title: '', cover: '', highlights: [], descZh: '', contentHtml: '', daysContent: [] })
+  travelDate?: string | null
+  groupSize?: number | null
+  vehicle?: string | null
+}>({ title: '', cover: '', highlights: [], descZh: '', contentHtml: '', daysContent: [], travelDate: null, groupSize: null, vehicle: null })
 const msg = ref('')
 
 // 草稿 localStorage（防意外中断丢失）
@@ -69,6 +71,9 @@ const previewCase = computed<CaseItem | null>(() => {
     descZh: form.value.descZh,
     contentHtml: form.value.contentHtml,
     daysContent: form.value.daysContent,
+    travelDate: form.value.travelDate || null,
+    groupSize: form.value.groupSize ?? null,
+    vehicle: form.value.vehicle || null,
   }
 })
 
@@ -90,28 +95,12 @@ async function load() {
 onMounted(load)
 watch([id, via], load)
 
-function caseTitle(): string {
-  return safeText(c.value?.title) || safeText(c.value?.destination) || '未命名案例'
-}
-
-// 分享链接：保留 via 参数，使接收方也能看到联合品牌
-const shareLink = computed(() => {
-  const base = window.location.origin + (import.meta.env.VITE_BASE || '/')
-  return `${base}#/cases/${id.value}${via.value ? '?via=' + via.value : ''}`
-})
-function shareCaption(): string {
+// 复制「路线链接分享」文案（含出行时间/人数/用车 + 每日行程概览 + 详情链接）
+async function onCopyShare() {
   const x = c.value
-  if (!x) return ''
-  return `${caseTitle()} · ${safeText(x.destination)} · ${x.priceRange}\n${shareLink.value}`
-}
-
-async function onCopyLink() {
-  const ok = await copyText(shareLink.value)
-  flash(ok ? '链接已复制' : '复制失败，请长按链接手动复制')
-}
-async function onCopyCaption() {
-  const ok = await copyText(shareCaption())
-  flash(ok ? '文案已复制' : '复制失败，请长按手动复制')
+  if (!x) return
+  const ok = await copyText(buildShareText(x))
+  flash(ok ? '路线链接分享已复制' : '复制失败，请长按手动复制')
 }
 function flash(m: string) {
   msg.value = m
@@ -128,6 +117,9 @@ function startEdit() {
     descZh: x.descZh || '',
     contentHtml: x.contentHtml || '',
     daysContent: (x.daysContent || []).map((d) => ({ ...d, spots: [...(d.spots || [])], meals: [...(d.meals || [])] })),
+    travelDate: x.travelDate ? x.travelDate.slice(0, 10) : null,
+    groupSize: x.groupSize ?? null,
+    vehicle: x.vehicle || null,
   }
   // 恢复未保存草稿（若有）
   try {
@@ -158,6 +150,9 @@ async function onSave() {
       descZh: form.value.descZh,
       contentHtml: form.value.contentHtml || undefined,
       daysContent: form.value.daysContent,
+      travelDate: form.value.travelDate || null,
+      groupSize: form.value.groupSize ?? null,
+      vehicle: form.value.vehicle?.trim() || null,
     }
     const updated = await updateCase(id.value, payload)
     c.value = updated
@@ -201,10 +196,9 @@ function removeHighlight(i: number) {
 <template>
   <div class="detail-page">
     <div class="topbar">
-      <router-link to="/cases" class="back">← 返回案例</router-link>
+      <router-link v-if="user" to="/cases" class="back">← 返回案例</router-link>
       <div class="share" v-if="!editing">
-        <button class="btn sm" @click="onCopyLink">复制链接</button>
-        <button class="btn ghost sm" @click="onCopyCaption">复制文案</button>
+        <button class="btn sm" @click="onCopyShare">复制路线链接分享</button>
       </div>
       <div v-else class="edit-head">
         <span class="edit-title">编辑内容</span>
@@ -220,9 +214,9 @@ function removeHighlight(i: number) {
     <template v-else-if="c">
       <!-- 非编辑态：公开视图（CaseDetailView）+ 管理按钮 -->
       <CaseDetailView v-if="!editing" :c="c" />
-      <p v-if="!editing" class="wechat-tip">复制链接或文案后，粘贴到微信发送给客户即可。</p>
+      <p v-if="!editing" class="wechat-tip">复制路线链接分享后，粘贴到微信发送给客户即可。</p>
 
-      <div v-if="!editing && user" class="admin-bar">
+      <div v-if="!editing && user && user.role === 'pandaking'" class="admin-bar">
         <button class="btn ghost sm" @click="startEdit">编辑内容</button>
         <button v-if="c.status !== 'published'" class="btn sm" @click="onPublish">发布</button>
         <button v-else class="btn ghost sm" @click="onUnpublish">下线</button>
@@ -253,6 +247,12 @@ function removeHighlight(i: number) {
                 @keydown.enter.prevent="addHighlight"
               />
             </div>
+            <label>出行时间</label>
+            <input v-model="form.travelDate" class="field" type="date" />
+            <label>人数</label>
+            <input v-model.number="form.groupSize" class="field" type="number" min="1" placeholder="出行人数" />
+            <label>用车</label>
+            <input v-model="form.vehicle" class="field" placeholder="如 15座中巴" />
             <label>描述</label>
             <textarea v-model="form.descZh" class="field area" placeholder="图文产品页正文"></textarea>
             <label>内容 HTML（单文件微站）</label>
