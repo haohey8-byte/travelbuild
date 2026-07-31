@@ -22,8 +22,8 @@ function onMsg(e: MessageEvent) {
   if (iframeRef.value && e.source !== iframeRef.value.contentWindow) return
   const d = e.data as any
   if (d && typeof d.__caseHtmlHeight === 'number' && d.__caseHtmlHeight > 0) {
-    // 钳制：最小 200，最大 6000（防恶意超大）
-    height.value = Math.min(Math.max(Math.round(d.__caseHtmlHeight), 200), 6000)
+    // 钳制：最小 200；上限 100000（长单文件微站如北疆攻略 1.3MB 远超 6000px，原 6000 会截断只剩头部）
+    height.value = Math.min(Math.max(Math.round(d.__caseHtmlHeight), 200), 100000)
     emit('loaded')
   }
 }

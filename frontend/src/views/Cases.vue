@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import {
   fetchCases,
+  fetchCasesManage,
   createCase,
   createCaseFromRoute,
   publishCase,
@@ -50,7 +51,9 @@ async function load() {
   loading.value = true
   err.value = ''
   try {
-    list.value = await fetchCases()
+    // 登录态走管理接口（草稿/下线可见——新建空白/派生的草稿必须出现在列表）；
+    // 未登录公开接口仅 published（对外案例展示页）
+    list.value = user.value ? await fetchCasesManage() : await fetchCases()
     if (user.value) routes.value = await fetchRoutes()
   } catch (e: any) {
     err.value = e?.response?.data?.message || '加载失败'

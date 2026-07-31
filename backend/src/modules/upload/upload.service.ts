@@ -79,6 +79,10 @@ function buildSanitizeOpts(recorder: { tags: Set<string>; attrs: Set<string> }):
       time: ['datetime'],
     },
     allowedSchemes: ['http', 'https', 'mailto', 'tel'],
+    // 图片允许 data: scheme（单文件微站常内嵌 base64 图，如北疆攻略 1.3MB）；
+    // 限定仅 img 标签，避免全局放行 data: 造成 a[href=data:text/html] 等可执行注入。
+    // 非 data:image/ 前缀的 data URI 由 transformTags.img 二次拦截剥掉 src。
+    allowedSchemesByTag: { img: ['http', 'https', 'data'] },
     allowedIframeHostnames: IFRAME_HOSTS,
     // 强制 iframe 注入 sandbox（不含 allow-top-navigation，防导航劫持）
     transformTags: {
@@ -93,10 +97,14 @@ function buildSanitizeOpts(recorder: { tags: Set<string>; attrs: Set<string> }):
         tagName: 'iframe',
         attribs: { ...attribs, sandbox: 'allow-scripts allow-same-origin allow-popups' },
       }),
-      img: (_t, attribs) => ({
-        tagName: 'img',
-        attribs: { ...attribs, loading: attribs.loading || 'lazy', decoding: attribs.decoding || 'async' },
-      }),
+      img: (_t, attribs) => {
+        const out = { ...attribs }
+        // data: URI 仅放行图片（data:image/...），其余（text/html、application/...）剥掉 src 防注入
+        if ((out.src || '').startsWith('data:') && !(out.src || '').startsWith('data:image/')) {
+          delete out.src
+        }
+        return { tagName: 'img', attribs: { ...out, loading: out.loading || 'lazy', decoding: out.decoding || 'async' } }
+      },
     },
     // 记录被剥离的标签
     onIgnoreTag: (tag) => {

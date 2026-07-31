@@ -7,6 +7,12 @@ export async function fetchCases(): Promise<CaseItem[]> {
   return data
 }
 
+// 管理端列表：全量（含草稿/下线）—— 案例中心管理视角（新建空白/派生的草稿必须可见）
+export async function fetchCasesManage(): Promise<CaseItem[]> {
+  const { data } = await client.get('/cases/manage/all')
+  return data
+}
+
 // 从已确认路线派生案例（服务端做脱敏校验）
 export async function createCaseFromRoute(routeId: string): Promise<CaseItem> {
   const { data } = await client.post(`/cases/from-route/${routeId}`)
