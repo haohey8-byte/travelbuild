@@ -158,13 +158,17 @@ async function onSave() {
       vehicle: form.value.vehicle?.trim() || null,
     }
     const updated = await updateCase(id.value, payload)
+    // 用后端权威返回刷新 c.value（避免本地 form 状态与 DB 不一致）
     c.value = updated
     editing.value = false
     // 保存成功清草稿
     try { localStorage.removeItem(draftKey.value) } catch { /* */ }
     flash('已保存')
   } catch (e: any) {
-    flash(e?.response?.data?.message || '保存失败')
+    // 显示详细错误（含后端 message），便于诊断字段丢失
+    const msg = e?.response?.data?.message || e?.response?.data?.error || e?.message || '保存失败'
+    const code = e?.response?.status ? ` (HTTP ${e.response.status})` : ''
+    flash(`保存失败${code}：${msg}`)
   } finally {
     saving.value = false
   }

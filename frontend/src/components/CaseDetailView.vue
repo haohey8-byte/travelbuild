@@ -58,15 +58,16 @@ const tripParams = computed(() => {
       </div>
     </div>
 
-    <div v-if="c.highlights?.length" class="hl">
-      <span v-for="h in c.highlights" :key="h" class="chip">{{ h }}</span>
+    <!-- 案例元数据摘要（亮点 / 行程参数 / 描述）—— 始终在 HTML 微站主体之前显示，确保运营填的字段可见 -->
+    <div v-if="c.highlights?.length || tripParams.length || c.descZh" class="meta-card">
+      <div v-if="c.highlights?.length" class="hl">
+        <span v-for="h in c.highlights" :key="h" class="chip">{{ h }}</span>
+      </div>
+      <div v-if="tripParams.length" class="params">
+        <span v-for="p in tripParams" :key="p.k" class="param"><b>{{ p.k }}</b> {{ p.v }}</span>
+      </div>
+      <p v-if="c.descZh" class="desc">{{ c.descZh }}</p>
     </div>
-
-    <div v-if="tripParams.length" class="params">
-      <span v-for="p in tripParams" :key="p.k" class="param"><b>{{ p.k }}</b> {{ p.v }}</span>
-    </div>
-
-    <p v-if="c.descZh" class="desc">{{ c.descZh }}</p>
 
     <!-- 案例主体 HTML（沙箱 iframe 渲染） -->
     <CaseHtmlView v-if="c.contentHtml" :html="c.contentHtml" class="content-html" />
@@ -114,6 +115,17 @@ const tripParams = computed(() => {
 .chip.sm { font-size: 11px; }
 .desc { line-height: 1.7; white-space: pre-wrap; margin: 8px 0 18px; }
 .content-html { margin: 12px 0 18px; }
+.meta-card {
+  background: var(--card, #fff);
+  border: 1px solid var(--line, #e8edf4);
+  border-left: 3px solid var(--brand, #185FA5);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin: 12px 0;
+}
+.meta-card .hl { margin: 0 0 8px; }
+.meta-card .params { margin: 0 0 8px; }
+.meta-card .desc { margin: 0; }
 .days h2 { font-size: 18px; margin: 8px 0; }
 .day-card { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 10px; background: var(--card); }
 .day-img { width: 100%; max-height: 220px; object-fit: cover; border-radius: 8px; margin-bottom: 8px; }
