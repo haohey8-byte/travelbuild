@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service'
+import { UploadService } from '../upload/upload.service'
 
 export interface CreateCaseInput {
   routeId?: string
@@ -34,9 +35,28 @@ export interface AgencyBranding {
   contacts: unknown
 }
 
+// 从 HTML 提取案例标题：优先 h1 文本，其次 <title>；剥标签、压缩空白、截 80 字
+function extractHtmlTitle(html: string): string {
+  const h1 = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)
+  const tag = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
+  const raw = (h1?.[1] || tag?.[1] || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return raw.slice(0, 80)
+}
+
 @Injectable()
 export class CaseService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly uploadSvc: UploadService,
+  ) {}
 
   // 公开列表：仅已发布（案例展示页）
   listPublished() {
@@ -74,6 +94,25 @@ export class CaseService {
     const c = await this.prisma.case.findUnique({ where: { id } })
     if (!c) throw new NotFoundException('案例不存在')
     return c
+  }
+
+  // 导入 HTML 微站直接创建草稿案例：sanitize → 抽 h1/<title> 作标题 → 建 draft
+  // 目的地/天数/主题/价格等字段留空由运营在编辑页补全（HTML 内不可靠解析）
+  async importCaseHtml(html: string, createdById: string) {
+    const sanitized = this.uploadSvc.sanitizeHtml(html).html
+    const title = extractHtmlTitle(html) || '未命名案例'
+    return this.prisma.case.create({
+      data: {
+        title,
+        destination: '',
+        days: 0,
+        theme: '',
+        priceRange: '',
+        contentHtml: sanitized,
+        status: 'draft',
+        createdById,
+      },
+    })
   }
 
   create(input: CreateCaseInput) {

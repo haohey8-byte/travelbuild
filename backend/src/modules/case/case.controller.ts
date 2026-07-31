@@ -54,6 +54,20 @@ export class CaseController {
     return this.svc.publishFromRoute(routeId, user.id)
   }
 
+  // 管理：导入 HTML 微站直接创建草稿（sanitize + 抽 h1 标题；其余字段编辑页补全）
+  @Post('import-html')
+  @UseGuards(JwtAuthGuard)
+  importHtml(@Body() body: any, @CurrentUser() user: AuthUser) {
+    const html = body?.html
+    if (typeof html !== 'string' || !html.trim()) {
+      return { error: 'html 字段必填' }
+    }
+    if (Buffer.byteLength(html, 'utf8') > 5 * 1024 * 1024) {
+      return { error: 'HTML 文件超过 5MB 上限' }
+    }
+    return this.svc.importCaseHtml(html, user.id)
+  }
+
   // 管理：发布
   @Post(':id/publish')
   @UseGuards(JwtAuthGuard)

@@ -36,6 +36,12 @@ export async function createCase(payload: Partial<CaseItem>): Promise<CaseItem> 
   return data
 }
 
+// 管理端：导入 HTML 微站直接创建草稿（后端 sanitize + 抽 h1 标题）
+export async function importCaseHtml(html: string): Promise<CaseItem> {
+  const { data } = await client.post('/cases/import-html', { html })
+  return data
+}
+
 export async function publishCase(id: string): Promise<CaseItem> {
   const { data } = await client.post(`/cases/${id}/publish`)
   return data

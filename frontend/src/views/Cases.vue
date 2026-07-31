@@ -6,6 +6,7 @@ import {
   fetchCases,
   fetchCasesManage,
   createCase,
+  importCaseHtml,
   createCaseFromRoute,
   publishCase,
   unpublishCase,
@@ -44,6 +45,63 @@ const showCreate = ref(false)
 const createBusy = ref(false)
 const createForm = ref({ title: '', destination: '', days: '', theme: '', priceRange: '' })
 const createErr = ref('')
+
+// —— 导入 HTML 微站弹窗 ——
+const showImport = ref(false)
+const importBusy = ref(false)
+const importErr = ref('')
+const importFile = ref<File | null>(null)
+const importName = ref('')
+const importSize = ref('')
+const importInputRef = ref<HTMLInputElement | null>(null)
+
+function openImport() {
+  importFile.value = null
+  importName.value = ''
+  importSize.value = ''
+  importErr.value = ''
+  showImport.value = true
+  // 下次打开重新触发文件选择
+  setTimeout(() => importInputRef.value?.click(), 60)
+}
+function onPickImport() {
+  importInputRef.value?.click()
+}
+function onImportFile(e: Event) {
+  const target = e.target as HTMLInputElement
+  const f = target.files?.[0]
+  if (!f) return
+  const name = f.name.toLowerCase()
+  if (!name.endsWith('.html') && !name.endsWith('.htm') && f.type !== 'text/html') {
+    importErr.value = '请选择 .html 文件'
+    return
+  }
+  if (f.size > 5 * 1024 * 1024) {
+    importErr.value = 'HTML 文件超过 5MB 上限'
+    return
+  }
+  importFile.value = f
+  importName.value = f.name
+  importSize.value = f.size > 1024 * 1024 ? `${(f.size / 1024 / 1024).toFixed(1)} MB` : `${Math.round(f.size / 1024)} KB`
+  importErr.value = ''
+}
+async function onImport() {
+  if (!importFile.value) {
+    importErr.value = '请先选择 .html 文件'
+    return
+  }
+  importBusy.value = true
+  try {
+    const text = await importFile.value.text()
+    const created = await importCaseHtml(text)
+    showImport.value = false
+    router.push(`/cases/${created.id}`)
+  } catch (e: any) {
+    importErr.value = e?.response?.data?.error || e?.response?.data?.message || e?.message || '导入失败'
+  } finally {
+    importBusy.value = false
+  }
+}
 
 onMounted(load)
 
@@ -241,7 +299,8 @@ async function onDelete(c: CaseItem) {
     <!-- Action Bar -->
     <section class="actions">
       <button class="btn btn-primary" @click="openCreate">+ 新建空白案例</button>
-      <button class="btn btn-soft" :class="{ active: deriveOpen }" @click="deriveOpen = !deriveOpen">
+      <button class="btn btn-soft" @click="openImport">↑ 导入 HTML 微站</button>
+      <button class="btn btn-ghost" :class="{ active: deriveOpen }" @click="deriveOpen = !deriveOpen">
         ↻ 从路线派生
       </button>
       <div class="btn-spacer"></div>
@@ -409,6 +468,45 @@ async function onDelete(c: CaseItem) {
       </div>
     </div>
   </div>
+
+  <!-- 导入 HTML 微站弹窗 -->
+  <div v-if="showImport" class="modal-mask" @click.self="showImport = false">
+    <div class="modal">
+      <div class="modal-head">
+        <div class="modal-title">导入 HTML 微站作为案例</div>
+        <div class="modal-close" @click="showImport = false">✕</div>
+      </div>
+      <div class="modal-body">
+        <div class="dropzone" @click="onPickImport" @dragover.prevent @drop.prevent="(e: DragEvent) => { const f = e.dataTransfer?.files?.[0]; if (f) { const ev = { target: { files: [f] } }; onImportFile(ev as unknown as Event) } }">
+          <template v-if="!importFile">
+            <div class="dropzone-ico">↑</div>
+            <div class="dropzone-text">点击或拖拽 .html 文件</div>
+            <div class="dropzone-sub">≤ 5MB · 服务端自动 sanitize</div>
+          </template>
+          <template v-else>
+            <div class="dropzone-ico ok">✓</div>
+            <div class="dropzone-text">{{ importName }}</div>
+            <div class="dropzone-sub">{{ importSize }} · 点击可重新选择</div>
+          </template>
+        </div>
+        <p v-if="importErr" class="err">{{ importErr }}</p>
+        <div class="field-hint">导入后自动创建草稿案例：标题取 HTML 内 h1，整份 HTML 作为案例正文，其余字段留空待补</div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" @click="showImport = false">取消</button>
+        <button class="btn btn-primary" :disabled="importBusy || !importFile" @click="onImport">
+          {{ importBusy ? '导入中…' : '上传并创建' }}
+        </button>
+      </div>
+    </div>
+  </div>
+  <input
+    ref="importInputRef"
+    type="file"
+    accept=".html,.htm,text/html"
+    hidden
+    @change="onImportFile"
+  />
 </template>
 
 <style scoped>
@@ -507,6 +605,15 @@ async function onDelete(c: CaseItem) {
 .field-input:focus { outline: 2px solid var(--brand-100); border-color: var(--brand); }
 .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .field-hint { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+.dropzone {
+  border: 2px dashed var(--line-strong); border-radius: var(--r-md); padding: 28px 20px;
+  text-align: center; background: var(--surface-2); cursor: pointer; transition: all .15s;
+}
+.dropzone:hover { border-color: var(--brand-100); background: var(--brand-50); }
+.dropzone-ico { width: 44px; height: 44px; border-radius: var(--r-md); background: var(--brand-50); color: var(--brand); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 10px; font-size: 19px; }
+.dropzone-ico.ok { background: var(--ok-50); color: var(--ok); }
+.dropzone-text { font-size: 14px; font-weight: 600; margin-bottom: 3px; word-break: break-all; }
+.dropzone-sub { font-size: 12px; color: var(--muted); }
 .modal-foot { padding: 13px 20px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 8px; background: var(--surface-2); }
 
 .err { color: var(--danger); font-size: 13px; margin: 8px 0; }
