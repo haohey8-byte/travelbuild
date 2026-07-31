@@ -187,13 +187,24 @@ async function onDelete() {
   router.push('/cases')
 }
 
-// 亮点 chips 编辑
+// 亮点 chips 编辑：支持逗号/顿号/分号分隔批量添加；重复项明确提示（不静默吞掉，避免"写了 N 个只有 M 个"）
 function addHighlight() {
-  const v = newHighlight.value.trim()
-  if (v && !form.value.highlights.includes(v)) {
-    form.value.highlights.push(v)
+  const raw = newHighlight.value.trim()
+  if (!raw) return
+  const items = raw
+    .split(/[,，、;；]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const dups: string[] = []
+  for (const it of items) {
+    if (form.value.highlights.includes(it)) {
+      dups.push(it)
+      continue
+    }
+    form.value.highlights.push(it)
   }
   newHighlight.value = ''
+  if (dups.length) flash(`已存在，未重复添加：${dups.join('、')}`)
 }
 function removeHighlight(i: number) {
   form.value.highlights.splice(i, 1)

@@ -331,7 +331,8 @@ async function onDelete(c: CaseItem) {
           <div class="title">{{ caseTitle(c) }}</div>
           <div class="dest">{{ c.destination }} · {{ c.days }} 天 · {{ c.theme || '—' }}</div>
           <div v-if="c.highlights?.length" class="hl">
-            <span v-for="h in c.highlights.slice(0, 3)" :key="h" class="hl-chip">{{ h }}</span>
+            <span v-for="h in c.highlights.slice(0, 4)" :key="h" class="hl-chip">{{ h }}</span>
+            <span v-if="c.highlights.length > 4" class="hl-chip more">+{{ c.highlights.length - 4 }}</span>
           </div>
           <div class="meta-row">
             <div class="params">
@@ -476,6 +477,7 @@ async function onDelete(c: CaseItem) {
 .dest { font-size: 12.5px; color: var(--muted); margin-bottom: 10px; }
 .hl { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
 .hl-chip { font-size: 11px; padding: 2px 8px; border-radius: var(--r-pill); background: var(--brand-50); color: var(--brand-600); }
+.hl-chip.more { background: #eef2f7; color: var(--ink-2); }
 .meta-row { display: flex; justify-content: space-between; align-items: baseline; margin-top: auto; padding-top: 10px; border-top: 1px dashed var(--line); }
 .params { display: flex; gap: 8px; font-size: 11.5px; color: var(--muted); align-items: center; }
 .params b { color: var(--ink-2); font-weight: 600; }
