@@ -15,7 +15,13 @@ const iframeRef = ref<HTMLIFrameElement | null>(null)
 const RESIZE_SCRIPT =
   '<scr' + 'ipt>(function(){function h(){try{parent.postMessage({__caseHtmlHeight:document.documentElement.scrollHeight},"*")}catch(e){}}window.addEventListener("load",h);window.addEventListener("resize",h);setTimeout(h,200);setTimeout(h,800);setTimeout(h,2000)})()</scr' + 'ipt>'
 
-const srcdoc = computed(() => (props.html || '') + RESIZE_SCRIPT)
+// 渐显动画兜底：服务端 sanitize 会剥掉 script，导致依赖 JS 加 .in 的
+// 渐显元素（.reveal 等）永远 opacity:0，整段内容不可见（如北疆攻略 D1-D7）。
+// 渲染层注入覆盖样式，强制所有常见渐显类直接显示（不动用户内容，安全）。
+const REVEAL_FIX =
+  '<style>.reveal,[class*="reveal"],.fade-in,.fadeIn,.anim,.animate{opacity:1!important;transform:none!important;visibility:visible!important;transition:none!important}</style>'
+
+const srcdoc = computed(() => REVEAL_FIX + (props.html || '') + RESIZE_SCRIPT)
 
 function onMsg(e: MessageEvent) {
   // 仅信任来自本 iframe contentWindow 的消息
