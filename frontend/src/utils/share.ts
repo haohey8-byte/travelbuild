@@ -101,22 +101,64 @@ export function formatTravelDate(d?: string | null): string {
 }
 
 // 案例「路线链接分享」文案：供 PandaKing 复制后粘贴到微信（客户/旅行社）。
-// 含出行时间 / 人数 / 用车三项可选行程参数（有值才显示，避免空字段），
-// 以及 D1..Dn 每日行程概要与详情链接（带 via 联合品牌参数）。
+// 结构（丰富但克制，微信卡片不臃肿）：标题 → 核心参数（天数/出行/人数/用车）
+// → 亮点 → 描述摘要（descZh 前 80 字）→ 每日行程概览（最多 7 天）→ 详情链接。
+// HTML 微站案例（contentHtml 有值）行程在 HTML 内、daysContent 常空：
+// 优先 descZh 摘要；仍无内容则从 contentHtml 提取纯文本兜底，保证文案有内容。
 export function buildShareText(c: CaseItem): string {
   const title = safeText(c.title) || safeText(c.destination) || '未命名案例'
-  const lines: string[] = [`${title}（${safeText(c.destination)}）`]
-  if (c.travelDate) lines.push(`出行时间：${formatTravelDate(c.travelDate)}`)
-  if (c.groupSize) lines.push(`人数：${c.groupSize}人`)
-  if (c.vehicle) lines.push(`用车：${safeText(c.vehicle)}`)
-  lines.push(`共 ${c.days || 0} 天`)
-  for (const d of c.daysContent || []) {
-    const spots = (d.spots || []).filter(Boolean).join('、')
-    const head = `D${d.day} ${safeText(d.city)}`
-    lines.push(spots ? `${head}：${spots}` : head)
+  const dest = safeText(c.destination)
+  const lines: string[] = [`【${title}】${dest ? `（${dest}）` : ''}`]
+
+  // 核心参数：天数 / 出行时间 / 人数 / 用车（有值才显示）
+  const params: string[] = []
+  if (c.days) params.push(`${c.days} 天`)
+  if (c.travelDate) params.push(`${formatTravelDate(c.travelDate)} 出行`)
+  if (c.groupSize) params.push(`${c.groupSize} 人`)
+  if (c.vehicle) params.push(safeText(c.vehicle))
+  if (params.length) lines.push(params.join(' · '))
+
+  // 亮点（最多 5 个）
+  const hl = (c.highlights || []).filter(Boolean)
+  if (hl.length) lines.push(`亮点：${hl.slice(0, 5).join('、')}`)
+
+  // 描述摘要（HTML 微站案例：行程在 contentHtml 内，descZh 是运营在表单里补的核心文字）
+  const desc = (c.descZh || '').trim().replace(/\s+/g, ' ')
+  if (desc) lines.push(desc.length > 80 ? desc.slice(0, 80) + '…' : desc)
+
+  // 每日行程概览（城市+景点，最多 7 天）
+  const days = (c.daysContent || []).filter((d) => d && (d.city || (d.spots || []).length))
+  if (days.length) {
+    for (const d of days.slice(0, 7)) {
+      const spots = (d.spots || []).filter(Boolean).join('、')
+      const head2 = `D${d.day} ${safeText(d.city)}`
+      lines.push(spots ? `${head2}：${spots}` : head2)
+    }
+    if (days.length > 7) lines.push(`…共 ${days.length} 天`)
+  } else if (!desc && c.contentHtml) {
+    // HTML 微站且无 descZh/daysContent：从 HTML 提取纯文本前 120 字兜底，保证文案有内容
+    const text = stripHtml(c.contentHtml)
+    if (text) lines.push(text.length > 120 ? text.slice(0, 120) + '…' : text)
   }
+
   lines.push(`详情：${caseShareUrl(c)}`)
   return lines.join('\n')
+}
+
+// 简易 HTML → 纯文本（分享文案用途，非安全边界：仅剥 script/style/标签 + 解码常用实体）
+function stripHtml(html: string): string {
+  return String(html || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 // 案例分享链接：指向后端 SSR 页（/share/case/:id，带 OG 注入）。
