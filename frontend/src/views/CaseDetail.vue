@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
-import { fetchCase, updateCase, publishCase, unpublishCase, deleteCase } from '@/api/cases'
+import { fetchCase, fetchCaseManage, updateCase, publishCase, unpublishCase, deleteCase } from '@/api/cases'
 import { useAuthStore } from '@/stores/auth'
 import { copyText, buildShareText } from '@/utils/share'
 import ImageUploader from '@/components/ImageUploader.vue'
@@ -82,7 +82,10 @@ async function load() {
   err.value = ''
   notFound.value = false
   try {
-    c.value = await fetchCase(id.value, via.value)
+    // 登录态走管理接口（草稿/下线也可打开编辑）；公开访问走公开接口（仅 published）
+    c.value = auth.user
+      ? await fetchCaseManage(id.value)
+      : await fetchCase(id.value, via.value)
   } catch (e: any) {
     if (e?.response?.status === 404) notFound.value = true
     else err.value = e?.response?.data?.message || '加载失败'

@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import {
   fetchCases,
+  createCase,
   createCaseFromRoute,
   publishCase,
   unpublishCase,
@@ -20,18 +21,28 @@ const { user } = storeToRefs(auth)
 
 const list = ref<CaseItem[]>([])
 const loading = ref(true)
-const routes = ref<Route[]>([])
-const routeId = ref('')
-const busy = ref(false)
 const err = ref('')
 
-// 筛选 / 排序
+// —— 派生 ——
+const routes = ref<Route[]>([])
+const deriveOpen = ref(false)
+const routeId = ref('')
+const deriveBusy = ref(false)
+
+// —— 筛选 / 排序 ——
 const kw = ref('')
 const fDest = ref('')
 const fTheme = ref('')
-const fDays = ref('') // '' | le5 | 6to10 | gt10
-const fPrice = ref('') // '' | eco | std | lux
-const sortBy = ref<'new' | 'daysAsc' | 'daysDesc' | 'priceAsc' | 'priceDesc'>('new')
+const fDays = ref('')
+const sortBy = ref<'new' | 'daysAsc' | 'priceAsc' | 'priceDesc'>('new')
+const moreDestOpen = ref(false)
+const moreThemeOpen = ref(false)
+
+// —— 新建空白弹窗 ——
+const showCreate = ref(false)
+const createBusy = ref(false)
+const createForm = ref({ title: '', destination: '', days: '', theme: '', priceRange: '' })
+const createErr = ref('')
 
 onMounted(load)
 
@@ -40,9 +51,7 @@ async function load() {
   err.value = ''
   try {
     list.value = await fetchCases()
-    if (user.value) {
-      routes.value = await fetchRoutes()
-    }
+    if (user.value) routes.value = await fetchRoutes()
   } catch (e: any) {
     err.value = e?.response?.data?.message || '加载失败'
   } finally {
@@ -50,14 +59,32 @@ async function load() {
   }
 }
 
+// —— KPI（全部来自现有数据，不造假） ——
+const kpi = computed(() => {
+  const published = list.value.filter((c) => c.status === 'published').length
+  const draft = list.value.filter((c) => c.status === 'draft').length
+  const offline = list.value.filter((c) => c.status === 'offline').length
+  const incomplete = list.value.filter(
+    (c) => (c.status === 'draft') && (!c.title || !c.cover),
+  ).length
+  return { published, draft, offline, total: list.value.length, incomplete }
+})
+
+// —— chips 选项 ——
 const destOptions = computed(() => uniq(list.value.map((c) => c.destination).filter(Boolean)))
 const themeOptions = computed(() => uniq(list.value.map((c) => c.theme).filter(Boolean)))
-
+const VISIBLE_DEST = 5
+const VISIBLE_THEME = 4
+const visibleDests = computed(() =>
+  moreDestOpen.value ? destOptions.value : destOptions.value.slice(0, VISIBLE_DEST),
+)
+const visibleThemes = computed(() =>
+  moreThemeOpen.value ? themeOptions.value : themeOptions.value.slice(0, VISIBLE_THEME),
+)
 function uniq(arr: string[]): string[] {
   return Array.from(new Set(arr))
 }
 
-// priceRange 为自由文本（如 "THB 12345"），提取首个数字用于排序/分桶
 function priceNum(c: CaseItem): number {
   const m = (c.priceRange || '').match(/[\d,]+/)
   return m ? Number(m[0].replace(/,/g, '')) : 0
@@ -67,12 +94,6 @@ function daysBucket(c: CaseItem): string {
   if (c.days <= 10) return '6to10'
   return 'gt10'
 }
-function priceBucket(c: CaseItem): string {
-  const n = priceNum(c)
-  if (n <= 10000) return 'eco'
-  if (n <= 30000) return 'std'
-  return 'lux'
-}
 
 const view = computed(() => {
   const k = kw.value.trim().toLowerCase()
@@ -80,7 +101,6 @@ const view = computed(() => {
     if (fDest.value && c.destination !== fDest.value) return false
     if (fTheme.value && c.theme !== fTheme.value) return false
     if (fDays.value && daysBucket(c) !== fDays.value) return false
-    if (fPrice.value && priceBucket(c) !== fPrice.value) return false
     if (k) {
       const hay = [c.title, c.destination, ...(c.highlights || [])].filter(Boolean).join(' ').toLowerCase()
       if (!hay.includes(k)) return false
@@ -91,7 +111,6 @@ const view = computed(() => {
   arr.sort((a, b) => {
     switch (s) {
       case 'daysAsc': return a.days - b.days
-      case 'daysDesc': return b.days - a.days
       case 'priceAsc': return priceNum(a) - priceNum(b)
       case 'priceDesc': return priceNum(b) - priceNum(a)
       default: return (b.publishedAt || '').localeCompare(a.publishedAt || '')
@@ -101,14 +120,13 @@ const view = computed(() => {
 })
 
 function hasFilter() {
-  return !!(kw.value || fDest.value || fTheme.value || fDays.value || fPrice.value)
+  return !!(kw.value || fDest.value || fTheme.value || fDays.value)
 }
 function resetFilter() {
   kw.value = ''
   fDest.value = ''
   fTheme.value = ''
   fDays.value = ''
-  fPrice.value = ''
 }
 
 function caseTitle(c: CaseItem): string {
@@ -117,172 +135,386 @@ function caseTitle(c: CaseItem): string {
 function routeName(r: Route): string {
   return safeName(r.customerNameCn, r.customerName)
 }
-
 function openDetail(c: CaseItem) {
   router.push(`/cases/${c.id}`)
 }
 
+// —— 派生 ——
 async function onDerive() {
   if (!routeId.value) {
     err.value = '请选择一条已确认路线'
     return
   }
-  busy.value = true
+  deriveBusy.value = true
   try {
     await createCaseFromRoute(routeId.value)
     routeId.value = ''
+    deriveOpen.value = false
     await load()
   } catch (e: any) {
     err.value = e?.response?.data?.message || '派生失败（需已确认路线）'
   } finally {
-    busy.value = false
+    deriveBusy.value = false
   }
 }
-async function onPublish(id: string) {
-  await publishCase(id)
+
+// —— 新建空白 ——
+function openCreate() {
+  createForm.value = { title: '', destination: '', days: '', theme: '', priceRange: '' }
+  createErr.value = ''
+  showCreate.value = true
+}
+async function onCreate() {
+  const f = createForm.value
+  if (!f.title.trim() || !f.destination.trim()) {
+    createErr.value = '请填写标题和目的地'
+    return
+  }
+  const days = Number(f.days)
+  if (f.days && (!Number.isInteger(days) || days < 1 || days > 60)) {
+    createErr.value = '天数需为 1-60 的整数'
+    return
+  }
+  createBusy.value = true
+  try {
+    const created = await createCase({
+      title: f.title.trim(),
+      destination: f.destination.trim(),
+      days: f.days ? days : 0,
+      theme: f.theme.trim(),
+      priceRange: f.priceRange.trim(),
+    })
+    showCreate.value = false
+    router.push(`/cases/${created.id}`)
+  } catch (e: any) {
+    createErr.value = e?.response?.data?.message || '创建失败'
+  } finally {
+    createBusy.value = false
+  }
+}
+
+// —— 状态操作 ——
+async function onPublish(c: CaseItem) {
+  await publishCase(c.id)
   await load()
 }
-async function onUnpublish(id: string) {
-  await unpublishCase(id)
+async function onUnpublish(c: CaseItem) {
+  await unpublishCase(c.id)
   await load()
 }
-async function onDelete(id: string) {
-  if (!confirm('确认删除该案例？')) return
-  await deleteCase(id)
+async function onDelete(c: CaseItem) {
+  if (!confirm(`确认删除案例「${caseTitle(c)}」？此操作不可恢复`)) return
+  await deleteCase(c.id)
   await load()
 }
 </script>
 
 <template>
   <div class="cases-page">
-    <h1 class="page-title">案例展示</h1>
-
-    <!-- 管理面板（仅登录可见）：从已确认路线派生脱敏案例 -->
-    <div v-if="user" class="card manage">
-      <p class="muted">从「已确认」路线派生脱敏案例（服务端强制合规校验，屏蔽真名/证件/合同价）。</p>
-      <div class="derive">
-        <select v-model="routeId" class="field">
-          <option value="">选择路线…</option>
-          <option v-for="r in routes" :key="r.id" :value="r.id">
-            {{ routeName(r) }} · {{ safeText(r.destination) }}
-          </option>
-        </select>
-        <button class="btn btn-primary" :disabled="busy" @click="onDerive">派生案例</button>
+    <!-- Hero -->
+    <section class="hero">
+      <h1 class="hero-h">案例中心</h1>
+      <p class="hero-sub">管理 PandaKing9 对外公开案例 — 派生、空建、HTML 微站三种创建路径</p>
+      <div class="kpi-row">
+        <div class="kpi">
+          <div class="kpi-ico pri">★</div>
+          <div><div class="kpi-l">已发布</div><div class="kpi-v">{{ kpi.published }}</div><div class="kpi-d">对外可看</div></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-ico warn">!</div>
+          <div><div class="kpi-l">草稿</div><div class="kpi-v">{{ kpi.draft }}</div><div class="kpi-d" :class="{ warn: kpi.incomplete > 0 }">{{ kpi.incomplete }} 待完善</div></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-ico neu">↧</div>
+          <div><div class="kpi-l">已下线</div><div class="kpi-v">{{ kpi.offline }}</div><div class="kpi-d">不对外</div></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-ico neu">≡</div>
+          <div><div class="kpi-l">案例总数</div><div class="kpi-v">{{ kpi.total }}</div><div class="kpi-d">全部状态</div></div>
+        </div>
       </div>
-    </div>
+    </section>
 
-    <!-- 公开筛选条 -->
-    <div class="filters card">
-      <input v-model="kw" class="field kw" placeholder="搜索标题 / 目的地 / 亮点" />
-      <select v-model="fDest" class="field">
-        <option value="">全部目的地</option>
-        <option v-for="d in destOptions" :key="d" :value="d">{{ d }}</option>
-      </select>
-      <select v-model="fTheme" class="field">
-        <option value="">全部主题</option>
-        <option v-for="t in themeOptions" :key="t" :value="t">{{ t }}</option>
-      </select>
-      <select v-model="fDays" class="field">
-        <option value="">全部天数</option>
-        <option value="le5">≤ 5 天</option>
-        <option value="6to10">6–10 天</option>
-        <option value="gt10">&gt; 10 天</option>
-      </select>
-      <select v-model="fPrice" class="field">
-        <option value="">全部价格</option>
-        <option value="eco">经济 (≤1万)</option>
-        <option value="std">标准 (1–3万)</option>
-        <option value="lux">高端 (&gt;3万)</option>
-      </select>
-      <select v-model="sortBy" class="field">
+    <!-- Action Bar -->
+    <section class="actions">
+      <button class="btn btn-primary" @click="openCreate">+ 新建空白案例</button>
+      <button class="btn btn-soft" :class="{ active: deriveOpen }" @click="deriveOpen = !deriveOpen">
+        ↻ 从路线派生
+      </button>
+      <div class="btn-spacer"></div>
+      <span class="count">共 {{ view.length }} 个案例</span>
+      <select v-model="sortBy" class="sort-select" title="排序">
         <option value="new">最新发布</option>
         <option value="daysAsc">天数 ↑</option>
-        <option value="daysDesc">天数 ↓</option>
         <option value="priceAsc">价格 ↑</option>
         <option value="priceDesc">价格 ↓</option>
       </select>
-      <button v-if="hasFilter()" class="btn ghost sm" @click="resetFilter">重置</button>
-    </div>
+    </section>
+
+    <!-- 派生面板（展开式） -->
+    <section v-if="deriveOpen && user" class="derive-panel">
+      <select v-model="routeId" class="field">
+        <option value="">选择已确认路线…</option>
+        <option v-for="r in routes" :key="r.id" :value="r.id">
+          {{ routeName(r) }} · {{ safeText(r.destination) }}
+        </option>
+      </select>
+      <button class="btn btn-primary btn-sm" :disabled="deriveBusy" @click="onDerive">
+        {{ deriveBusy ? '派生中…' : '派生脱敏草稿' }}
+      </button>
+      <p class="hint">服务端强制合规：自动屏蔽真名 / 证件 / 合同价</p>
+    </section>
+
+    <!-- Filter chips -->
+    <section class="filters">
+      <span class="filter-label">目的地</span>
+      <span class="chip" :class="{ active: !fDest }" @click="fDest = ''">全部</span>
+      <span
+        v-for="d in visibleDests"
+        :key="d"
+        class="chip"
+        :class="{ active: fDest === d }"
+        @click="fDest = fDest === d ? '' : d"
+      >{{ d }}</span>
+      <span
+        v-if="destOptions.length > VISIBLE_DEST"
+        class="chip chip-more"
+        @click="moreDestOpen = !moreDestOpen"
+      >{{ moreDestOpen ? '收起' : `+ ${destOptions.length - VISIBLE_DEST} 更多` }}</span>
+
+      <span class="filter-label" style="margin-left: 14px">主题</span>
+      <span class="chip" :class="{ active: !fTheme }" @click="fTheme = ''">全部</span>
+      <span
+        v-for="t in visibleThemes"
+        :key="t"
+        class="chip"
+        :class="{ active: fTheme === t }"
+        @click="fTheme = fTheme === t ? '' : t"
+      >{{ t }}</span>
+      <span
+        v-if="themeOptions.length > VISIBLE_THEME"
+        class="chip chip-more"
+        @click="moreThemeOpen = !moreThemeOpen"
+      >{{ moreThemeOpen ? '收起' : `+ ${themeOptions.length - VISIBLE_THEME} 更多` }}</span>
+
+      <span class="filter-label" style="margin-left: 14px">天数</span>
+      <span class="chip" :class="{ active: !fDays }" @click="fDays = ''">全部</span>
+      <span class="chip" :class="{ active: fDays === 'le5' }" @click="fDays = fDays === 'le5' ? '' : 'le5'">≤5</span>
+      <span class="chip" :class="{ active: fDays === '6to10' }" @click="fDays = fDays === '6to10' ? '' : '6to10'">6-10</span>
+      <span class="chip" :class="{ active: fDays === 'gt10' }" @click="fDays = fDays === 'gt10' ? '' : 'gt10'">&gt;10</span>
+
+      <input v-model="kw" class="filter-search" placeholder="搜索标题 / 亮点…" />
+      <button v-if="hasFilter()" class="btn btn-ghost btn-sm" @click="resetFilter">重置</button>
+    </section>
 
     <p v-if="err" class="err">{{ err }}</p>
-    <p v-if="loading">加载中…</p>
-    <div v-else class="case-grid">
+
+    <!-- Grid -->
+    <section v-if="loading" class="loading-tip">加载中…</section>
+    <section v-else-if="view.length" class="grid">
       <div
         v-for="c in view"
         :key="c.id"
-        class="card case-card"
+        class="card"
         @click="openDetail(c)"
       >
-        <div class="cover" :style="c.cover ? `background-image:url(${c.cover})` : ''">
+        <div class="cover" :style="c.cover ? `background-image:url('${c.cover}')` : ''">
           <span v-if="!c.cover" class="cover-ph">{{ caseTitle(c).slice(0, 1) }}</span>
+          <span class="status-badge" :class="c.status">
+            {{ c.status === 'published' ? '已发布' : c.status === 'draft' ? '草稿' : '已下线' }}
+          </span>
         </div>
-        <div class="case-body">
-          <div class="case-title">{{ caseTitle(c) }}</div>
-          <div class="case-meta">{{ c.destination }} · {{ c.days }} 天 · {{ c.theme }}</div>
-          <div class="case-price">{{ c.priceRange }}</div>
+        <div class="body">
+          <div class="title">{{ caseTitle(c) }}</div>
+          <div class="dest">{{ c.destination }} · {{ c.days }} 天 · {{ c.theme || '—' }}</div>
           <div v-if="c.highlights?.length" class="hl">
-            <span v-for="h in c.highlights" :key="h" class="chip">{{ h }}</span>
+            <span v-for="h in c.highlights.slice(0, 3)" :key="h" class="hl-chip">{{ h }}</span>
+          </div>
+          <div class="meta-row">
+            <div class="params">
+              <span v-if="c.contentHtml" class="tag-html">HTML 微站</span>
+              <span v-if="c.groupSize"><b>{{ c.groupSize }} 人</b></span>
+            </div>
+            <div class="price">{{ c.priceRange || '—' }}</div>
+          </div>
+          <div v-if="user" class="card-actions" @click.stop>
+            <button v-if="c.status !== 'published'" class="btn btn-sm btn-soft" @click="onPublish(c)">发布</button>
+            <button v-else class="btn btn-sm btn-ghost" @click="onUnpublish(c)">下线</button>
+            <button class="btn btn-sm btn-ghost danger" @click="onDelete(c)">删除</button>
+            <span class="card-edit" @click="openDetail(c)">编辑 →</span>
           </div>
         </div>
-        <div class="case-status" :class="c.status">{{ c.status }}</div>
-        <div v-if="user" class="case-actions" @click.stop>
-          <button v-if="c.status !== 'published'" class="btn sm" @click="onPublish(c.id)">发布</button>
-          <button v-else class="btn sm" @click="onUnpublish(c.id)">下线</button>
-          <button class="btn ghost sm danger" @click="onDelete(c.id)">删除</button>
-        </div>
       </div>
-      <p v-if="!view.length" class="muted empty">没有匹配的案例</p>
+    </section>
+
+    <!-- 空状态 -->
+    <section v-else class="empty">
+      <div class="empty-illust"></div>
+      <div class="empty-title">还没有匹配的案例</div>
+      <div class="empty-sub">
+        {{ hasFilter() ? '试试清除筛选条件' : (user ? '新建空白案例、从路线派生，或导入 HTML 微站' : '暂无公开案例') }}
+      </div>
+      <div v-if="user" style="display: flex; gap: 8px; justify-content: center">
+        <button class="btn btn-primary" @click="openCreate">+ 新建空白案例</button>
+        <button class="btn btn-soft" @click="deriveOpen = true; !routeId && (routeId = routes[0]?.id || '')">↻ 从路线派生</button>
+      </div>
+      <button v-else-if="hasFilter()" class="btn btn-ghost" @click="resetFilter">清除筛选</button>
+    </section>
+  </div>
+
+  <!-- 新建空白案例弹窗 -->
+  <div v-if="showCreate" class="modal-mask" @click.self="showCreate = false">
+    <div class="modal">
+      <div class="modal-head">
+        <div class="modal-title">新建空白案例</div>
+        <div class="modal-close" @click="showCreate = false">✕</div>
+      </div>
+      <div class="modal-body">
+        <div class="field-row">
+          <div class="field-label">案例标题 *</div>
+          <input v-model="createForm.title" class="field-input" placeholder="例如：清迈兰纳文化 5 日深度游" />
+        </div>
+        <div class="row2">
+          <div class="field-row">
+            <div class="field-label">目的地 *</div>
+            <input v-model="createForm.destination" class="field-input" placeholder="如：清迈" />
+          </div>
+          <div class="field-row">
+            <div class="field-label">天数 *</div>
+            <input v-model="createForm.days" class="field-input" type="number" min="1" max="60" placeholder="如：5" />
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field-row">
+            <div class="field-label">主题</div>
+            <input v-model="createForm.theme" class="field-input" placeholder="如：亲子自然" />
+          </div>
+          <div class="field-row">
+            <div class="field-label">参考价</div>
+            <input v-model="createForm.priceRange" class="field-input" placeholder="如：¥2.5-3.5 万" />
+          </div>
+        </div>
+        <p v-if="createErr" class="err">{{ createErr }}</p>
+        <div class="field-hint">其他字段（封面、亮点、描述、行程等）创建后可继续编辑</div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" @click="showCreate = false">取消</button>
+        <button class="btn btn-primary" :disabled="createBusy" @click="onCreate">
+          {{ createBusy ? '创建中…' : '创建并编辑' }}
+        </button>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.cases-page { max-width: 1100px; margin: 0 auto; }
-.manage { margin-bottom: 14px; }
-.muted { color: var(--muted); font-size: 13px; }
-.empty { padding: 24px 0; }
-.filters {
-  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
-  margin-bottom: 14px; padding: 12px;
-}
-.field {
-  padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
-  background: var(--card); color: var(--text);
-}
-.kw { flex: 1; min-width: 200px; }
-.derive { display: flex; gap: 8px; margin-top: 8px; }
-.case-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
-.case-card { overflow: hidden; cursor: pointer; transition: border-color .15s, transform .15s; display: flex; flex-direction: column; }
-.case-card:hover { border-color: var(--brand); transform: translateY(-2px); }
-.cover {
-  height: 140px; background: var(--brand-soft, var(--line)) center/cover no-repeat;
-  display: flex; align-items: center; justify-content: center;
-}
-.cover-ph {
-  font-size: 40px; font-weight: 700; color: var(--brand);
-  background: var(--card); width: 64px; height: 64px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-}
-.case-body { padding: 12px; flex: 1; }
-.case-title { font-weight: 600; }
-.case-meta { color: var(--muted); font-size: 13px; margin: 4px 0; }
-.case-price { color: var(--brand); font-weight: 600; }
-.hl { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
-.chip { font-size: 12px; background: var(--brand-soft, #eef); color: var(--brand); border-radius: 999px; padding: 2px 8px; }
-.case-status { font-size: 12px; color: var(--muted); padding: 0 12px 8px; }
-.case-status.published { color: var(--ok); }
-.case-status.offline { color: var(--danger); }
-.case-actions { padding: 0 12px 12px; display: flex; gap: 6px; }
-.btn { padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--brand); color: #fff; cursor: pointer; }
-.btn.sm { padding: 3px 10px; font-size: 12px; }
-.btn.ghost { background: transparent; color: var(--text); }
-.btn.ghost.sm { padding: 3px 10px; font-size: 12px; }
-.btn.ghost.danger { color: var(--danger); border-color: var(--danger); }
-.err { color: var(--danger); }
+.cases-page { max-width: 1200px; margin: 0 auto; padding: 0 0 48px; }
 
+/* Hero */
+.hero { padding: 20px 0 18px; }
+.hero-h { font-size: clamp(19px, 3.2vw, 24px); font-weight: 700; letter-spacing: -.01em; margin-bottom: 6px; }
+.hero-sub { color: var(--muted); font-size: 13.5px; }
+.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: 13px 16px; display: flex; align-items: center; gap: 12px; }
+.kpi-ico { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 15px; }
+.kpi-ico.pri { background: var(--brand-50); color: var(--brand); }
+.kpi-ico.warn { background: var(--warn-50); color: var(--warn); }
+.kpi-ico.neu { background: #eef2f7; color: var(--ink-2); }
+.kpi-l { font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+.kpi-v { font-size: 21px; font-weight: 700; line-height: 1.1; }
+.kpi-d { font-size: 11px; color: var(--ok); margin-top: 3px; }
+.kpi-d.warn { color: var(--warn); }
+
+/* Action Bar */
+.actions { display: flex; gap: 10px; align-items: center; margin: 18px 0 12px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--sh-sm); flex-wrap: wrap; }
+.count { font-size: 12.5px; color: var(--muted); }
+.sort-select { padding: 6px 10px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); font-size: 12.5px; background: var(--surface); color: var(--ink-2); font-family: inherit; }
+
+.btn { padding: 8px 14px; border-radius: var(--r-sm); font-size: 13.5px; cursor: pointer; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); display: inline-flex; align-items: center; gap: 6px; font-family: inherit; font-weight: 600; transition: background .15s, color .15s, box-shadow .15s, transform .15s; }
+.btn:hover { transform: translateY(-1px); }
+.btn-primary { background: var(--brand); border-color: var(--brand); color: #fff; box-shadow: 0 1px 2px rgba(24, 95, 165, .2); }
+.btn-primary:hover { background: var(--brand-600); box-shadow: 0 4px 12px rgba(24, 95, 165, .25); }
+.btn-soft { background: var(--brand-50); border-color: transparent; color: var(--brand-600); }
+.btn-soft.active { background: var(--brand); color: #fff; }
+.btn-ghost { background: transparent; border-color: transparent; color: var(--ink-2); }
+.btn-ghost:hover { background: var(--brand-50); color: var(--brand); }
+.btn-ghost.danger { color: var(--danger); }
+.btn-ghost.danger:hover { background: var(--danger-50); color: var(--danger); }
+.btn-sm { padding: 5px 10px; font-size: 12px; border-radius: 6px; }
+
+/* 派生面板 */
+.derive-panel { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; padding: 12px 14px; background: var(--brand-50); border: 1px solid var(--brand-100); border-radius: var(--r-md); flex-wrap: wrap; }
+.derive-panel .field { padding: 7px 10px; border: 1px solid var(--brand-100); border-radius: var(--r-sm); background: var(--surface); font-size: 13px; flex: 1; min-width: 200px; font-family: inherit; }
+.hint { font-size: 11.5px; color: var(--muted); width: 100%; }
+
+/* Filter chips */
+.filters { display: flex; align-items: center; gap: 7px; margin-bottom: 16px; flex-wrap: wrap; }
+.filter-label { font-size: 12px; color: var(--muted); font-weight: 600; }
+.chip { padding: 5px 12px; border-radius: var(--r-pill); background: var(--surface); border: 1px solid var(--line-strong); font-size: 12.5px; color: var(--ink-2); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; transition: all .15s; }
+.chip:hover { border-color: var(--brand-100); }
+.chip.active { background: var(--brand); color: #fff; border-color: var(--brand); }
+.chip-more { color: var(--brand-600); border-color: var(--brand-100); background: var(--brand-50); }
+.filter-search { flex: 1; min-width: 200px; max-width: 300px; padding: 6px 12px; border-radius: var(--r-sm); border: 1px solid var(--line-strong); font-size: 13px; background: var(--surface); margin-left: auto; font-family: inherit; }
+.filter-search:focus { outline: 2px solid var(--brand-100); border-color: var(--brand); }
+
+/* Grid */
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; cursor: pointer; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; display: flex; flex-direction: column; }
+.card:hover { transform: translateY(-2px); box-shadow: var(--sh-md); border-color: var(--brand-100); }
+.cover { aspect-ratio: 16/9; background: #d8e1ec center/cover no-repeat; position: relative; display: flex; align-items: center; justify-content: center; }
+.cover-ph { width: 62px; height: 62px; border-radius: 50%; background: var(--surface); color: var(--brand); font-size: 26px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: var(--sh-sm); }
+.status-badge { position: absolute; top: 10px; left: 10px; padding: 3px 9px; border-radius: var(--r-pill); font-size: 11px; font-weight: 600; }
+.status-badge.published { background: rgba(15, 157, 111, .92); color: #fff; }
+.status-badge.draft { background: rgba(255, 255, 255, .94); color: var(--ink-2); border: 1px solid var(--line-strong); }
+.status-badge.offline { background: rgba(216, 58, 46, .9); color: #fff; }
+
+.body { padding: 13px 15px 14px; flex: 1; display: flex; flex-direction: column; }
+.title { font-size: 15px; font-weight: 700; color: var(--ink); margin-bottom: 4px; line-height: 1.4; }
+.dest { font-size: 12.5px; color: var(--muted); margin-bottom: 10px; }
+.hl { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+.hl-chip { font-size: 11px; padding: 2px 8px; border-radius: var(--r-pill); background: var(--brand-50); color: var(--brand-600); }
+.meta-row { display: flex; justify-content: space-between; align-items: baseline; margin-top: auto; padding-top: 10px; border-top: 1px dashed var(--line); }
+.params { display: flex; gap: 8px; font-size: 11.5px; color: var(--muted); align-items: center; }
+.params b { color: var(--ink-2); font-weight: 600; }
+.tag-html { font-size: 10.5px; padding: 1px 7px; border-radius: var(--r-pill); background: #eef2f7; color: var(--ink-2); border: 1px solid var(--line-strong); }
+.price { font-size: 13px; color: var(--brand-600); font-weight: 700; }
+.card-actions { display: flex; gap: 6px; margin-top: 10px; align-items: center; }
+.card-edit { margin-left: auto; font-size: 12px; color: var(--brand); font-weight: 600; }
+
+/* 空状态 */
+.empty { background: var(--surface); border: 1px dashed var(--line-strong); border-radius: var(--r-lg); padding: 48px 24px; text-align: center; }
+.empty-illust { width: 110px; height: 110px; margin: 0 auto 18px; border-radius: 50%; background: var(--brand-50); position: relative; }
+.empty-illust::after { content: ""; position: absolute; inset: 16px; border-radius: 50%; border: 2px dashed var(--brand); opacity: .35; }
+.empty-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+.empty-sub { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
+
+/* 弹窗 */
+.modal-mask { position: fixed; inset: 0; background: rgba(18, 26, 41, .45); display: flex; align-items: center; justify-content: center; z-index: 60; padding: 20px; }
+.modal { width: 520px; max-width: 100%; background: var(--surface); border-radius: var(--r-lg); box-shadow: var(--sh-lg); overflow: hidden; }
+.modal-head { padding: 16px 20px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
+.modal-title { font-size: 16px; font-weight: 700; }
+.modal-close { width: 26px; height: 26px; border-radius: 6px; color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.modal-close:hover { background: var(--surface-2); color: var(--ink); }
+.modal-body { padding: 20px; }
+.field-row { margin-bottom: 13px; }
+.field-label { font-size: 12.5px; color: var(--ink-2); margin-bottom: 5px; font-weight: 600; }
+.field-input { width: 100%; padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); font-size: 14px; background: var(--surface); font-family: inherit; }
+.field-input:focus { outline: 2px solid var(--brand-100); border-color: var(--brand); }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.field-hint { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+.modal-foot { padding: 13px 20px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 8px; background: var(--surface-2); }
+
+.err { color: var(--danger); font-size: 13px; margin: 8px 0; }
+.loading-tip { color: var(--muted); font-size: 13px; padding: 24px 0; }
+
+@media (max-width: 1100px) {
+  .grid { grid-template-columns: repeat(2, 1fr); }
+}
 @media (max-width: 640px) {
-  .case-grid { grid-template-columns: 1fr; }
-  .derive { flex-direction: column; align-items: stretch; }
+  .grid { grid-template-columns: 1fr; }
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .row2 { grid-template-columns: 1fr; }
+  .filter-search { max-width: none; margin-left: 0; width: 100%; }
+  .hero-sub { font-size: 13px; }
 }
 </style>

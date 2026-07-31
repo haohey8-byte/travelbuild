@@ -32,6 +32,14 @@ export class CaseController {
     return this.svc.listAll()
   }
 
+  // 管理：单个案例（含草稿/下线）—— 管理端编辑入口（公开接口仅 published，草稿打不开）
+  // 注意：声明在 :id 之后 + 两段路径（manage/:id），与单段 :id 不冲突
+  @Get('manage/:id')
+  @UseGuards(JwtAuthGuard)
+  getManage(@Param('id') id: string) {
+    return this.svc.getById(id)
+  }
+
   // 管理：新建案例
   @Post()
   @UseGuards(JwtAuthGuard)

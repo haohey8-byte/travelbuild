@@ -18,6 +18,18 @@ export async function fetchCase(id: string, via?: string): Promise<CaseItem> {
   return data
 }
 
+// 管理端：单个案例（含草稿/下线）—— 草稿案例编辑入口
+export async function fetchCaseManage(id: string): Promise<CaseItem> {
+  const { data } = await client.get(`/cases/manage/${id}`)
+  return data
+}
+
+// 管理端：新建空白案例（最少字段，其余后补）
+export async function createCase(payload: Partial<CaseItem>): Promise<CaseItem> {
+  const { data } = await client.post('/cases', payload)
+  return data
+}
+
 export async function publishCase(id: string): Promise<CaseItem> {
   const { data } = await client.post(`/cases/${id}/publish`)
   return data
