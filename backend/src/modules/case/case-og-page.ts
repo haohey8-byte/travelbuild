@@ -30,10 +30,13 @@ function jsonSafe(obj: unknown): string {
 }
 
 // 图片地址归一化：COS 完整 URL 原样用；相对路径（本地 /uploads/*）拼 origin
+// 同时修正历史 bug：早期 cos.storage 把 "https://" 压成 "https:/"，单斜杠自动补回双斜杠
 function imgUrl(u: string | null | undefined, origin: string): string {
   if (!u) return ''
-  if (/^https?:\/\//i.test(u)) return u
-  return `${origin}${u.startsWith('/') ? u : '/' + u}`
+  let fixed = u
+  if (/^https:\/[^/]/i.test(fixed)) fixed = fixed.replace(/^https:\//i, 'https://')
+  if (/^https?:\/\//i.test(fixed)) return fixed
+  return `${origin}${fixed.startsWith('/') ? fixed : '/' + fixed}`
 }
 
 export interface CaseOgData {

@@ -45,8 +45,12 @@ export class CosStorage implements IStorage, OnModuleInit {
       throw new Error(`COS 上传失败${code ? ` (${code})` : ''}：${msg}`)
     }
     const base = this.cdnBase || `https://${this.bucket}.cos.${this.region}.myqcloud.com`
-    const url = `${base}/${input.key}`.replace(/\/+/g, '/')
-    this.logger.log(`cos put ${input.key} (${input.body.length}B)`)
-    return { url, key: input.key, size: input.body.length, contentType: input.contentType }
+    // 注意：不能 .replace(/\/+/g, '/')，会把 "https://" 里的双斜杠压扁成 "https:/" 导致协议错。
+    // 仅去除 base 末尾 + key 开头的多余斜杠，保留协议头完整。
+    const cleanBase = base.replace(/\/+$/, '')
+    const cleanKey = input.key.replace(/^\/+/, '')
+    const url = `${cleanBase}/${cleanKey}`
+    this.logger.log(`cos put ${cleanKey} (${input.body.length}B)`)
+    return { url, key: cleanKey, size: input.body.length, contentType: input.contentType }
   }
 }

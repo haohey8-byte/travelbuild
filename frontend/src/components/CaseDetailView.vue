@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import CaseHtmlView from './CaseHtmlView.vue'
 import { safeText } from '@/utils/name'
 import { formatTravelDate } from '@/utils/share'
+import { fixImageUrl } from '@/utils/image'
 import type { CaseItem } from '@/types'
 
 // 案例只读视图（公开页 + 编辑预览共用，防样式漂移）
@@ -39,7 +40,7 @@ const tripParams = computed(() => {
   <div class="cdv">
     <!-- 联合品牌条 -->
     <div v-if="c.agencyBranding" class="cobrand">
-      <img v-if="c.agencyBranding.logoUrl" :src="c.agencyBranding.logoUrl" class="logo" alt="logo" />
+      <img v-if="c.agencyBranding.logoUrl" :src="fixImageUrl(c.agencyBranding.logoUrl)" class="logo" alt="logo" />
       <div class="cobrand-text">
         <span class="x">PandaKing</span> × <b>{{ c.agencyBranding.name }}</b>
         <div v-if="contactList.length" class="contacts">
@@ -49,7 +50,7 @@ const tripParams = computed(() => {
     </div>
 
     <!-- 封面 + 标题 -->
-    <div class="hero" :style="c.cover ? `background-image:url(${c.cover})` : ''">
+    <div class="hero" :style="c.cover ? `background-image:url(${fixImageUrl(c.cover)})` : ''">
       <span v-if="!c.cover" class="hero-ph">{{ caseTitle().slice(0, 1) }}</span>
       <div class="hero-mask">
         <h1 class="title">{{ caseTitle() }}</h1>
@@ -74,7 +75,7 @@ const tripParams = computed(() => {
     <section v-if="c.daysContent?.length" class="days">
       <h2>行程亮点（每日）</h2>
       <div v-for="d in c.daysContent" :key="d.day" class="day-card">
-        <img v-if="d.image" :src="d.image" class="day-img" alt="" />
+        <img v-if="d.image" :src="fixImageUrl(d.image)" class="day-img" alt="" />
         <div class="day-head">第 {{ d.day }} 天 · {{ d.city }}</div>
         <div v-if="d.spots?.length" class="day-row"><span class="k">景点</span>
           <span class="chips"><span v-for="s in d.spots" :key="s" class="chip sm">{{ s }}</span></span>

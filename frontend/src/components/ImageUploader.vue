@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { uploadImage } from '@/api/upload'
+import { fixImageUrl } from '@/utils/image'
 
 // 封面/每日图上传组件：点击或拖拽选图 → 客户端 canvas 压缩（≤1920px / JPEG q0.85）→ 上传 → 回填 URL
 // v-model 绑定 URL 字符串（与 CaseItem.cover / daysContent[].image 同型）
+// 预览 src 过 fixImageUrl：兼容历史 cos.storage URL 协议错（https:/ → https://）
 const props = defineProps<{
   modelValue?: string | null
   label?: string
@@ -116,7 +118,7 @@ function compressImage(file: File, maxDim = 1920, quality = 0.85): Promise<Blob>
       @dragover.prevent
       @drop="onDrop"
     >
-      <img v-if="modelValue && !loading" :src="modelValue" class="iu-preview" alt="预览" />
+      <img v-if="modelValue && !loading" :src="fixImageUrl(modelValue)" class="iu-preview" alt="预览" />
       <div v-else-if="loading" class="iu-loading">上传中…</div>
       <div v-else class="iu-empty">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
