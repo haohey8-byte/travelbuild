@@ -151,7 +151,7 @@ async function onSave() {
       contentHtml: form.value.contentHtml || undefined,
       daysContent: form.value.daysContent,
       travelDate: form.value.travelDate || null,
-      groupSize: form.value.groupSize ?? null,
+      groupSize: form.value.groupSize ? Number(form.value.groupSize) : null,
       vehicle: form.value.vehicle?.trim() || null,
     }
     const updated = await updateCase(id.value, payload)
