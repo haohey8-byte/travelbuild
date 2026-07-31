@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common'
+import { Body, Controller, Logger, Post, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { UploadService } from './upload.service'
@@ -15,6 +15,7 @@ interface HtmlBody {
 @Controller('upload')
 @UseGuards(JwtAuthGuard)
 export class UploadController {
+  private readonly logger = new Logger(UploadController.name)
   constructor(private readonly svc: UploadService) {}
 
   // HTML sanitize：前端读取 .html 文件内容后以 JSON 提交；返回 sanitize 后的 HTML + 剥离统计
@@ -44,6 +45,10 @@ export class UploadController {
     try {
       return await this.svc.uploadImage(file)
     } catch (e: any) {
+      // 记日志便于线上诊断（COS 密钥/权限/网络错误在响应里只透传 message，原样错误进日志）
+      this.logger.error(
+        `upload image failed file=${file.originalname} size=${file.size} err=${e?.message || e}`,
+      )
       return { error: e?.message || '上传失败' }
     }
   }

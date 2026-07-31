@@ -27,13 +27,23 @@ export class CosStorage implements IStorage, OnModuleInit {
     if (!this.bucket || !this.region) {
       throw new Error('COS 未配置：缺少 COS_BUCKET/COS_REGION 环境变量')
     }
-    await this.cos.putObject({
-      Bucket: this.bucket,
-      Region: this.region,
-      Key: input.key,
-      Body: input.body,
-      ContentType: input.contentType,
-    })
+    try {
+      await this.cos.putObject({
+        Bucket: this.bucket,
+        Region: this.region,
+        Key: input.key,
+        Body: input.body,
+        ContentType: input.contentType,
+      })
+    } catch (e: any) {
+      // COS SDK 错误必须记日志（此前完全吞掉只剩 message，线上无法诊断）
+      const code = e?.code || e?.statusCode || ''
+      const msg = e?.message || String(e)
+      this.logger.error(
+        `cos putObject failed bucket=${this.bucket} region=${this.region} key=${input.key} code=${code} msg=${msg}`,
+      )
+      throw new Error(`COS 上传失败${code ? ` (${code})` : ''}：${msg}`)
+    }
     const base = this.cdnBase || `https://${this.bucket}.cos.${this.region}.myqcloud.com`
     const url = `${base}/${input.key}`.replace(/\/+/g, '/')
     this.logger.log(`cos put ${input.key} (${input.body.length}B)`)
