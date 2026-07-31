@@ -115,10 +115,15 @@ export function buildShareText(c: CaseItem): string {
     const head = `D${d.day} ${safeText(d.city)}`
     lines.push(spots ? `${head}：${spots}` : head)
   }
-  const base = window.location.origin + (import.meta.env.VITE_BASE || '/')
-  const link = `${base}#/cases/${c.id}${c.agencyBranding ? '?via=' + c.agencyBranding.id : ''}`
-  lines.push(`详情：${link}`)
+  lines.push(`详情：${caseShareUrl(c)}`)
   return lines.join('\n')
+}
+
+// 案例分享链接：指向后端 SSR 页（/share/case/:id，带 OG 注入）。
+// 与协作 H5（shareH5Url）同模式——hash 路由的 #/cases/:id 无法被微信爬虫解析，
+// 因此对外分享必须用无 hash 的 SSR 地址，粘贴到微信即可出标题/封面/描述卡片。
+export function caseShareUrl(c: CaseItem): string {
+  return `${API_ORIGIN}/share/case/${c.id}${c.agencyBranding ? '?via=' + c.agencyBranding.id : ''}`
 }
 
 // 统一协作通知文案构造：覆盖「规划提交（方案更新）」与「反馈意见」两类事件。
