@@ -7,7 +7,12 @@ import type { Request, Response, NextFunction } from 'express'
 import { join } from 'node:path'
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule)
+  // bodyParser: false → 手动挂 express.json，提升 body 上限至 10MB。
+  // NestJS 默认 100kb：案例 HTML 微站单文件 1-3MB（sanitize 后仍大），上传/保存都会 413。
+  // multipart（/api/upload/image）由 multer 处理，不受此中间件影响。
+  const app = await NestFactory.create(AppModule, { bodyParser: false })
+  app.use(express.json({ limit: '10mb' }))
+  app.use(express.urlencoded({ extended: true, limit: '10mb' }))
   // 全局前缀 /api，对齐前端 Vite 代理与 axios baseURL
   // 排除 /share/(.*)：协作 H5 分享页走服务端渲染（带 OG 注入），不挂 /api 前缀
   app.setGlobalPrefix('api', { exclude: ['share/(.*)'] })

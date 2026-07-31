@@ -24,9 +24,9 @@ export class UploadController {
     if (!body || typeof body.html !== 'string' || !body.html.trim()) {
       return { error: 'html 字段必填' }
     }
-    // 500KB 上限（与 PRD M2 一致）
-    if (Buffer.byteLength(body.html, 'utf8') > 500 * 1024) {
-      return { error: 'HTML 文件超过 500KB 上限' }
+    // 5MB 上限（案例 HTML 微站单文件普遍 1-3MB，含内联样式/脚本/外链图）
+    if (Buffer.byteLength(body.html, 'utf8') > 5 * 1024 * 1024) {
+      return { error: 'HTML 文件超过 5MB 上限' }
     }
     return this.svc.sanitizeHtml(body.html)
   }
