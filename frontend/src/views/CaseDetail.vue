@@ -35,17 +35,26 @@ const form = ref<{
   titleTh: string
   cover: string
   highlights: string[]
+  highlightsEn: string[]
+  highlightsTh: string[]
   descZh: string
   descEn: string
   descTh: string
   contentHtml: string
+  contentHtmlEn: string
+  contentHtmlTh: string
   daysContent: DayContent[]
+  daysContentEn: DayContent[]
+  daysContentTh: DayContent[]
   travelDate?: string | null
   groupSize?: number | null
   vehicle?: string | null
 }>({
-  title: '', titleEn: '', titleTh: '', cover: '', highlights: [], descZh: '', descEn: '', descTh: '',
-  contentHtml: '', daysContent: [], travelDate: null, groupSize: null, vehicle: null,
+  title: '', titleEn: '', titleTh: '', cover: '', highlights: [], highlightsEn: [], highlightsTh: [],
+  descZh: '', descEn: '', descTh: '',
+  contentHtml: '', contentHtmlEn: '', contentHtmlTh: '',
+  daysContent: [], daysContentEn: [], daysContentTh: [],
+  travelDate: null, groupSize: null, vehicle: null,
 })
 const msg = ref('')
 
@@ -78,11 +87,17 @@ const previewCase = computed<CaseItem | null>(() => {
     titleTh: form.value.titleTh,
     cover: form.value.cover,
     highlights: form.value.highlights,
+    highlightsEn: form.value.highlightsEn,
+    highlightsTh: form.value.highlightsTh,
     descZh: form.value.descZh,
     descEn: form.value.descEn,
     descTh: form.value.descTh,
     contentHtml: form.value.contentHtml,
+    contentHtmlEn: form.value.contentHtmlEn,
+    contentHtmlTh: form.value.contentHtmlTh,
     daysContent: form.value.daysContent,
+    daysContentEn: form.value.daysContentEn,
+    daysContentTh: form.value.daysContentTh,
     travelDate: form.value.travelDate || null,
     groupSize: form.value.groupSize ?? null,
     vehicle: form.value.vehicle || null,
@@ -189,11 +204,17 @@ function startEdit() {
     titleTh: x.titleTh || '',
     cover: x.cover || '',
     highlights: x.highlights ? [...x.highlights] : [],
+    highlightsEn: x.highlightsEn ? [...x.highlightsEn] : [],
+    highlightsTh: x.highlightsTh ? [...x.highlightsTh] : [],
     descZh: x.descZh || '',
     descEn: x.descEn || '',
     descTh: x.descTh || '',
     contentHtml: x.contentHtml || '',
+    contentHtmlEn: x.contentHtmlEn || '',
+    contentHtmlTh: x.contentHtmlTh || '',
     daysContent: (x.daysContent || []).map((d) => ({ ...d, spots: [...(d.spots || [])], meals: [...(d.meals || [])] })),
+    daysContentEn: x.daysContentEn?.map((d) => ({ ...d, spots: [...(d.spots || [])], meals: [...(d.meals || [])] })) || [],
+    daysContentTh: x.daysContentTh?.map((d) => ({ ...d, spots: [...(d.spots || [])], meals: [...(d.meals || [])] })) || [],
     travelDate: x.travelDate ? x.travelDate.slice(0, 10) : null,
     groupSize: x.groupSize ?? null,
     vehicle: x.vehicle || null,
@@ -226,11 +247,17 @@ async function onSave() {
       titleTh: form.value.titleTh?.trim() || undefined,
       cover: form.value.cover?.trim() || undefined,
       highlights: form.value.highlights,
+      highlightsEn: form.value.highlightsEn,
+      highlightsTh: form.value.highlightsTh,
       descZh: form.value.descZh,
       descEn: form.value.descEn || undefined,
       descTh: form.value.descTh || undefined,
       contentHtml: form.value.contentHtml || undefined,
+      contentHtmlEn: form.value.contentHtmlEn || undefined,
+      contentHtmlTh: form.value.contentHtmlTh || undefined,
       daysContent: form.value.daysContent,
+      daysContentEn: form.value.daysContentEn,
+      daysContentTh: form.value.daysContentTh,
       travelDate: form.value.travelDate || null,
       groupSize: form.value.groupSize ? Number(form.value.groupSize) : null,
       vehicle: form.value.vehicle?.trim() || null,
@@ -265,24 +292,40 @@ async function onDelete() {
   router.push('/cases')
 }
 
-// —— AI 机器翻译（中文 → en/th，TMT；结果可编辑人工校对）——
+// —— AI 机器翻译（中文 → en/th，TMT；按 fields 翻译指定模块；不传=整体翻译 5 模块）
+// 整体页面翻译模块：title / desc / highlights / daysContent / contentHtml
 const translateBusy = ref(false)
-async function onTranslate() {
+const TRANS_ALL = ['title', 'desc', 'highlights', 'daysContent', 'contentHtml']
+async function onTranslate(fields?: string[]) {
   if (translateBusy.value) return
-  if (!form.value.descZh.trim() && !form.value.title.trim()) {
-    flash('请先填写标题或中文描述再翻译')
-    return
+  const wantAll = !fields || fields.length === 0
+  const list = fields || TRANS_ALL
+  if (wantAll) {
+    if (!form.value.descZh.trim() && !form.value.title.trim() && !form.value.highlights.length && !form.value.daysContent.length && !form.value.contentHtml.trim()) {
+      flash('请先填写标题/描述/亮点/行程/HTML 任一中文内容')
+      return
+    }
+  } else if (list.includes('title') || list.includes('desc')) {
+    if (!form.value.descZh.trim() && !form.value.title.trim()) {
+      flash('请先填写标题或中文描述再翻译')
+      return
+    }
   }
   translateBusy.value = true
   try {
-    const updated = await translateCase(id.value)
+    const updated = await translateCase(id.value, wantAll ? undefined : list)
     c.value = updated
-    // 回填翻译结果到编辑表单（保留其他未保存编辑）
     form.value.titleEn = updated.titleEn || ''
     form.value.titleTh = updated.titleTh || ''
     form.value.descEn = updated.descEn || ''
     form.value.descTh = updated.descTh || ''
-    flash('AI 翻译完成，请人工校对后保存')
+    form.value.highlightsEn = updated.highlightsEn || []
+    form.value.highlightsTh = updated.highlightsTh || []
+    form.value.daysContentEn = (updated.daysContentEn as DayContent[]) || []
+    form.value.daysContentTh = (updated.daysContentTh as DayContent[]) || []
+    form.value.contentHtmlEn = updated.contentHtmlEn || ''
+    form.value.contentHtmlTh = updated.contentHtmlTh || ''
+    flash(wantAll ? '整体页面翻译完成，请校对后保存' : `已翻译 ${list.join('、')} 模块，请校对后保存`)
   } catch (e: any) {
     const m = e?.response?.data?.message || e?.response?.data?.error || e?.message || '翻译失败'
     flash(`翻译失败：${m}`)
@@ -290,12 +333,30 @@ async function onTranslate() {
     translateBusy.value = false
   }
 }
-function transStatus(lang: 'en' | 'th'): { label: string; cls: string } | null {
-  const m = c.value?.transMeta?.[lang]
-  const has = lang === 'en' ? form.value.descEn || form.value.titleEn : form.value.descTh || form.value.titleTh
-  if (!has) return null
-  if (m?.status === 'reviewed') return { label: '已人工校对', cls: 'ok' }
-  return { label: 'AI 翻译 · 待校对', cls: 'ai' }
+// 模块状态聚合：返回该语言已翻译模块数 / 总模块数 + 是否全部 reviewed
+function transLangStatus(lang: 'en' | 'th') {
+  const meta = c.value?.transMeta || {}
+  const want = (field: string) =>
+    lang === 'en'
+      ? (field === 'highlights'
+          ? (c.value?.highlightsEn?.length ?? 0) > 0
+          : field === 'daysContent'
+            ? (c.value?.daysContentEn?.length ?? 0) > 0
+            : field === 'contentHtml'
+              ? !!c.value?.contentHtmlEn
+              : !!c.value?.[field === 'title' ? 'titleEn' : 'descEn'])
+      : (field === 'highlights'
+          ? (c.value?.highlightsTh?.length ?? 0) > 0
+          : field === 'daysContent'
+            ? (c.value?.daysContentTh?.length ?? 0) > 0
+            : field === 'contentHtml'
+              ? !!c.value?.contentHtmlTh
+              : !!c.value?.[field === 'title' ? 'titleTh' : 'descTh'])
+  const total = TRANS_ALL.length
+  const done = TRANS_ALL.filter(want).length
+  // 模块级 reviewed 判断（所有已翻译模块都被人工校对）—— meta 是模块化对象，直接用模块名索引
+  const allReviewed = TRANS_ALL.every((m) => !want(m) || (meta as any)[m]?.status === 'reviewed')
+  return { done, total, allReviewed }
 }
 
 // 亮点 chips 编辑：支持逗号/顿号/分号分隔批量添加；重复项明确提示（不静默吞掉，避免"写了 N 个只有 M 个"）
@@ -387,21 +448,21 @@ function removeHighlight(i: number) {
             <label>描述</label>
             <textarea v-model="form.descZh" class="field area" placeholder="图文产品页正文"></textarea>
 
-            <!-- AI 机器翻译 + 多语言校对（英/泰可编辑，保存即标记人工校对） -->
+            <!-- P2 整体页面 AI 翻译：翻译中文源 → 英泰，5 模块（标题/描述/亮点/行程/HTML）一并处理 -->
             <div class="trans-bar">
               <span class="trans-bar-tip">
-                AI 机器翻译为英文 / 泰文（发布时若缺失也会自动补翻），结果可编辑人工校对
+                ✨ 翻译整个产品页 → 中文一键生成英文 + 泰文（发布时若缺失也会自动补翻），结果可编辑人工校对
               </span>
-              <button class="btn sm" :disabled="translateBusy" @click="onTranslate">
-                {{ translateBusy ? '翻译中…' : '✨ AI 翻译' }}
+              <button class="btn btn-primary sm" :disabled="translateBusy" @click="onTranslate()">
+                {{ translateBusy ? '翻译中…' : '✨ 翻译整个产品页' }}
               </button>
             </div>
             <div class="trans-langs">
               <div class="trans-lang">
                 <div class="trans-lang-h">
-                  <span class="trans-lang-name">🇺🇸 英文</span>
-                  <span v-if="transStatus('en')" class="badge" :class="transStatus('en')!.cls">
-                    {{ transStatus('en')!.label }}
+                  <span class="trans-lang-name">🇺🇸 English</span>
+                  <span v-if="transLangStatus('en').done > 0" class="badge" :class="transLangStatus('en').allReviewed ? 'ok' : 'ai'">
+                    {{ transLangStatus('en').allReviewed && transLangStatus('en').done === transLangStatus('en').total ? '✅ 已校对' : `🤖 AI ${transLangStatus('en').done}/${transLangStatus('en').total}` }}
                   </span>
                 </div>
                 <input v-model="form.titleEn" class="field" placeholder="English title（可选）" />
@@ -409,9 +470,9 @@ function removeHighlight(i: number) {
               </div>
               <div class="trans-lang">
                 <div class="trans-lang-h">
-                  <span class="trans-lang-name">🇹🇭 泰文</span>
-                  <span v-if="transStatus('th')" class="badge" :class="transStatus('th')!.cls">
-                    {{ transStatus('th')!.label }}
+                  <span class="trans-lang-name">🇹🇭 ไทย</span>
+                  <span v-if="transLangStatus('th').done > 0" class="badge" :class="transLangStatus('th').allReviewed ? 'ok' : 'ai'">
+                    {{ transLangStatus('th').allReviewed && transLangStatus('th').done === transLangStatus('th').total ? '✅ 已校对' : `🤖 AI ${transLangStatus('th').done}/${transLangStatus('th').total}` }}
                   </span>
                 </div>
                 <input v-model="form.titleTh" class="field" placeholder="Thai title（可选）" />

@@ -189,11 +189,21 @@ export interface CaseItem {
   descZh?: string
   descEn?: string
   descTh?: string
-  // 归属机构 + 翻译状态（P1）：agencyId=境外旅行社；transMeta={ en:{status,at}, th:{...} }
+  // P2 整体页面多语言字段
+  highlightsEn?: string[]
+  highlightsTh?: string[]
+  daysContentEn?: DayContent[]
+  daysContentTh?: DayContent[]
+  contentHtmlEn?: string | null
+  contentHtmlTh?: string | null
+  // 归属机构 + 翻译状态（P1）：agencyId=境外旅行社；transMeta={title/desc/highlights/daysContent/contentHtml:{status,at}}
   agencyId?: string | null
   transMeta?: {
-    en?: { status?: 'machine' | 'reviewed'; at?: string }
-    th?: { status?: 'machine' | 'reviewed'; at?: string }
+    title?: { status?: 'machine' | 'reviewed'; at?: string }
+    desc?: { status?: 'machine' | 'reviewed'; at?: string }
+    highlights?: { status?: 'machine' | 'reviewed'; at?: string }
+    daysContent?: { status?: 'machine' | 'reviewed'; at?: string }
+    contentHtml?: { status?: 'machine' | 'reviewed'; at?: string }
   } | null
   // 每日图文（脱敏派生，可覆盖）
   daysContent?: DayContent[]

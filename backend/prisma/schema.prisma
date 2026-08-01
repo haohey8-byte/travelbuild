@@ -152,7 +152,14 @@ model Case {
   contentHtml  String?  // 案例主体 HTML（运营上传的单文件微站，服务端 sanitize 后存；含地图/天气/滚动等交互）
   // —— P1 多语言 AI 机器翻译 ——
   agencyId  String?     // 案例归属境外旅行社（权限边界：机构账号只管理/校对自己的案例；PandaKing 全量）
-  transMeta Json?       // 翻译状态：{ en: { status:'machine'|'reviewed', at:ISO }, th: {...} }
+  transMeta Json?       // 翻译状态：{ title/desc/highlights/daysContent/contentHtml: { status:'machine'|'reviewed', at:ISO } }
+  // —— P2 整体页面多语言字段扩展 ——
+  highlightsEn   String[]  // 亮点英文版（数组整体翻译）
+  highlightsTh   String[]  // 亮点泰文版
+  daysContentEn  Json?     // 每日图文英文版
+  daysContentTh  Json?     // 每日图文泰文版
+  contentHtmlEn  String?   // HTML 微站英文版（DOM 级自动翻译）
+  contentHtmlTh  String?   // HTML 微站泰文版
 }
 
 // 知识库条目

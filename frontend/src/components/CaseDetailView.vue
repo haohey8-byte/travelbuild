@@ -28,13 +28,19 @@ const caseDesc = computed(() => {
   if (locale.value === 'th' && props.c.descTh) return props.c.descTh
   return props.c.descZh || ''
 })
-// 翻译署名（英文/泰文显示时告知来源）
+// 翻译署名（英文/泰文显示时告知来源；按模块化 transMeta 聚合）
 const transCredit = computed(() => {
   if (locale.value === 'zh') return ''
-  const m = props.c.transMeta?.[locale.value]
-  if (m?.status === 'reviewed') return 'Translated by AI · Human-reviewed'
-  if (m) return 'Translated by AI'
-  return props.c[locale.value === 'en' ? 'descEn' : 'descTh'] ? '' : 'Chinese original'
+  const meta = props.c.transMeta || {}
+  const reviewedFields = Object.values(meta).filter((m: any) => m?.status === 'reviewed').length
+  const totalFields = Object.keys(meta).length
+  if (reviewedFields > 0 && reviewedFields === totalFields && totalFields > 0) {
+    return 'Translated by AI · Human-reviewed'
+  }
+  if (totalFields > 0) return 'Translated by AI'
+  // 无翻译元数据时根据是否有该语言 desc 判断
+  const hasDesc = locale.value === 'en' ? !!props.c.descEn : !!props.c.descTh
+  return hasDesc ? '' : 'Chinese original'
 })
 
 const contactList = computed(() => {
@@ -56,6 +62,29 @@ const tripParams = computed(() => {
   if (props.c.groupSize) arr.push({ k: '人数', v: `${props.c.groupSize}人` })
   if (props.c.vehicle) arr.push({ k: '用车', v: safeText(props.c.vehicle) })
   return arr
+})
+
+// P2 多语言字段：按 locale 选版本，空回退中文
+const caseHighlights = computed(() => {
+  if (locale.value === 'en' && props.c.highlightsEn?.length) return props.c.highlightsEn
+  if (locale.value === 'th' && props.c.highlightsTh?.length) return props.c.highlightsTh
+  return props.c.highlights || []
+})
+const caseDaysContent = computed(() => {
+  if (locale.value === 'en' && props.c.daysContentEn?.length) return props.c.daysContentEn as any
+  if (locale.value === 'th' && props.c.daysContentTh?.length) return props.c.daysContentTh as any
+  return (props.c.daysContent as any) || []
+})
+const caseContentHtml = computed(() => {
+  if (locale.value === 'en' && props.c.contentHtmlEn) return props.c.contentHtmlEn
+  if (locale.value === 'th' && props.c.contentHtmlTh) return props.c.contentHtmlTh
+  return props.c.contentHtml
+})
+// 多语言「行程亮点」标题
+const daysTitle = computed(() => {
+  if (locale.value === 'en') return 'Daily Itinerary'
+  if (locale.value === 'th') return 'กำหนดการเดินทาง'
+  return '行程亮点（每日）'
 })
 </script>
 
@@ -93,9 +122,9 @@ const tripParams = computed(() => {
     </div>
 
     <!-- 案例元数据摘要（亮点 / 行程参数 / 描述）—— 始终在 HTML 微站主体之前显示，确保运营填的字段可见 -->
-    <div v-if="c.highlights?.length || tripParams.length || c.descZh" class="meta-card">
-      <div v-if="c.highlights?.length" class="hl">
-        <span v-for="h in c.highlights" :key="h" class="chip">{{ h }}</span>
+    <div v-if="caseHighlights.length || tripParams.length || caseDesc" class="meta-card">
+      <div v-if="caseHighlights.length" class="hl">
+        <span v-for="h in caseHighlights" :key="h" class="chip">{{ h }}</span>
       </div>
       <div v-if="tripParams.length" class="params">
         <span v-for="p in tripParams" :key="p.k" class="param"><b>{{ p.k }}</b> {{ p.v }}</span>
@@ -105,12 +134,12 @@ const tripParams = computed(() => {
     </div>
 
     <!-- 案例主体 HTML（沙箱 iframe 渲染） -->
-    <CaseHtmlView v-if="c.contentHtml" :html="c.contentHtml" class="content-html" />
+    <CaseHtmlView v-if="caseContentHtml" :html="caseContentHtml" class="content-html" />
 
     <!-- 每日图文（只读） -->
-    <section v-if="c.daysContent?.length" class="days">
-      <h2>行程亮点（每日）</h2>
-      <div v-for="d in c.daysContent" :key="d.day" class="day-card">
+    <section v-if="caseDaysContent.length" class="days">
+      <h2>{{ daysTitle }}</h2>
+      <div v-for="d in caseDaysContent" :key="d.day" class="day-card">
         <img v-if="d.image" :src="fixImageUrl(d.image)" class="day-img" alt="" />
         <div class="day-head">第 {{ d.day }} 天 · {{ d.city }}</div>
         <div v-if="d.spots?.length" class="day-row"><span class="k">景点</span>

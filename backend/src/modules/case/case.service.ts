@@ -190,67 +190,127 @@ export class CaseService {
     })
   }
 
-  // 发布 + 自动补翻：中文内容 → TMT 生成 en/th 初稿（未翻译字段才翻；翻译失败不阻塞发布）
+  // 发布 + 自动补翻：未翻译的字段（title/desc/highlights/daysContent/contentHtml）→ TMT 生成 en/th 初稿；
+  // 翻译失败不阻塞发布；transMeta 改为模块化状态（按 title/desc/.../contentHtml 维度）
   async publish(id: string, user: { role?: string; agencyId?: string | null }) {
     await this.assertCanManage(id, user)
     const c = await this.getById(id)
     const data: Record<string, unknown> = { status: 'published', publishedAt: new Date() }
-    const srcTitle = (c.title || '').trim()
-    const srcDesc = (c.descZh || '').trim()
-    if (srcTitle || srcDesc) {
-      const transMeta: Record<string, { status: string; at: string }> = (c.transMeta as any) || {}
-      const nowIso = new Date().toISOString()
-      try {
-        if (srcTitle && !c.titleEn) {
-          data.titleEn = await this.translate.translateZh(srcTitle, 'en')
-          transMeta.en = { status: 'machine', at: nowIso }
-        }
-        if (srcDesc && !c.descEn) {
-          data.descEn = await this.translate.translateZh(srcDesc, 'en')
-          transMeta.en = { status: 'machine', at: nowIso }
-        }
-        if (srcTitle && !c.titleTh) {
-          data.titleTh = await this.translate.translateZh(srcTitle, 'th')
-          transMeta.th = { status: 'machine', at: nowIso }
-        }
-        if (srcDesc && !c.descTh) {
-          data.descTh = await this.translate.translateZh(srcDesc, 'th')
-          transMeta.th = { status: 'machine', at: nowIso }
-        }
-        if (Object.keys(transMeta).length) data.transMeta = transMeta
-      } catch (e: any) {
-        // 翻译失败（如 TMT 未配置）不阻塞发布，下次发布/手动翻译再补
-        this.logger.warn(`publish auto-translate skipped: ${e?.message || e}`)
+    const meta: Record<string, any> = (c.transMeta as any) || {}
+    const nowIso = new Date().toISOString()
+    try {
+      // title
+      const srcTitle = (c.title || '').trim()
+      if (srcTitle && !c.titleEn) {
+        data.titleEn = await this.translate.translateZh(srcTitle, 'en')
+        meta.title = { status: 'machine', at: nowIso }
       }
+      if (srcTitle && !c.titleTh) {
+        data.titleTh = await this.translate.translateZh(srcTitle, 'th')
+        meta.title = { status: 'machine', at: nowIso }
+      }
+      // desc
+      const srcDesc = (c.descZh || '').trim()
+      if (srcDesc && !c.descEn) {
+        data.descEn = await this.translate.translateZh(srcDesc, 'en')
+        meta.desc = { status: 'machine', at: nowIso }
+      }
+      if (srcDesc && !c.descTh) {
+        data.descTh = await this.translate.translateZh(srcDesc, 'th')
+        meta.desc = { status: 'machine', at: nowIso }
+      }
+      // highlights（数组）
+      if (Array.isArray(c.highlights) && c.highlights.length) {
+        if (!c.highlightsEn?.length) data.highlightsEn = await this.translate.translateArray(c.highlights, 'en')
+        if (!c.highlightsTh?.length) data.highlightsTh = await this.translate.translateArray(c.highlights, 'th')
+        meta.highlights = { status: 'machine', at: nowIso }
+      }
+      // daysContent（每日图文）
+      if (Array.isArray(c.daysContent) && c.daysContent.length) {
+        if (!c.daysContentEn) data.daysContentEn = await this.translate.translateDaysContent(c.daysContent, 'en')
+        if (!c.daysContentTh) data.daysContentTh = await this.translate.translateDaysContent(c.daysContent, 'th')
+        meta.daysContent = { status: 'machine', at: nowIso }
+      }
+      // contentHtml（DOM 级）
+      if (c.contentHtml) {
+        if (!c.contentHtmlEn) data.contentHtmlEn = await this.translate.translateHtmlContent(c.contentHtml, 'en')
+        if (!c.contentHtmlTh) data.contentHtmlTh = await this.translate.translateHtmlContent(c.contentHtml, 'th')
+        meta.contentHtml = { status: 'machine', at: nowIso }
+      }
+      if (Object.keys(meta).length) data.transMeta = meta
+    } catch (e: any) {
+      // 翻译失败（如 TMT 未配置）不阻塞发布，下次发布/手动翻译再补
+      this.logger.warn(`publish auto-translate skipped: ${e?.message || e}`)
     }
     return this.prisma.case.update({ where: { id }, data })
   }
 
-  // 手动触发 AI 翻译（编辑页按钮/重翻）：翻译中文 title/descZh → en/th，标记 machine
-  async translateCase(id: string, user: { role?: string; agencyId?: string | null }) {
+  // 手动触发 AI 翻译（编辑页按钮）：按 fields 列表翻译，未指定则全部翻译
+  async translateCase(
+    id: string,
+    user: { role?: string; agencyId?: string | null },
+    fields?: string[],
+  ) {
     await this.assertCanManage(id, user)
     const c = await this.getById(id)
-    const srcTitle = (c.title || '').trim()
-    const srcDesc = (c.descZh || '').trim()
-    if (!srcTitle && !srcDesc) {
-      throw new BadRequestException('暂无中文内容可翻译（请先填写标题或中文描述）')
-    }
+    const wantAll = !fields || fields.length === 0
+    const has = (f: string) => wantAll || fields.includes(f)
+    const meta: Record<string, any> = (c.transMeta as any) || {}
     const nowIso = new Date().toISOString()
-    const [titleEn, descEn, titleTh, descTh] = await Promise.all([
-      srcTitle ? this.translate.translateZh(srcTitle, 'en') : c.titleEn,
-      srcDesc ? this.translate.translateZh(srcDesc, 'en') : c.descEn,
-      srcTitle ? this.translate.translateZh(srcTitle, 'th') : c.titleTh,
-      srcDesc ? this.translate.translateZh(srcDesc, 'th') : c.descTh,
-    ])
-    const transMeta = {
-      ...((c.transMeta as any) || {}),
-      en: { status: 'machine' as const, at: nowIso },
-      th: { status: 'machine' as const, at: nowIso },
+    const data: Record<string, unknown> = {}
+
+    // title / desc
+    if (has('title') || has('desc')) {
+      const srcTitle = (c.title || '').trim()
+      const srcDesc = (c.descZh || '').trim()
+      if (!srcTitle && !srcDesc) {
+        throw new BadRequestException('暂无中文内容可翻译（请先填写标题或中文描述）')
+      }
+      const [titleEn, descEn, titleTh, descTh] = await Promise.all([
+        has('title') && srcTitle ? this.translate.translateZh(srcTitle, 'en') : Promise.resolve(c.titleEn),
+        has('desc') && srcDesc ? this.translate.translateZh(srcDesc, 'en') : Promise.resolve(c.descEn),
+        has('title') && srcTitle ? this.translate.translateZh(srcTitle, 'th') : Promise.resolve(c.titleTh),
+        has('desc') && srcDesc ? this.translate.translateZh(srcDesc, 'th') : Promise.resolve(c.descTh),
+      ])
+      if (has('title')) {
+        if (srcTitle) {
+          data.titleEn = titleEn
+          data.titleTh = titleTh
+          meta.title = { status: 'machine', at: nowIso }
+        }
+      }
+      if (has('desc')) {
+        if (srcDesc) {
+          data.descEn = descEn
+          data.descTh = descTh
+          meta.desc = { status: 'machine', at: nowIso }
+        }
+      }
     }
-    return this.prisma.case.update({
-      where: { id },
-      data: { titleEn, descEn, titleTh, descTh, transMeta },
-    })
+
+    // highlights（数组整体翻译）
+    if (has('highlights') && Array.isArray(c.highlights) && c.highlights.length) {
+      data.highlightsEn = await this.translate.translateArray(c.highlights, 'en')
+      data.highlightsTh = await this.translate.translateArray(c.highlights, 'th')
+      meta.highlights = { status: 'machine', at: nowIso }
+    }
+
+    // daysContent（每日图文）
+    if (has('daysContent') && Array.isArray(c.daysContent) && c.daysContent.length) {
+      data.daysContentEn = await this.translate.translateDaysContent(c.daysContent, 'en')
+      data.daysContentTh = await this.translate.translateDaysContent(c.daysContent, 'th')
+      meta.daysContent = { status: 'machine', at: nowIso }
+    }
+
+    // contentHtml（DOM 级）
+    if (has('contentHtml') && c.contentHtml) {
+      data.contentHtmlEn = await this.translate.translateHtmlContent(c.contentHtml, 'en')
+      data.contentHtmlTh = await this.translate.translateHtmlContent(c.contentHtml, 'th')
+      meta.contentHtml = { status: 'machine', at: nowIso }
+    }
+
+    data.transMeta = meta
+    return this.prisma.case.update({ where: { id }, data })
   }
 
   async unpublish(id: string, user: { role?: string; agencyId?: string | null }) {

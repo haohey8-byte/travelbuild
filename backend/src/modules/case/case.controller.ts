@@ -82,11 +82,15 @@ export class CaseController {
     return this.svc.publish(id, user)
   }
 
-  // 管理：AI 翻译（手动触发/重翻：中文 → en/th）
+  // 管理：AI 翻译（手动触发/重翻：body.fields 指定翻译哪些模块；空=全部）
   @Post(':id/translate')
   @UseGuards(JwtAuthGuard)
-  translate(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.svc.translateCase(id, user)
+  translate(
+    @Param('id') id: string,
+    @Body() body: { fields?: string[] } | undefined,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.svc.translateCase(id, user, body?.fields)
   }
 
   // 管理：下线
