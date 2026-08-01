@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common'
+import { Throttle } from '@nestjs/throttler'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
 import { CaseService } from './case.service'
@@ -9,6 +10,7 @@ interface AuthUser {
 
 // 案例展示（脱敏） —— 对应 doc/04-接口契约/案例.md 与 PRD 4.8.6
 // 公开只读已发布案例；管理（建/改/发布/下线/删）需登录
+// 限流：公开写操作（创建/导入）30 次/分/IP
 @Controller('cases')
 export class CaseController {
   constructor(private readonly svc: CaseService) {}
@@ -43,6 +45,7 @@ export class CaseController {
   // 管理：新建案例
   @Post()
   @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   create(@Body() body: any, @CurrentUser() user: AuthUser) {
     return this.svc.create({ ...body, createdById: user.id })
   }
@@ -57,6 +60,7 @@ export class CaseController {
   // 管理：导入 HTML 微站直接创建草稿（sanitize + 抽 h1 标题；其余字段编辑页补全）
   @Post('import-html')
   @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   importHtml(@Body() body: any, @CurrentUser() user: AuthUser) {
     const html = body?.html
     if (typeof html !== 'string' || !html.trim()) {

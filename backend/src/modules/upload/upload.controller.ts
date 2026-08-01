@@ -1,5 +1,6 @@
 import { Body, Controller, Logger, Post, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
+import { Throttle } from '@nestjs/throttler'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { UploadService } from './upload.service'
 
@@ -12,8 +13,10 @@ interface HtmlBody {
 }
 
 // 上传模块：HTML sanitize + 图片上传。均需登录（JWT）。
+// 限流：上传 10 次/分/IP（防刷 COS 存储与 sanitize 资源）
 @Controller('upload')
 @UseGuards(JwtAuthGuard)
+@Throttle({ default: { limit: 10, ttl: 60000 } })
 export class UploadController {
   private readonly logger = new Logger(UploadController.name)
   constructor(private readonly svc: UploadService) {}

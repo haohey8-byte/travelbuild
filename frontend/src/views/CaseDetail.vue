@@ -5,6 +5,7 @@ import { storeToRefs } from 'pinia'
 import { fetchCase, fetchCaseManage, updateCase, publishCase, unpublishCase, deleteCase } from '@/api/cases'
 import { useAuthStore } from '@/stores/auth'
 import { copyText, buildShareText } from '@/utils/share'
+import { fixImageUrl } from '@/utils/image'
 import ImageUploader from '@/components/ImageUploader.vue'
 import HtmlUploader from '@/components/HtmlUploader.vue'
 import CaseDetailView from '@/components/CaseDetailView.vue'
@@ -142,6 +143,25 @@ function onSelectShare(e: Event) {
   ta.focus()
   ta.select()
   try { ta.setSelectionRange(0, ta.value.length) } catch { /* */ }
+}
+
+// —— 离站咨询 CTA（境外旅行社联合品牌获客：展示机构联系方式 + 一键复制 + 引导加 Line）——
+const ctaOpen = ref(false)
+const ctaContacts = computed(() => {
+  const ct = c.value?.agencyBranding?.contacts as Record<string, string> | null | undefined
+  if (!ct) return []
+  const items: { k: string; label: string; v: string; link?: string }[] = []
+  if (ct.line) items.push({ k: 'line', label: 'Line', v: ct.line })
+  if (ct.facebook) items.push({ k: 'facebook', label: 'Facebook', v: ct.facebook })
+  if (ct.wechat) items.push({ k: 'wechat', label: '微信', v: ct.wechat })
+  if (ct.phone) items.push({ k: 'phone', label: '电话', v: ct.phone, link: `tel:${ct.phone}` })
+  if (ct.email) items.push({ k: 'email', label: '邮箱', v: ct.email, link: `mailto:${ct.email}` })
+  return items
+})
+const ctaLine = computed(() => c.value?.agencyBranding?.contacts?.line)
+async function copyCta(v: string, label: string) {
+  const ok = await copyText(v)
+  flash(ok ? `${label} 已复制，去粘贴添加好友即可` : '复制失败，请长按手动复制')
 }
 
 function flash(m: string) {
@@ -342,6 +362,58 @@ function removeHighlight(i: number) {
     </template>
   </div>
 
+  <!-- 离站咨询 CTA：浮动按钮（仅联合品牌案例，境外旅行社分享获客） -->
+  <button
+    v-if="!editing && c?.agencyBranding && ctaContacts.length"
+    class="cta-fab"
+    @click="ctaOpen = true"
+  >
+    💬 咨询此行程
+  </button>
+
+  <!-- 咨询弹窗：机构联系方式 + 一键复制 + 引导加 Line -->
+  <div v-if="ctaOpen" class="modal-mask" @click.self="ctaOpen = false">
+    <div class="modal">
+      <div class="modal-head">
+        <div class="modal-title">咨询此行程</div>
+        <div class="modal-close" @click="ctaOpen = false">✕</div>
+      </div>
+      <div class="modal-body">
+        <div class="cta-brand">
+          <img
+            v-if="c?.agencyBranding?.logoUrl"
+            :src="fixImageUrl(c.agencyBranding.logoUrl)"
+            class="cta-logo"
+            alt="logo"
+          />
+          <span v-else class="cta-logo fb">{{ (c?.agencyBranding?.name || '?').slice(0, 1) }}</span>
+          <div>
+            <div class="cta-name">{{ c?.agencyBranding?.name }}</div>
+            <div class="cta-co">与 <b>PandaKing9</b> 联合提供</div>
+          </div>
+        </div>
+        <p class="cta-tip">咨询此行程的行程安排与报价，请通过以下方式联系：</p>
+        <div v-if="ctaLine" class="cta-line-main" @click="copyCta(ctaLine, 'Line')">
+          <span class="cta-line-ico">L</span>
+          <div class="cta-line-meta">
+            <div class="cta-line-label">添加 Line 咨询</div>
+            <div class="cta-line-id">Line ID：{{ ctaLine }}</div>
+          </div>
+          <button class="btn btn-primary btn-sm">一键复制</button>
+        </div>
+        <div class="cta-list">
+          <div v-for="it in ctaContacts" :key="it.k" class="cta-item">
+            <span class="cta-k">{{ it.label }}</span>
+            <a v-if="it.link" :href="it.link" class="cta-v" target="_blank" rel="noopener">{{ it.v }}</a>
+            <span v-else class="cta-v">{{ it.v }}</span>
+            <button class="btn btn-sm btn-ghost" @click="copyCta(it.v, it.label)">复制</button>
+          </div>
+        </div>
+        <p class="cta-foot">本案例由 {{ c?.agencyBranding?.name }} 与 PandaKing9 联合提供 · 定制旅行</p>
+      </div>
+    </div>
+  </div>
+
   <!-- 复制分享文案弹窗（自动复制失败时的可靠兜底：全选 + 长按手动复制 + 重试） -->
   <div v-if="shareModal" class="modal-mask" @click.self="shareModal = false">
     <div class="modal">
@@ -433,6 +505,44 @@ function removeHighlight(i: number) {
   white-space: pre-wrap;
 }
 .modal-foot { padding: 13px 20px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 8px; background: var(--surface-2); }
+
+/* 离站咨询 CTA */
+.cta-fab {
+  position: fixed; right: 22px; bottom: 26px; z-index: 40;
+  padding: 12px 20px; border: none; border-radius: var(--r-pill, 999px);
+  background: var(--brand); color: #fff; font-size: 14.5px; font-weight: 600;
+  font-family: inherit; cursor: pointer;
+  box-shadow: 0 8px 24px rgba(24, 95, 165, .35);
+  transition: transform .15s, box-shadow .15s;
+}
+.cta-fab:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(24, 95, 165, .4); }
+.cta-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.cta-logo { width: 46px; height: 46px; border-radius: 10px; object-fit: cover; background: var(--brand-50); }
+.cta-logo.fb { display: flex; align-items: center; justify-content: center; background: var(--brand); color: #fff; font-size: 20px; font-weight: 700; }
+.cta-name { font-weight: 700; font-size: 15px; }
+.cta-co { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.cta-co b { color: var(--brand); }
+.cta-tip { font-size: 13px; color: var(--ink-2); margin-bottom: 12px; }
+.cta-line-main {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+  background: var(--brand-50); border: 1px solid var(--brand-100); border-radius: var(--r-md);
+  margin-bottom: 12px; cursor: pointer;
+}
+.cta-line-ico {
+  width: 38px; height: 38px; border-radius: 9px; background: var(--brand); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 700; flex-shrink: 0;
+}
+.cta-line-meta { flex: 1; }
+.cta-line-label { font-size: 13.5px; font-weight: 600; color: var(--brand-600); }
+.cta-line-id { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
+.cta-list { display: flex; flex-direction: column; gap: 8px; }
+.cta-item {
+  display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+  border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface-2);
+}
+.cta-k { font-size: 12px; color: var(--muted); min-width: 62px; font-weight: 600; }
+.cta-v { flex: 1; font-size: 13.5px; color: var(--ink); text-decoration: none; word-break: break-all; }
+.cta-foot { font-size: 11.5px; color: var(--muted); margin-top: 14px; text-align: center; }
 
 /* 移动端：Tab 切换，单栏 */
 @media (max-width: 768px) {
