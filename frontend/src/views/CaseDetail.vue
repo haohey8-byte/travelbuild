@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
+import { useI18n } from 'vue-i18n'
 import { fetchCase, fetchCaseManage, updateCase, publishCase, unpublishCase, deleteCase, translateCase } from '@/api/cases'
 import { useAuthStore } from '@/stores/auth'
 import { copyText, buildShareText } from '@/utils/share'
@@ -15,6 +16,7 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const { user } = storeToRefs(auth)
+const { t, locale } = useI18n()
 
 const id = computed(() => route.params.id as string)
 const via = computed(() => (route.query.via as string) || undefined)
@@ -24,11 +26,14 @@ const loading = ref(true)
 const err = ref('')
 const notFound = ref(false)
 
-// 编辑态
-const editing = ref(false)
+// 页面模式：view 查看 / edit PandaKing 完整编辑 / review agency 仅校对翻译
+type Mode = 'view' | 'edit' | 'review'
+const mode = ref<Mode>('view')
 const saving = ref(false)
 const tab = ref<'edit' | 'preview'>('edit')
 const newHighlight = ref('')
+const newHighlightEn = ref('')
+const newHighlightTh = ref('')
 const form = ref<{
   title: string
   titleEn: string
@@ -58,13 +63,27 @@ const form = ref<{
 })
 const msg = ref('')
 
+// 权限计算
+const isPandaking = computed(() => user.value?.role === 'pandaking')
+const isAgency = computed(() => user.value?.role === 'agency')
+const canManage = computed(() => {
+  if (isPandaking.value) return true
+  if (isAgency.value && user.value?.agencyId && c.value?.agencyId === user.value.agencyId) return true
+  return false
+})
+const canEdit = computed(() => isPandaking.value)
+const canReview = computed(() => isAgency.value && canManage.value)
+const isEditing = computed(() => mode.value === 'edit')
+const isReviewing = computed(() => mode.value === 'review')
+const isWorking = computed(() => isEditing.value || isReviewing.value)
+
 // 草稿 localStorage（防意外中断丢失）
-const draftKey = computed(() => `case-draft-${id.value}`)
+const draftKey = computed(() => `case-draft-${id.value}-${mode.value}`)
 let draftTimer: ReturnType<typeof setTimeout> | null = null
 watch(
   form,
   () => {
-    if (!editing.value) return
+    if (!isWorking.value) return
     if (draftTimer) clearTimeout(draftTimer)
     draftTimer = setTimeout(() => {
       try {
@@ -115,7 +134,7 @@ async function load() {
       : await fetchCase(id.value, via.value)
   } catch (e: any) {
     if (e?.response?.status === 404) notFound.value = true
-    else err.value = e?.response?.data?.message || '加载失败'
+    else err.value = e?.response?.data?.message || t('common.error')
     c.value = null
   } finally {
     loading.value = false
@@ -126,8 +145,6 @@ onMounted(load)
 watch([id, via], load)
 
 // 复制「路线链接分享」文案（含出行时间/人数/用车 + 每日行程概览 + 详情链接）
-// 产品反馈闭环：成功 → 按钮变「✓ 已复制」+ 顶部提示；失败（微信 webview 常禁用 Clipboard）→
-// 弹出文案弹窗自动全选，引导长按手动复制 + 重试按钮，用户永远知道结果。
 const copying = ref(false)
 const copied = ref(false)
 const shareModal = ref(false)
@@ -142,7 +159,7 @@ async function onCopyShare() {
     const ok = await copyText(text)
     if (ok) {
       copied.value = true
-      flash('分享文案已复制，直接粘贴到微信发送即可')
+      flash(t('caseDetail.shareCopied'))
       setTimeout(() => (copied.value = false), 1800)
     } else {
       shareText.value = text
@@ -157,14 +174,13 @@ async function onRetryCopy() {
   const ok = await copyText(shareText.value)
   if (ok) {
     shareModal.value = false
-    flash('已复制！直接粘贴到微信发送即可')
+    flash(t('caseDetail.shareModal.retrySuccess'))
   } else {
-    flash('复制仍失败，请长按上方文字手动复制')
+    flash(t('caseDetail.shareModal.retryFail'))
   }
 }
 
 function onSelectShare(e: Event) {
-  // 点入文本区自动全选，方便长按复制
   const ta = e.target as HTMLTextAreaElement
   ta.focus()
   ta.select()
@@ -179,15 +195,15 @@ const ctaContacts = computed(() => {
   const items: { k: string; label: string; v: string; link?: string }[] = []
   if (ct.line) items.push({ k: 'line', label: 'Line', v: ct.line })
   if (ct.facebook) items.push({ k: 'facebook', label: 'Facebook', v: ct.facebook })
-  if (ct.wechat) items.push({ k: 'wechat', label: '微信', v: ct.wechat })
-  if (ct.phone) items.push({ k: 'phone', label: '电话', v: ct.phone, link: `tel:${ct.phone}` })
-  if (ct.email) items.push({ k: 'email', label: '邮箱', v: ct.email, link: `mailto:${ct.email}` })
+  if (ct.wechat) items.push({ k: 'wechat', label: t('caseDetail.cta.wechat'), v: ct.wechat })
+  if (ct.phone) items.push({ k: 'phone', label: t('caseDetail.cta.phone'), v: ct.phone, link: `tel:${ct.phone}` })
+  if (ct.email) items.push({ k: 'email', label: t('caseDetail.cta.email'), v: ct.email, link: `mailto:${ct.email}` })
   return items
 })
 const ctaLine = computed(() => c.value?.agencyBranding?.contacts?.line)
 async function copyCta(v: string, label: string) {
   const ok = await copyText(v)
-  flash(ok ? `${label} 已复制，去粘贴添加好友即可` : '复制失败，请长按手动复制')
+  flash(ok ? t('caseDetail.cta.copySuccess', { label }) : t('caseDetail.cta.copyFail'))
 }
 
 function flash(m: string) {
@@ -195,10 +211,8 @@ function flash(m: string) {
   setTimeout(() => { if (msg.value === m) msg.value = '' }, 2600)
 }
 
-function startEdit() {
-  const x = c.value
-  if (!x) return
-  form.value = {
+function initForm(x: CaseItem) {
+  return {
     title: x.title || '',
     titleEn: x.titleEn || '',
     titleTh: x.titleTh || '',
@@ -219,61 +233,119 @@ function startEdit() {
     groupSize: x.groupSize ?? null,
     vehicle: x.vehicle || null,
   }
-  // 恢复未保存草稿（若有）
+}
+
+function restoreDraft() {
   try {
     const saved = localStorage.getItem(draftKey.value)
     if (saved) {
       const draft = JSON.parse(saved) as typeof form.value
       form.value = { ...form.value, ...draft }
-      flash('已恢复上次未保存的草稿')
+      flash(t('caseDetail.draftRestored'))
     }
   } catch {
     /* 忽略 */
   }
+}
+
+function startEdit() {
+  const x = c.value
+  if (!x || !canEdit.value) return
+  form.value = initForm(x)
+  restoreDraft()
   tab.value = 'edit'
-  editing.value = true
+  mode.value = 'edit'
   msg.value = ''
 }
-function cancelEdit() {
-  editing.value = false
+
+function startReview() {
+  const x = c.value
+  if (!x || !canReview.value) return
+  form.value = initForm(x)
+  // agency 校对时若多语言行程为空，从中文源派生空壳结构，确保有输入位置
+  if (!form.value.daysContentEn?.length && form.value.daysContent.length) {
+    form.value.daysContentEn = form.value.daysContent.map((d) => ({
+      day: d.day,
+      city: d.city,
+      spots: [...d.spots],
+      hotel: d.hotel,
+      meals: [...d.meals],
+      notes: '',
+      image: null,
+    }))
+  }
+  if (!form.value.daysContentTh?.length && form.value.daysContent.length) {
+    form.value.daysContentTh = form.value.daysContent.map((d) => ({
+      day: d.day,
+      city: d.city,
+      spots: [...d.spots],
+      hotel: d.hotel,
+      meals: [...d.meals],
+      notes: '',
+      image: null,
+    }))
+  }
+  restoreDraft()
+  tab.value = 'edit'
+  mode.value = 'review'
+  msg.value = ''
 }
+
+function cancelWork() {
+  mode.value = 'view'
+}
+
 async function onSave() {
   saving.value = true
   msg.value = ''
   try {
-    const payload = {
-      title: form.value.title.trim(),
-      titleEn: form.value.titleEn?.trim() || undefined,
-      titleTh: form.value.titleTh?.trim() || undefined,
-      cover: form.value.cover?.trim() || undefined,
-      highlights: form.value.highlights,
-      highlightsEn: form.value.highlightsEn,
-      highlightsTh: form.value.highlightsTh,
-      descZh: form.value.descZh,
-      descEn: form.value.descEn || undefined,
-      descTh: form.value.descTh || undefined,
-      contentHtml: form.value.contentHtml || undefined,
-      contentHtmlEn: form.value.contentHtmlEn || undefined,
-      contentHtmlTh: form.value.contentHtmlTh || undefined,
-      daysContent: form.value.daysContent,
-      daysContentEn: form.value.daysContentEn,
-      daysContentTh: form.value.daysContentTh,
-      travelDate: form.value.travelDate || null,
-      groupSize: form.value.groupSize ? Number(form.value.groupSize) : null,
-      vehicle: form.value.vehicle?.trim() || null,
+    let payload: Record<string, unknown>
+    if (isReviewing.value) {
+      // agency 仅提交多语言校对字段
+      payload = {
+        titleEn: form.value.titleEn?.trim() || undefined,
+        titleTh: form.value.titleTh?.trim() || undefined,
+        descEn: form.value.descEn || undefined,
+        descTh: form.value.descTh || undefined,
+        highlightsEn: form.value.highlightsEn,
+        highlightsTh: form.value.highlightsTh,
+        daysContentEn: form.value.daysContentEn,
+        daysContentTh: form.value.daysContentTh,
+        contentHtmlEn: form.value.contentHtmlEn || undefined,
+        contentHtmlTh: form.value.contentHtmlTh || undefined,
+      }
+    } else {
+      payload = {
+        title: form.value.title.trim(),
+        titleEn: form.value.titleEn?.trim() || undefined,
+        titleTh: form.value.titleTh?.trim() || undefined,
+        cover: form.value.cover?.trim() || undefined,
+        highlights: form.value.highlights,
+        highlightsEn: form.value.highlightsEn,
+        highlightsTh: form.value.highlightsTh,
+        descZh: form.value.descZh,
+        descEn: form.value.descEn || undefined,
+        descTh: form.value.descTh || undefined,
+        contentHtml: form.value.contentHtml || undefined,
+        contentHtmlEn: form.value.contentHtmlEn || undefined,
+        contentHtmlTh: form.value.contentHtmlTh || undefined,
+        daysContent: form.value.daysContent,
+        daysContentEn: form.value.daysContentEn,
+        daysContentTh: form.value.daysContentTh,
+        travelDate: form.value.travelDate || null,
+        groupSize: form.value.groupSize ? Number(form.value.groupSize) : null,
+        vehicle: form.value.vehicle?.trim() || null,
+      }
     }
     const updated = await updateCase(id.value, payload)
-    // 用后端权威返回刷新 c.value（避免本地 form 状态与 DB 不一致）
     c.value = updated
-    editing.value = false
-    // 保存成功清草稿
+    mode.value = 'view'
     try { localStorage.removeItem(draftKey.value) } catch { /* */ }
-    flash('已保存')
+    flash(t('caseDetail.saved'))
   } catch (e: any) {
-    // 显示详细错误（含后端 message），便于诊断字段丢失
-    const msg = e?.response?.data?.message || e?.response?.data?.error || e?.message || '保存失败'
+    const m = e?.response?.data?.message || e?.response?.data?.error || e?.message || t('common.error')
     const code = e?.response?.status ? ` (HTTP ${e.response.status})` : ''
-    flash(`保存失败${code}：${msg}`)
+    flash(t('caseDetail.saveFailed', { code, msg: m }))
   } finally {
     saving.value = false
   }
@@ -287,13 +359,12 @@ async function onUnpublish() {
   await load()
 }
 async function onDelete() {
-  if (!confirm('确认删除该案例？')) return
+  if (!confirm(t('caseDetail.deleteConfirm', { title: c.value?.title || t('caseDetail.untitled') }))) return
   await deleteCase(id.value)
   router.push('/cases')
 }
 
 // —— AI 机器翻译（中文 → en/th，TMT；按 fields 翻译指定模块；不传=整体翻译 5 模块）
-// 整体页面翻译模块：title / desc / highlights / daysContent / contentHtml
 const translateBusy = ref(false)
 const TRANS_ALL = ['title', 'desc', 'highlights', 'daysContent', 'contentHtml']
 async function onTranslate(fields?: string[]) {
@@ -333,6 +404,7 @@ async function onTranslate(fields?: string[]) {
     translateBusy.value = false
   }
 }
+
 // 模块状态聚合：返回该语言已翻译模块数 / 总模块数 + 是否全部 reviewed
 function transLangStatus(lang: 'en' | 'th') {
   const meta = c.value?.transMeta || {}
@@ -354,12 +426,11 @@ function transLangStatus(lang: 'en' | 'th') {
               : !!c.value?.[field === 'title' ? 'titleTh' : 'descTh'])
   const total = TRANS_ALL.length
   const done = TRANS_ALL.filter(want).length
-  // 模块级 reviewed 判断（所有已翻译模块都被人工校对）—— meta 是模块化对象，直接用模块名索引
   const allReviewed = TRANS_ALL.every((m) => !want(m) || (meta as any)[m]?.status === 'reviewed')
   return { done, total, allReviewed }
 }
 
-// 亮点 chips 编辑：支持逗号/顿号/分号分隔批量添加；重复项明确提示（不静默吞掉，避免"写了 N 个只有 M 个"）
+// 亮点 chips 编辑：支持逗号/顿号/分号分隔批量添加；重复项明确提示
 function addHighlight() {
   const raw = newHighlight.value.trim()
   if (!raw) return
@@ -376,129 +447,216 @@ function addHighlight() {
     form.value.highlights.push(it)
   }
   newHighlight.value = ''
-  if (dups.length) flash(`已存在，未重复添加：${dups.join('、')}`)
+  if (dups.length) flash(t('caseDetail.highlightDup', { list: dups.join('、') }))
 }
 function removeHighlight(i: number) {
   form.value.highlights.splice(i, 1)
+}
+function addHighlightLang(lang: 'en' | 'th') {
+  const inputRef = lang === 'en' ? newHighlightEn : newHighlightTh
+  const raw = inputRef.value.trim()
+  if (!raw) return
+  const field = lang === 'en' ? 'highlightsEn' : 'highlightsTh'
+  const items = raw.split(/[,，、;；]+/).map((s) => s.trim()).filter(Boolean)
+  const dups: string[] = []
+  for (const it of items) {
+    if ((form.value as any)[field].includes(it)) {
+      dups.push(it)
+      continue
+    }
+    ;(form.value as any)[field].push(it)
+  }
+  inputRef.value = ''
+  if (dups.length) flash(t('caseDetail.highlightDup', { list: dups.join('、') }))
+}
+function removeHighlightLang(lang: 'en' | 'th', i: number) {
+  const field = lang === 'en' ? 'highlightsEn' : 'highlightsTh'
+  ;(form.value as any)[field].splice(i, 1)
 }
 </script>
 
 <template>
   <div class="detail-page">
     <div class="topbar">
-      <router-link v-if="user" to="/cases" class="back">← 返回案例</router-link>
-      <div class="share" v-if="!editing">
-        <button class="btn sm" :class="{ copied }" :disabled="copying" @click="onCopyShare">
-          {{ copied ? '✓ 已复制' : '复制路线链接分享' }}
-        </button>
-      </div>
-      <div v-else class="edit-head">
-        <span class="edit-title">编辑内容</span>
-        <button class="btn sm" :disabled="saving" @click="onSave">保存</button>
-        <button class="btn ghost sm" @click="cancelEdit">取消</button>
+      <router-link v-if="user" to="/cases" class="back">{{ t('caseDetail.backToCases') }}</router-link>
+      <div class="top-actions">
+        <!-- 非工作态：复制分享 + 管理/校对入口 -->
+        <template v-if="!isWorking">
+          <button class="btn sm" :class="{ copied }" :disabled="copying" @click="onCopyShare">
+            {{ copied ? t('caseDetail.copied') : t('caseDetail.copyShare') }}
+          </button>
+          <button v-if="canEdit" class="btn ghost sm" @click="startEdit">{{ t('caseDetail.editContent') }}</button>
+          <button v-if="canReview" class="btn ghost sm" @click="startReview">{{ t('caseDetail.reviewTranslation') }}</button>
+          <template v-if="canEdit">
+            <button v-if="c?.status !== 'published'" class="btn sm" @click="onPublish">{{ t('caseDetail.publish') }}</button>
+            <button v-else class="btn ghost sm" @click="onUnpublish">{{ t('caseDetail.unpublish') }}</button>
+            <button class="btn ghost sm danger" @click="onDelete">{{ t('common.delete') }}</button>
+          </template>
+        </template>
+
+        <!-- 编辑/校对态：保存 + 取消（PandaKing 编辑态额外显示 AI翻译） -->
+        <template v-else>
+          <button v-if="isEditing" class="btn ghost sm ai-btn" :disabled="translateBusy" :title="'基于中文内容一键生成英文+泰文初稿；发布时若缺失也会自动补翻。生成后请在下方双语区人工校对。'" @click="onTranslate()">
+            {{ translateBusy ? '翻译中…' : '✨ AI翻译' }}
+          </button>
+          <button class="btn sm" :disabled="saving" @click="onSave">{{ saving ? t('common.loading') : t('common.save') }}</button>
+          <button class="btn ghost sm" @click="cancelWork">{{ t('common.cancel') }}</button>
+        </template>
       </div>
     </div>
 
-    <p v-if="loading">加载中…</p>
-    <p v-else-if="notFound" class="err">案例不存在或未发布</p>
+    <p v-if="loading">{{ t('common.loading') }}</p>
+    <p v-else-if="notFound" class="err">{{ t('caseDetail.notFound') }}</p>
     <p v-else-if="err" class="err">{{ err }}</p>
 
     <template v-else-if="c">
-      <!-- 非编辑态：公开视图（CaseDetailView）+ 管理按钮 -->
-      <CaseDetailView v-if="!editing" :c="c" />
-      <p v-if="!editing" class="wechat-tip">复制路线链接分享后，粘贴到微信发送给客户即可。</p>
+      <!-- 非工作态：公开视图（CaseDetailView）+ 管理按钮 -->
+      <CaseDetailView v-if="!isWorking" :c="c" />
+      <p v-if="!isWorking" class="wechat-tip">{{ t('caseDetail.shareCopied') }}</p>
 
-      <div v-if="!editing && user && user.role === 'pandaking'" class="admin-bar">
-        <button class="btn ghost sm" @click="startEdit">编辑内容</button>
-        <button v-if="c.status !== 'published'" class="btn sm" @click="onPublish">发布</button>
-        <button v-else class="btn ghost sm" @click="onUnpublish">下线</button>
-        <button class="btn ghost sm danger" @click="onDelete">删除</button>
-      </div>
-
-      <!-- 编辑态：双栏（桌面左编辑右预览 / 移动 Tab） -->
-      <div v-if="editing" class="edit-layout" :class="tab">
+      <!-- 工作态：双栏（桌面左编辑右预览 / 移动 Tab） -->
+      <div v-if="isWorking" class="edit-layout" :class="tab">
         <div class="edit-tabs">
-          <button :class="{ active: tab === 'edit' }" @click="tab = 'edit'">编辑</button>
-          <button :class="{ active: tab === 'preview' }" @click="tab = 'preview'">预览</button>
+          <button :class="{ active: tab === 'edit' }" @click="tab = 'edit'">{{ t('caseDetail.editContent') }}</button>
+          <button :class="{ active: tab === 'preview' }" @click="tab = 'preview'">{{ t('caseDetail.preview') || '预览' }}</button>
         </div>
         <div class="edit-body">
           <div class="edit-pane">
-            <label>标题</label>
-            <input v-model="form.title" class="field" placeholder="案例标题" />
-            <label>封面图</label>
-            <ImageUploader v-model="form.cover" hint="点击或拖拽上传封面（jpg/png/webp，自动压缩）" />
-            <label>亮点</label>
-            <div class="chips-edit">
-              <span v-for="(h, i) in form.highlights" :key="i" class="chip-edit">
-                {{ h }} <button type="button" class="chip-x" @click="removeHighlight(i)">×</button>
-              </span>
-              <input
-                v-model="newHighlight"
-                class="field chip-input"
-                placeholder="输入后回车添加"
-                @keydown.enter.prevent="addHighlight"
-              />
-            </div>
-            <label>出行时间</label>
-            <input v-model="form.travelDate" class="field" type="date" />
-            <label>人数</label>
-            <input v-model.number="form.groupSize" class="field" type="number" min="1" placeholder="出行人数" />
-            <label>用车</label>
-            <input v-model="form.vehicle" class="field" placeholder="如 15座中巴" />
-            <label>描述</label>
-            <textarea v-model="form.descZh" class="field area" placeholder="图文产品页正文"></textarea>
+            <!-- PandaKing 完整编辑字段 -->
+            <template v-if="isEditing">
+              <label>{{ t('caseDetail.label.title') }}</label>
+              <input v-model="form.title" class="field" :placeholder="t('caseDetail.label.title')" />
+              <label>{{ t('caseDetail.label.cover') }}</label>
+              <ImageUploader v-model="form.cover" :hint="t('caseDetail.hint.coverUpload')" />
+              <label>{{ t('caseDetail.label.highlights') }}</label>
+              <div class="chips-edit">
+                <span v-for="(h, i) in form.highlights" :key="i" class="chip-edit">
+                  {{ h }} <button type="button" class="chip-x" @click="removeHighlight(i)">×</button>
+                </span>
+                <input
+                  v-model="newHighlight"
+                  class="field chip-input"
+                  :placeholder="t('caseDetail.hint.highlightInput')"
+                  @keydown.enter.prevent="addHighlight"
+                />
+              </div>
+              <label>{{ t('caseDetail.label.travelDate') }}</label>
+              <input v-model="form.travelDate" class="field" type="date" />
+              <label>{{ t('caseDetail.label.groupSize') }}</label>
+              <input v-model.number="form.groupSize" class="field" type="number" min="1" :placeholder="t('caseDetail.label.groupSize')" />
+              <label>{{ t('caseDetail.label.vehicle') }}</label>
+              <input v-model="form.vehicle" class="field" :placeholder="t('caseDetail.label.vehicle')" />
+              <label>{{ t('caseDetail.label.description') }}</label>
+              <textarea v-model="form.descZh" class="field area" :placeholder="t('caseDetail.hint.description')"></textarea>
+            </template>
 
-            <!-- P2 整体页面 AI 翻译：翻译中文源 → 英泰，5 模块（标题/描述/亮点/行程/HTML）一并处理 -->
+            <!-- agency 校对态：中文源只读摘要 -->
+            <template v-if="isReviewing">
+              <div class="source-summary">
+                <div class="source-title">{{ t('caseDetail.label.title') }}：{{ form.title || t('caseDetail.untitled') }}</div>
+                <div v-if="form.descZh" class="source-desc">{{ form.descZh }}</div>
+              </div>
+            </template>
+
+            <!-- 双语校对区（edit / review 均显示） -->
             <div class="trans-bar">
-              <span class="trans-bar-tip">
-                ✨ 翻译整个产品页 → 中文一键生成英文 + 泰文（发布时若缺失也会自动补翻），结果可编辑人工校对
-              </span>
-              <button class="btn btn-primary sm" :disabled="translateBusy" @click="onTranslate()">
-                {{ translateBusy ? '翻译中…' : '✨ 翻译整个产品页' }}
-              </button>
+              <span class="trans-bar-tip">双语校对（人工修正 AI 翻译）</span>
             </div>
             <div class="trans-langs">
               <div class="trans-lang">
                 <div class="trans-lang-h">
-                  <span class="trans-lang-name">🇺🇸 English</span>
+                  <span class="trans-lang-name">English</span>
                   <span v-if="transLangStatus('en').done > 0" class="badge" :class="transLangStatus('en').allReviewed ? 'ok' : 'ai'">
                     {{ transLangStatus('en').allReviewed && transLangStatus('en').done === transLangStatus('en').total ? '✅ 已校对' : `🤖 AI ${transLangStatus('en').done}/${transLangStatus('en').total}` }}
                   </span>
                 </div>
-                <input v-model="form.titleEn" class="field" placeholder="English title（可选）" />
-                <textarea v-model="form.descEn" class="field area" placeholder="English description（可选）"></textarea>
+                <input v-model="form.titleEn" class="field" :placeholder="t('caseDetail.placeholder.titleEn')" />
+                <textarea v-model="form.descEn" class="field area" :placeholder="t('caseDetail.placeholder.descEn')"></textarea>
+                <label class="sub-label">亮点</label>
+                <div class="chips-edit">
+                  <span v-for="(h, i) in form.highlightsEn" :key="i" class="chip-edit">
+                    {{ h }} <button type="button" class="chip-x" @click="removeHighlightLang('en', i)">×</button>
+                  </span>
+                  <input
+                    v-model="newHighlightEn"
+                    class="field chip-input"
+                    placeholder="English highlights, Enter"
+                    @keydown.enter.prevent="addHighlightLang('en')"
+                  />
+                </div>
               </div>
               <div class="trans-lang">
                 <div class="trans-lang-h">
-                  <span class="trans-lang-name">🇹🇭 ไทย</span>
+                  <span class="trans-lang-name">ไทย</span>
                   <span v-if="transLangStatus('th').done > 0" class="badge" :class="transLangStatus('th').allReviewed ? 'ok' : 'ai'">
                     {{ transLangStatus('th').allReviewed && transLangStatus('th').done === transLangStatus('th').total ? '✅ 已校对' : `🤖 AI ${transLangStatus('th').done}/${transLangStatus('th').total}` }}
                   </span>
                 </div>
-                <input v-model="form.titleTh" class="field" placeholder="Thai title（可选）" />
-                <textarea v-model="form.descTh" class="field area" placeholder="Thai description（可选）"></textarea>
+                <input v-model="form.titleTh" class="field" :placeholder="t('caseDetail.placeholder.titleTh')" />
+                <textarea v-model="form.descTh" class="field area" :placeholder="t('caseDetail.placeholder.descTh')"></textarea>
+                <label class="sub-label">亮点</label>
+                <div class="chips-edit">
+                  <span v-for="(h, i) in form.highlightsTh" :key="i" class="chip-edit">
+                    {{ h }} <button type="button" class="chip-x" @click="removeHighlightLang('th', i)">×</button>
+                  </span>
+                  <input
+                    v-model="newHighlightTh"
+                    class="field chip-input"
+                    placeholder="Highlights ภาษาไทย, Enter"
+                    @keydown.enter.prevent="addHighlightLang('th')"
+                  />
+                </div>
               </div>
             </div>
 
-            <label>内容 HTML（单文件微站）</label>
-            <HtmlUploader v-model="form.contentHtml" />
+            <!-- PandaKing 专属：中文源 HTML 微站 + 每日行程 -->
+            <template v-if="isEditing">
+              <label>{{ t('caseDetail.label.contentHtml') }}</label>
+              <HtmlUploader v-model="form.contentHtml" />
 
-            <label>每日行程</label>
-            <div v-for="(d, i) in form.daysContent" :key="d.day" class="day-card edit">
-              <div class="day-head">第 {{ d.day }} 天 · {{ d.city }}</div>
-              <div v-if="d.spots?.length" class="day-row"><span class="k">景点</span>
+              <label>{{ t('caseDetail.label.daysItinerary') }}</label>
+              <div v-for="(d, i) in form.daysContent" :key="d.day" class="day-card edit">
+                <div class="day-head">{{ t('caseDetail.dayTitle', { day: d.day, city: d.city }) }}</div>
+                <div v-if="d.spots?.length" class="day-row"><span class="k">{{ t('caseDetail.label.spots') }}</span>
+                  <span class="chips"><span v-for="s in d.spots" :key="s" class="chip sm">{{ s }}</span></span>
+                </div>
+                <div v-if="d.hotel" class="day-row"><span class="k">{{ t('caseDetail.label.hotel') }}</span><b>{{ d.hotel }}</b></div>
+                <div class="day-img-edit">
+                  <ImageUploader v-model="form.daysContent[i].image" :hint="t('caseDetail.hint.dayImage')" compact />
+                </div>
+                <textarea v-model="form.daysContent[i].notes" class="field area" :placeholder="t('caseDetail.hint.dayNotes')"></textarea>
+              </div>
+            </template>
+
+            <!-- 多语言 HTML 微站校对（edit / review 均显示） -->
+            <label>English HTML</label>
+            <textarea v-model="form.contentHtmlEn" class="field area" rows="6" placeholder="English HTML microsite content"></textarea>
+            <label>Thai HTML</label>
+            <textarea v-model="form.contentHtmlTh" class="field area" rows="6" placeholder="Thai HTML microsite content"></textarea>
+
+            <!-- 多语言每日行程校对（edit / review 均显示） -->
+            <label>English {{ t('caseDetail.label.daysItinerary') }}</label>
+            <div v-for="(d, i) in form.daysContentEn" :key="`en-${d.day}`" class="day-card edit">
+              <div class="day-head">{{ t('caseDetail.dayTitle', { day: d.day, city: d.city }) }}</div>
+              <div v-if="d.spots?.length" class="day-row"><span class="k">{{ t('caseDetail.label.spots') }}</span>
                 <span class="chips"><span v-for="s in d.spots" :key="s" class="chip sm">{{ s }}</span></span>
               </div>
-              <div v-if="d.hotel" class="day-row"><span class="k">酒店</span><b>{{ d.hotel }}</b></div>
-              <div class="day-img-edit">
-                <ImageUploader v-model="form.daysContent[i].image" hint="每日主图（自动压缩）" compact />
+              <div v-if="d.hotel" class="day-row"><span class="k">{{ t('caseDetail.label.hotel') }}</span><b>{{ d.hotel }}</b></div>
+              <textarea v-model="form.daysContentEn[i].notes" class="field area" placeholder="English day notes"></textarea>
+            </div>
+            <label>Thai {{ t('caseDetail.label.daysItinerary') }}</label>
+            <div v-for="(d, i) in form.daysContentTh" :key="`th-${d.day}`" class="day-card edit">
+              <div class="day-head">{{ t('caseDetail.dayTitle', { day: d.day, city: d.city }) }}</div>
+              <div v-if="d.spots?.length" class="day-row"><span class="k">{{ t('caseDetail.label.spots') }}</span>
+                <span class="chips"><span v-for="s in d.spots" :key="s" class="chip sm">{{ s }}</span></span>
               </div>
-              <textarea v-model="form.daysContent[i].notes" class="field area" placeholder="当日备注"></textarea>
+              <div v-if="d.hotel" class="day-row"><span class="k">{{ t('caseDetail.label.hotel') }}</span><b>{{ d.hotel }}</b></div>
+              <textarea v-model="form.daysContentTh[i].notes" class="field area" placeholder="Thai day notes"></textarea>
             </div>
           </div>
 
           <div class="preview-pane">
-            <div class="preview-label">实时预览</div>
+            <div class="preview-label">{{ t('caseDetail.preview') }}</div>
             <CaseDetailView v-if="previewCase" :c="previewCase" />
           </div>
         </div>
@@ -508,20 +666,20 @@ function removeHighlight(i: number) {
     </template>
   </div>
 
-  <!-- 离站咨询 CTA：浮动按钮（仅联合品牌案例，境外旅行社分享获客） -->
+  <!-- 离站咨询 CTA -->
   <button
-    v-if="!editing && c?.agencyBranding && ctaContacts.length"
+    v-if="!isWorking && c?.agencyBranding && ctaContacts.length"
     class="cta-fab"
     @click="ctaOpen = true"
   >
-    💬 咨询此行程
+    {{ t('caseDetail.cta.fab') }}
   </button>
 
-  <!-- 咨询弹窗：机构联系方式 + 一键复制 + 引导加 Line -->
+  <!-- 咨询弹窗 -->
   <div v-if="ctaOpen" class="modal-mask" @click.self="ctaOpen = false">
     <div class="modal">
       <div class="modal-head">
-        <div class="modal-title">咨询此行程</div>
+        <div class="modal-title">{{ t('caseDetail.cta.title') }}</div>
         <div class="modal-close" @click="ctaOpen = false">✕</div>
       </div>
       <div class="modal-body">
@@ -535,40 +693,40 @@ function removeHighlight(i: number) {
           <span v-else class="cta-logo fb">{{ (c?.agencyBranding?.name || '?').slice(0, 1) }}</span>
           <div>
             <div class="cta-name">{{ c?.agencyBranding?.name }}</div>
-            <div class="cta-co">与 <b>PandaKing9</b> 联合提供</div>
+            <div class="cta-co">{{ t('caseDetail.cta.coBranding') }}</div>
           </div>
         </div>
-        <p class="cta-tip">咨询此行程的行程安排与报价，请通过以下方式联系：</p>
+        <p class="cta-tip">{{ t('caseDetail.cta.tip') }}</p>
         <div v-if="ctaLine" class="cta-line-main" @click="copyCta(ctaLine, 'Line')">
           <span class="cta-line-ico">L</span>
           <div class="cta-line-meta">
-            <div class="cta-line-label">添加 Line 咨询</div>
-            <div class="cta-line-id">Line ID：{{ ctaLine }}</div>
+            <div class="cta-line-label">{{ t('caseDetail.cta.addLine') }}</div>
+            <div class="cta-line-id">{{ t('caseDetail.cta.lineId', { id: ctaLine }) }}</div>
           </div>
-          <button class="btn btn-primary btn-sm">一键复制</button>
+          <button class="btn btn-primary btn-sm">{{ t('caseDetail.cta.copyOneClick') }}</button>
         </div>
         <div class="cta-list">
           <div v-for="it in ctaContacts" :key="it.k" class="cta-item">
             <span class="cta-k">{{ it.label }}</span>
             <a v-if="it.link" :href="it.link" class="cta-v" target="_blank" rel="noopener">{{ it.v }}</a>
             <span v-else class="cta-v">{{ it.v }}</span>
-            <button class="btn btn-sm btn-ghost" @click="copyCta(it.v, it.label)">复制</button>
+            <button class="btn btn-sm btn-ghost" @click="copyCta(it.v, it.label)">{{ t('common.copy') }}</button>
           </div>
         </div>
-        <p class="cta-foot">本案例由 {{ c?.agencyBranding?.name }} 与 PandaKing9 联合提供 · 定制旅行</p>
+        <p class="cta-foot">{{ t('caseDetail.cta.footer', { name: c?.agencyBranding?.name || '' }) }}</p>
       </div>
     </div>
   </div>
 
-  <!-- 复制分享文案弹窗（自动复制失败时的可靠兜底：全选 + 长按手动复制 + 重试） -->
+  <!-- 复制分享文案弹窗 -->
   <div v-if="shareModal" class="modal-mask" @click.self="shareModal = false">
     <div class="modal">
       <div class="modal-head">
-        <div class="modal-title">复制分享文案</div>
+        <div class="modal-title">{{ t('caseDetail.shareModal.title') }}</div>
         <div class="modal-close" @click="shareModal = false">✕</div>
       </div>
       <div class="modal-body">
-        <p class="share-tip">自动复制未成功，请<b>长按下方文字手动复制</b>，再粘贴到微信发送：</p>
+        <p class="share-tip" v-html="t('caseDetail.shareModal.tip')"></p>
         <textarea
           class="share-ta"
           readonly
@@ -578,8 +736,8 @@ function removeHighlight(i: number) {
         ></textarea>
       </div>
       <div class="modal-foot">
-        <button class="btn" @click="shareModal = false">关闭</button>
-        <button class="btn btn-primary" @click="onRetryCopy">重试复制</button>
+        <button class="btn" @click="shareModal = false">{{ t('common.close') }}</button>
+        <button class="btn btn-primary" @click="onRetryCopy">{{ t('caseDetail.shareModal.retry') }}</button>
       </div>
     </div>
   </div>
@@ -587,13 +745,10 @@ function removeHighlight(i: number) {
 
 <style scoped>
 .detail-page { max-width: 920px; margin: 0 auto; }
-.topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 8px; }
+.topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 8px; flex-wrap: wrap; }
 .back { color: var(--brand); text-decoration: none; }
-.share { display: flex; gap: 6px; }
-.edit-head { display: flex; align-items: center; gap: 8px; }
-.edit-title { font-size: 14px; color: var(--muted); margin-right: auto; }
+.top-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .wechat-tip { color: var(--muted); font-size: 13px; margin: 14px 0; }
-.admin-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
 
 /* 双栏编辑布局 */
 .edit-layout { margin-top: 4px; }
@@ -602,8 +757,19 @@ function removeHighlight(i: number) {
 .edit-pane { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .preview-pane { flex: 1; min-width: 0; position: sticky; top: 12px; }
 .preview-label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
-.edit-pane label { font-size: 13px; color: var(--muted); margin-top: 10px; }
+.edit-pane label, .sub-label { font-size: 13px; color: var(--muted); margin-top: 10px; }
 .edit-pane label:first-child { margin-top: 0; }
+
+.source-summary {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--brand);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 4px;
+}
+.source-title { font-weight: 600; margin-bottom: 4px; }
+.source-desc { color: var(--muted); font-size: 13px; white-space: pre-wrap; line-height: 1.6; }
 
 .chips-edit { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .chip-edit {
@@ -637,13 +803,14 @@ function removeHighlight(i: number) {
 .badge { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
 .badge.ai { background: var(--warn-50); color: var(--warn); }
 .badge.ok { background: var(--ok-50); color: var(--ok); }
-@media (max-width: 640px) { .trans-langs { grid-template-columns: 1fr; } }
-.btn { padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--brand); color: #fff; cursor: pointer; }
+
+.btn { padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--brand); color: #fff; cursor: pointer; font-family: inherit; }
 .btn.sm { padding: 3px 10px; font-size: 12px; }
 .btn.ghost { background: transparent; color: var(--text); }
 .btn.ghost.sm { padding: 3px 10px; font-size: 12px; }
 .btn.ghost.danger { color: var(--danger); border-color: var(--danger); }
 .btn.copied { background: var(--ok); border-color: var(--ok); }
+.btn.ai-btn { color: var(--brand-600); border-color: var(--brand-200); background: var(--brand-50); }
 .err { color: var(--danger); }
 .msg { color: var(--ok); font-size: 13px; margin-top: 10px; }
 
@@ -680,7 +847,6 @@ function removeHighlight(i: number) {
 .cta-logo.fb { display: flex; align-items: center; justify-content: center; background: var(--brand); color: #fff; font-size: 20px; font-weight: 700; }
 .cta-name { font-weight: 700; font-size: 15px; }
 .cta-co { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
-.cta-co b { color: var(--brand); }
 .cta-tip { font-size: 13px; color: var(--ink-2); margin-bottom: 12px; }
 .cta-line-main {
   display: flex; align-items: center; gap: 12px; padding: 12px 14px;
@@ -715,5 +881,10 @@ function removeHighlight(i: number) {
   .preview-pane { position: static; }
   .edit-layout.edit .preview-pane { display: none; }
   .edit-layout.preview .edit-pane { display: none; }
+  .topbar { flex-direction: column; align-items: flex-start; }
+  .top-actions { width: 100%; justify-content: flex-end; }
+}
+@media (max-width: 640px) {
+  .trans-langs { grid-template-columns: 1fr; }
 }
 </style>

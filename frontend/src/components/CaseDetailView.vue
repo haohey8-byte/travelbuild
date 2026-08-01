@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import CaseHtmlView from './CaseHtmlView.vue'
 import { safeText } from '@/utils/name'
 import { formatTravelDate } from '@/utils/share'
@@ -9,19 +10,20 @@ import type { CaseItem } from '@/types'
 // 案例只读视图（公开页 + 编辑预览共用，防样式漂移）
 // 渲染：语言切换 / 联合品牌条 / hero / 亮点 / 描述 / 主体 HTML / 每日图文（只读）
 const props = defineProps<{ c: CaseItem }>()
+const { t, locale } = useI18n()
 
-// 多语言：中/英/泰切换（localStorage 记忆；未翻译语言回退中文）
 type Locale = 'zh' | 'en' | 'th'
-const locale = ref<Locale>((localStorage.getItem('case-lang') as Locale) || 'zh')
+
+// 公开页语言切换与全局 vue-i18n 联动，保证全站语言一致
 function setLocale(l: Locale) {
   locale.value = l
-  try { localStorage.setItem('case-lang', l) } catch { /* */ }
+  try { localStorage.setItem('locale', l) } catch { /* */ }
 }
 
 function caseTitle(): string {
   if (locale.value === 'en' && props.c.titleEn) return safeText(props.c.titleEn)
   if (locale.value === 'th' && props.c.titleTh) return safeText(props.c.titleTh)
-  return safeText(props.c.title) || safeText(props.c.destination) || '未命名案例'
+  return safeText(props.c.title) || safeText(props.c.destination) || t('caseDetail.untitled')
 }
 const caseDesc = computed(() => {
   if (locale.value === 'en' && props.c.descEn) return props.c.descEn
@@ -35,32 +37,31 @@ const transCredit = computed(() => {
   const reviewedFields = Object.values(meta).filter((m: any) => m?.status === 'reviewed').length
   const totalFields = Object.keys(meta).length
   if (reviewedFields > 0 && reviewedFields === totalFields && totalFields > 0) {
-    return 'Translated by AI · Human-reviewed'
+    return t('caseDetail.transCredit.reviewed')
   }
-  if (totalFields > 0) return 'Translated by AI'
-  // 无翻译元数据时根据是否有该语言 desc 判断
+  if (totalFields > 0) return t('caseDetail.transCredit.ai')
   const hasDesc = locale.value === 'en' ? !!props.c.descEn : !!props.c.descTh
-  return hasDesc ? '' : 'Chinese original'
+  return hasDesc ? '' : t('caseDetail.transCredit.original')
 })
 
 const contactList = computed(() => {
   const ct = props.c.agencyBranding?.contacts
   if (!ct) return []
   const arr: { label: string; value: string }[] = []
-  if (ct.wechat) arr.push({ label: '微信', value: ct.wechat })
+  if (ct.wechat) arr.push({ label: t('caseDetail.cta.wechat'), value: ct.wechat })
   if (ct.line) arr.push({ label: 'Line', value: ct.line })
   if (ct.facebook) arr.push({ label: 'Facebook', value: ct.facebook })
-  if (ct.phone) arr.push({ label: '电话', value: ct.phone })
-  if (ct.email) arr.push({ label: '邮箱', value: ct.email })
+  if (ct.phone) arr.push({ label: t('caseDetail.cta.phone'), value: ct.phone })
+  if (ct.email) arr.push({ label: t('caseDetail.cta.email'), value: ct.email })
   return arr
 })
 
 // 行程参数（出行时间 / 人数 / 用车）：公开案例页与分享文案保持一致；均可空，无值不展示
 const tripParams = computed(() => {
   const arr: { k: string; v: string }[] = []
-  if (props.c.travelDate) arr.push({ k: '出行时间', v: formatTravelDate(props.c.travelDate) })
-  if (props.c.groupSize) arr.push({ k: '人数', v: `${props.c.groupSize}人` })
-  if (props.c.vehicle) arr.push({ k: '用车', v: safeText(props.c.vehicle) })
+  if (props.c.travelDate) arr.push({ k: t('caseDetail.label.travelDate'), v: formatTravelDate(props.c.travelDate) })
+  if (props.c.groupSize) arr.push({ k: t('caseDetail.label.groupSize'), v: `${props.c.groupSize}人` })
+  if (props.c.vehicle) arr.push({ k: t('caseDetail.label.vehicle'), v: safeText(props.c.vehicle) })
   return arr
 })
 
@@ -80,17 +81,12 @@ const caseContentHtml = computed(() => {
   if (locale.value === 'th' && props.c.contentHtmlTh) return props.c.contentHtmlTh
   return props.c.contentHtml
 })
-// 多语言「行程亮点」标题
-const daysTitle = computed(() => {
-  if (locale.value === 'en') return 'Daily Itinerary'
-  if (locale.value === 'th') return 'กำหนดการเดินทาง'
-  return '行程亮点（每日）'
-})
+const daysTitle = computed(() => t('caseDetail.daysTitle'))
 </script>
 
 <template>
   <div class="cdv">
-    <!-- 语言切换（中/英/泰；HTML 微站正文不翻译，仅切换标题/描述 meta） -->
+    <!-- 语言切换（中/英/泰；HTML 微站正文已纳入多语言） -->
     <div class="lang-switch">
       <span
         v-for="l in (['zh', 'en', 'th'] as Locale[])"
@@ -98,7 +94,7 @@ const daysTitle = computed(() => {
         class="lang-chip"
         :class="{ active: locale === l }"
         @click="setLocale(l)"
-      >{{ l === 'zh' ? '🇨🇳 中文' : l === 'en' ? '🇺🇸 EN' : '🇹🇭 ไทย' }}</span>
+      >{{ t(`caseDetail.lang.${l}`) }}</span>
     </div>
 
     <!-- 联合品牌条 -->
@@ -117,11 +113,11 @@ const daysTitle = computed(() => {
       <span v-if="!c.cover" class="hero-ph">{{ caseTitle().slice(0, 1) }}</span>
       <div class="hero-mask">
         <h1 class="title">{{ caseTitle() }}</h1>
-        <div class="meta">{{ c.destination }} · {{ c.days }} 天 · {{ c.theme }} · {{ c.priceRange }}</div>
+        <div class="meta">{{ c.destination }} · {{ c.days }} {{ t('caseDetail.daysUnit') || '天' }} · {{ c.theme }} · {{ c.priceRange }}</div>
       </div>
     </div>
 
-    <!-- 案例元数据摘要（亮点 / 行程参数 / 描述）—— 始终在 HTML 微站主体之前显示，确保运营填的字段可见 -->
+    <!-- 案例元数据摘要（亮点 / 行程参数 / 描述） -->
     <div v-if="caseHighlights.length || tripParams.length || caseDesc" class="meta-card">
       <div v-if="caseHighlights.length" class="hl">
         <span v-for="h in caseHighlights" :key="h" class="chip">{{ h }}</span>
@@ -130,7 +126,7 @@ const daysTitle = computed(() => {
         <span v-for="p in tripParams" :key="p.k" class="param"><b>{{ p.k }}</b> {{ p.v }}</span>
       </div>
       <p v-if="caseDesc" class="desc">{{ caseDesc }}</p>
-    <p v-if="transCredit && caseDesc" class="trans-credit">{{ transCredit }}</p>
+      <p v-if="transCredit && caseDesc" class="trans-credit">{{ transCredit }}</p>
     </div>
 
     <!-- 案例主体 HTML（沙箱 iframe 渲染） -->
@@ -141,12 +137,12 @@ const daysTitle = computed(() => {
       <h2>{{ daysTitle }}</h2>
       <div v-for="d in caseDaysContent" :key="d.day" class="day-card">
         <img v-if="d.image" :src="fixImageUrl(d.image)" class="day-img" alt="" />
-        <div class="day-head">第 {{ d.day }} 天 · {{ d.city }}</div>
-        <div v-if="d.spots?.length" class="day-row"><span class="k">景点</span>
+        <div class="day-head">{{ t('caseDetail.dayTitle', { day: d.day, city: d.city }) }}</div>
+        <div v-if="d.spots?.length" class="day-row"><span class="k">{{ t('caseDetail.label.spots') }}</span>
           <span class="chips"><span v-for="s in d.spots" :key="s" class="chip sm">{{ s }}</span></span>
         </div>
-        <div v-if="d.hotel" class="day-row"><span class="k">酒店</span><b>{{ d.hotel }}</b></div>
-        <div v-if="d.meals?.length" class="day-row"><span class="k">餐饮</span>
+        <div v-if="d.hotel" class="day-row"><span class="k">{{ t('caseDetail.label.hotel') }}</span><b>{{ d.hotel }}</b></div>
+        <div v-if="d.meals?.length" class="day-row"><span class="k">{{ t('caseDetail.label.meals') }}</span>
           <span class="chips"><span v-for="m in d.meals" :key="m" class="chip sm">{{ m }}</span></span>
         </div>
         <div v-if="d.notes" class="day-notes">{{ d.notes }}</div>

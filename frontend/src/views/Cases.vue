@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
+import { useI18n } from 'vue-i18n'
 import {
   fetchCases,
   fetchCasesManage,
@@ -20,6 +21,10 @@ import type { CaseItem, Route } from '@/types'
 const router = useRouter()
 const auth = useAuthStore()
 const { user } = storeToRefs(auth)
+const { t } = useI18n()
+
+const isPandaking = computed(() => user.value?.role === 'pandaking')
+const isAgency = computed(() => user.value?.role === 'agency')
 
 const list = ref<CaseItem[]>([])
 const loading = ref(true)
@@ -401,10 +406,15 @@ async function onDelete(c: CaseItem) {
             <div class="price">{{ c.priceRange || '—' }}</div>
           </div>
           <div v-if="user" class="card-actions" @click.stop>
-            <button v-if="c.status !== 'published'" class="btn btn-sm btn-soft" @click="onPublish(c)">发布</button>
-            <button v-else class="btn btn-sm btn-ghost" @click="onUnpublish(c)">下线</button>
-            <button class="btn btn-sm btn-ghost danger" @click="onDelete(c)">删除</button>
-            <span class="card-edit" @click="openDetail(c)">编辑 →</span>
+            <template v-if="isPandaking">
+              <button v-if="c.status !== 'published'" class="btn btn-sm btn-soft" @click="onPublish(c)">发布</button>
+              <button v-else class="btn btn-sm btn-ghost" @click="onUnpublish(c)">下线</button>
+              <button class="btn btn-sm btn-ghost danger" @click="onDelete(c)">删除</button>
+              <span class="card-edit" @click="openDetail(c)">{{ t('caseDetail.editContent') }} →</span>
+            </template>
+            <template v-else-if="isAgency && c.agencyId === user?.agencyId">
+              <span class="card-edit" @click="openDetail(c)">{{ t('caseDetail.reviewTranslation') }} →</span>
+            </template>
           </div>
         </div>
       </div>

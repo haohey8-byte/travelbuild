@@ -76,6 +76,11 @@ export class CaseService {
     throw new ForbiddenException('无权操作该案例')
   }
 
+  // PandaKing 专属操作（发布/下线/删除/AI 翻译）
+  private assertPandaking(user: { role?: string }) {
+    if (user.role !== 'pandaking') throw new ForbiddenException('该操作仅限 PandaKing')
+  }
+
   // 公开列表：仅已发布（案例展示页）
   listPublished() {
     return this.prisma.case.findMany({
@@ -193,6 +198,7 @@ export class CaseService {
   // 发布 + 自动补翻：未翻译的字段（title/desc/highlights/daysContent/contentHtml）→ TMT 生成 en/th 初稿；
   // 翻译失败不阻塞发布；transMeta 改为模块化状态（按 title/desc/.../contentHtml 维度）
   async publish(id: string, user: { role?: string; agencyId?: string | null }) {
+    this.assertPandaking(user)
     await this.assertCanManage(id, user)
     const c = await this.getById(id)
     const data: Record<string, unknown> = { status: 'published', publishedAt: new Date() }
@@ -251,6 +257,7 @@ export class CaseService {
     user: { role?: string; agencyId?: string | null },
     fields?: string[],
   ) {
+    this.assertPandaking(user)
     await this.assertCanManage(id, user)
     const c = await this.getById(id)
     const wantAll = !fields || fields.length === 0
@@ -314,6 +321,7 @@ export class CaseService {
   }
 
   async unpublish(id: string, user: { role?: string; agencyId?: string | null }) {
+    this.assertPandaking(user)
     await this.assertCanManage(id, user)
     return this.prisma.case.update({ where: { id }, data: { status: 'offline', publishedAt: null } })
   }
@@ -324,29 +332,39 @@ export class CaseService {
     user: { role?: string; agencyId?: string | null },
   ) {
     await this.assertCanManage(id, user)
-    // 人工保存 En/Th 字段时标记 reviewed（人工校对）
-    const data: Record<string, unknown> = { ...input }
-    if (input.titleEn !== undefined || input.descEn !== undefined) {
-      const cur = await this.getById(id)
-      const meta = ((cur.transMeta as any) || {})
-      data.transMeta = {
-        ...meta,
-        en: { status: 'reviewed', at: new Date().toISOString() },
-        th: meta.th || undefined,
-      }
-    }
-    if (input.titleTh !== undefined || input.descTh !== undefined) {
-      const cur = await this.getById(id)
-      const meta = ((cur.transMeta as any) || {})
-      data.transMeta = {
-        ...((data.transMeta as any) || meta),
-        th: { status: 'reviewed', at: new Date().toISOString() },
-      }
-    }
+
+    // agency 仅允许修改多语言校对字段
+    const AGENCY_EDITABLE_FIELDS = [
+      'titleEn', 'titleTh', 'descEn', 'descTh',
+      'highlightsEn', 'highlightsTh',
+      'daysContentEn', 'daysContentTh',
+      'contentHtmlEn', 'contentHtmlTh',
+    ]
+    const isAgency = user.role === 'agency'
+    const filteredInput: Record<string, unknown> = isAgency
+      ? Object.fromEntries(Object.entries(input).filter(([k]) => AGENCY_EDITABLE_FIELDS.includes(k)))
+      : { ...input }
+
+    // 人工保存多语言字段时，按模块标记 reviewed
+    const cur = await this.getById(id)
+    const meta: Record<string, any> = ((cur.transMeta as any) || {})
+    const nowIso = new Date().toISOString()
+    const touched = (key: string) => key in filteredInput && filteredInput[key] !== undefined
+
+    if (touched('titleEn') || touched('titleTh')) meta.title = { status: 'reviewed', at: nowIso }
+    if (touched('descEn') || touched('descTh')) meta.desc = { status: 'reviewed', at: nowIso }
+    if (touched('highlightsEn') || touched('highlightsTh')) meta.highlights = { status: 'reviewed', at: nowIso }
+    if (touched('daysContentEn') || touched('daysContentTh')) meta.daysContent = { status: 'reviewed', at: nowIso }
+    if (touched('contentHtmlEn') || touched('contentHtmlTh')) meta.contentHtml = { status: 'reviewed', at: nowIso }
+
+    const data: Record<string, unknown> = { ...filteredInput }
+    if (Object.keys(meta).length) data.transMeta = meta
     return this.prisma.case.update({ where: { id }, data })
   }
 
-  remove(id: string, user: { role?: string; agencyId?: string | null }) {
-    return this.assertCanManage(id, user).then(() => this.prisma.case.delete({ where: { id } }))
+  async remove(id: string, user: { role?: string; agencyId?: string | null }) {
+    this.assertPandaking(user)
+    await this.assertCanManage(id, user)
+    return this.prisma.case.delete({ where: { id } })
   }
 }
