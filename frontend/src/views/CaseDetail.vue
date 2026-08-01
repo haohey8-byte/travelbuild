@@ -371,21 +371,51 @@ async function onTranslate(fields?: string[]) {
   if (translateBusy.value) return
   const wantAll = !fields || fields.length === 0
   const list = fields || TRANS_ALL
-  if (wantAll) {
-    if (!form.value.descZh.trim() && !form.value.title.trim() && !form.value.highlights.length && !form.value.daysContent.length && !form.value.contentHtml.trim()) {
-      flash('请先填写标题/描述/亮点/行程/HTML 任一中文内容')
-      return
-    }
-  } else if (list.includes('title') || list.includes('desc')) {
-    if (!form.value.descZh.trim() && !form.value.title.trim()) {
-      flash('请先填写标题或中文描述再翻译')
-      return
+
+  // 校验：按请求的模块检查当前表单中文内容
+  const moduleHasContent = (f: string) => {
+    switch (f) {
+      case 'title':
+        return form.value.title.trim().length > 0
+      case 'desc':
+        return form.value.descZh.trim().length > 0
+      case 'highlights':
+        return form.value.highlights.length > 0
+      case 'daysContent':
+        return form.value.daysContent.length > 0
+      case 'contentHtml':
+        return form.value.contentHtml.trim().length > 0
+      default:
+        return false
     }
   }
+  if (!TRANS_ALL.some((f) => list.includes(f) && moduleHasContent(f))) {
+    flash('请先填写标题/描述/亮点/行程/HTML 任一中文内容')
+    return
+  }
+
   translateBusy.value = true
   try {
-    const updated = await translateCase(id.value, wantAll ? undefined : list)
+    const source = {
+      title: form.value.title,
+      descZh: form.value.descZh,
+      highlights: form.value.highlights,
+      daysContent: form.value.daysContent,
+      contentHtml: form.value.contentHtml,
+    }
+    const updated = await translateCase(id.value, wantAll ? undefined : list, source)
     c.value = updated
+    // 同步后端已保存的中文源
+    form.value.title = updated.title || ''
+    form.value.descZh = updated.descZh || ''
+    form.value.highlights = updated.highlights ? [...updated.highlights] : []
+    form.value.daysContent = (updated.daysContent || []).map((d) => ({
+      ...d,
+      spots: [...(d.spots || [])],
+      meals: [...(d.meals || [])],
+    }))
+    form.value.contentHtml = updated.contentHtml || ''
+    // 回填翻译结果
     form.value.titleEn = updated.titleEn || ''
     form.value.titleTh = updated.titleTh || ''
     form.value.descEn = updated.descEn || ''
@@ -396,7 +426,7 @@ async function onTranslate(fields?: string[]) {
     form.value.daysContentTh = (updated.daysContentTh as DayContent[]) || []
     form.value.contentHtmlEn = updated.contentHtmlEn || ''
     form.value.contentHtmlTh = updated.contentHtmlTh || ''
-    flash(wantAll ? '整体页面翻译完成，请校对后保存' : `已翻译 ${list.join('、')} 模块，请校对后保存`)
+    flash(wantAll ? '已按当前内容生成英文+泰文初稿，请校对后保存' : `已翻译 ${list.join('、')} 模块，请校对后保存`)
   } catch (e: any) {
     const m = e?.response?.data?.message || e?.response?.data?.error || e?.message || '翻译失败'
     flash(`翻译失败：${m}`)

@@ -83,14 +83,15 @@ export class CaseController {
   }
 
   // 管理：AI 翻译（手动触发/重翻：body.fields 指定翻译哪些模块；空=全部）
+  // body.source 可选：传入当前编辑态表单中的中文源内容，优先于数据库旧值作为翻译源
   @Post(':id/translate')
   @UseGuards(JwtAuthGuard)
   translate(
     @Param('id') id: string,
-    @Body() body: { fields?: string[] } | undefined,
+    @Body() body: { fields?: string[]; source?: any } | undefined,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.svc.translateCase(id, user, body?.fields)
+    return this.svc.translateCase(id, user, body?.fields, body?.source)
   }
 
   // 管理：下线

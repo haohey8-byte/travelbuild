@@ -48,9 +48,20 @@ export async function publishCase(id: string): Promise<CaseItem> {
 }
 
 // 管理端：AI 机器翻译（中文 → en/th，标记 machine；fields 指定翻译模块，不传=翻译全部）
+// source 可选：传入当前编辑态表单中的中文源内容，优先于数据库旧值作为翻译源
 // 整体页面翻译模块：title/desc/highlights/daysContent/contentHtml
-export async function translateCase(id: string, fields?: string[]): Promise<CaseItem> {
-  const { data } = await client.post(`/cases/${id}/translate`, fields ? { fields } : {})
+export async function translateCase(
+  id: string,
+  fields?: string[],
+  source?: {
+    title?: string
+    descZh?: string
+    highlights?: string[]
+    daysContent?: any[]
+    contentHtml?: string
+  },
+): Promise<CaseItem> {
+  const { data } = await client.post(`/cases/${id}/translate`, { fields, source })
   return data
 }
 

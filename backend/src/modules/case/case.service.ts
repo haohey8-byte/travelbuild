@@ -252,10 +252,18 @@ export class CaseService {
   }
 
   // 手动触发 AI 翻译（编辑页按钮）：按 fields 列表翻译，未指定则全部翻译
+  // source 可选：传入当前编辑态表单中的中文源内容，优先于数据库旧值作为翻译源
   async translateCase(
     id: string,
     user: { role?: string; agencyId?: string | null },
     fields?: string[],
+    source?: {
+      title?: string
+      descZh?: string
+      highlights?: string[]
+      daysContent?: any[]
+      contentHtml?: string
+    },
   ) {
     this.assertPandaking(user)
     await this.assertCanManage(id, user)
@@ -266,54 +274,84 @@ export class CaseService {
     const nowIso = new Date().toISOString()
     const data: Record<string, unknown> = {}
 
+    // source 优先于数据库当前值作为翻译源
+    const srcTitle = ((source?.title ?? c.title) || '').trim()
+    const srcDesc = ((source?.descZh ?? c.descZh) || '').trim()
+    const srcHighlights = source?.highlights ?? c.highlights
+    const srcDaysContent = source?.daysContent ?? c.daysContent
+    const srcContentHtml = source?.contentHtml ?? c.contentHtml
+
+    // 校验：请求的模块中至少有一个存在有效中文内容
+    const TRANS_MODULES = ['title', 'desc', 'highlights', 'daysContent', 'contentHtml']
+    const moduleHasSource = (f: string) => {
+      switch (f) {
+        case 'title':
+          return srcTitle.length > 0
+        case 'desc':
+          return srcDesc.length > 0
+        case 'highlights':
+          return Array.isArray(srcHighlights) && srcHighlights.length > 0
+        case 'daysContent':
+          return Array.isArray(srcDaysContent) && srcDaysContent.length > 0
+        case 'contentHtml':
+          return (srcContentHtml || '').trim().length > 0
+        default:
+          return false
+      }
+    }
+    const requestedWithSource = TRANS_MODULES.filter((f) => has(f) && moduleHasSource(f))
+    if (requestedWithSource.length === 0) {
+      throw new BadRequestException('暂无中文内容可翻译（请先在对应模块填写中文内容）')
+    }
+
     // title / desc
     if (has('title') || has('desc')) {
-      const srcTitle = (c.title || '').trim()
-      const srcDesc = (c.descZh || '').trim()
-      if (!srcTitle && !srcDesc) {
-        throw new BadRequestException('暂无中文内容可翻译（请先填写标题或中文描述）')
-      }
       const [titleEn, descEn, titleTh, descTh] = await Promise.all([
         has('title') && srcTitle ? this.translate.translateZh(srcTitle, 'en') : Promise.resolve(c.titleEn),
         has('desc') && srcDesc ? this.translate.translateZh(srcDesc, 'en') : Promise.resolve(c.descEn),
         has('title') && srcTitle ? this.translate.translateZh(srcTitle, 'th') : Promise.resolve(c.titleTh),
         has('desc') && srcDesc ? this.translate.translateZh(srcDesc, 'th') : Promise.resolve(c.descTh),
       ])
-      if (has('title')) {
-        if (srcTitle) {
-          data.titleEn = titleEn
-          data.titleTh = titleTh
-          meta.title = { status: 'machine', at: nowIso }
-        }
+      if (has('title') && srcTitle) {
+        data.titleEn = titleEn
+        data.titleTh = titleTh
+        meta.title = { status: 'machine', at: nowIso }
       }
-      if (has('desc')) {
-        if (srcDesc) {
-          data.descEn = descEn
-          data.descTh = descTh
-          meta.desc = { status: 'machine', at: nowIso }
-        }
+      if (has('desc') && srcDesc) {
+        data.descEn = descEn
+        data.descTh = descTh
+        meta.desc = { status: 'machine', at: nowIso }
       }
     }
 
     // highlights（数组整体翻译）
-    if (has('highlights') && Array.isArray(c.highlights) && c.highlights.length) {
-      data.highlightsEn = await this.translate.translateArray(c.highlights, 'en')
-      data.highlightsTh = await this.translate.translateArray(c.highlights, 'th')
+    if (has('highlights') && Array.isArray(srcHighlights) && srcHighlights.length) {
+      data.highlightsEn = await this.translate.translateArray(srcHighlights, 'en')
+      data.highlightsTh = await this.translate.translateArray(srcHighlights, 'th')
       meta.highlights = { status: 'machine', at: nowIso }
     }
 
     // daysContent（每日图文）
-    if (has('daysContent') && Array.isArray(c.daysContent) && c.daysContent.length) {
-      data.daysContentEn = await this.translate.translateDaysContent(c.daysContent, 'en')
-      data.daysContentTh = await this.translate.translateDaysContent(c.daysContent, 'th')
+    if (has('daysContent') && Array.isArray(srcDaysContent) && srcDaysContent.length) {
+      data.daysContentEn = await this.translate.translateDaysContent(srcDaysContent, 'en')
+      data.daysContentTh = await this.translate.translateDaysContent(srcDaysContent, 'th')
       meta.daysContent = { status: 'machine', at: nowIso }
     }
 
     // contentHtml（DOM 级）
-    if (has('contentHtml') && c.contentHtml) {
-      data.contentHtmlEn = await this.translate.translateHtmlContent(c.contentHtml, 'en')
-      data.contentHtmlTh = await this.translate.translateHtmlContent(c.contentHtml, 'th')
+    if (has('contentHtml') && srcContentHtml) {
+      data.contentHtmlEn = await this.translate.translateHtmlContent(srcContentHtml, 'en')
+      data.contentHtmlTh = await this.translate.translateHtmlContent(srcContentHtml, 'th')
       meta.contentHtml = { status: 'machine', at: nowIso }
+    }
+
+    // 若传入了当前表单 source，同步保存中文源字段，避免只存翻译而源丢失导致刷新后不一致
+    if (source) {
+      if (source.title !== undefined) data.title = source.title
+      if (source.descZh !== undefined) data.descZh = source.descZh
+      if (source.highlights !== undefined) data.highlights = source.highlights
+      if (source.daysContent !== undefined) data.daysContent = source.daysContent as Prisma.InputJsonValue
+      if (source.contentHtml !== undefined) data.contentHtml = source.contentHtml
     }
 
     data.transMeta = meta
