@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import CaseHtmlView from './CaseHtmlView.vue'
 import { safeText } from '@/utils/name'
 import { formatTravelDate } from '@/utils/share'
@@ -7,12 +7,35 @@ import { fixImageUrl } from '@/utils/image'
 import type { CaseItem } from '@/types'
 
 // 案例只读视图（公开页 + 编辑预览共用，防样式漂移）
-// 渲染：联合品牌条 / hero / 亮点 / 描述 / 主体 HTML / 每日图文（只读）
+// 渲染：语言切换 / 联合品牌条 / hero / 亮点 / 描述 / 主体 HTML / 每日图文（只读）
 const props = defineProps<{ c: CaseItem }>()
 
+// 多语言：中/英/泰切换（localStorage 记忆；未翻译语言回退中文）
+type Locale = 'zh' | 'en' | 'th'
+const locale = ref<Locale>((localStorage.getItem('case-lang') as Locale) || 'zh')
+function setLocale(l: Locale) {
+  locale.value = l
+  try { localStorage.setItem('case-lang', l) } catch { /* */ }
+}
+
 function caseTitle(): string {
+  if (locale.value === 'en' && props.c.titleEn) return safeText(props.c.titleEn)
+  if (locale.value === 'th' && props.c.titleTh) return safeText(props.c.titleTh)
   return safeText(props.c.title) || safeText(props.c.destination) || '未命名案例'
 }
+const caseDesc = computed(() => {
+  if (locale.value === 'en' && props.c.descEn) return props.c.descEn
+  if (locale.value === 'th' && props.c.descTh) return props.c.descTh
+  return props.c.descZh || ''
+})
+// 翻译署名（英文/泰文显示时告知来源）
+const transCredit = computed(() => {
+  if (locale.value === 'zh') return ''
+  const m = props.c.transMeta?.[locale.value]
+  if (m?.status === 'reviewed') return 'Translated by AI · Human-reviewed'
+  if (m) return 'Translated by AI'
+  return props.c[locale.value === 'en' ? 'descEn' : 'descTh'] ? '' : 'Chinese original'
+})
 
 const contactList = computed(() => {
   const ct = props.c.agencyBranding?.contacts
@@ -38,6 +61,17 @@ const tripParams = computed(() => {
 
 <template>
   <div class="cdv">
+    <!-- 语言切换（中/英/泰；HTML 微站正文不翻译，仅切换标题/描述 meta） -->
+    <div class="lang-switch">
+      <span
+        v-for="l in (['zh', 'en', 'th'] as Locale[])"
+        :key="l"
+        class="lang-chip"
+        :class="{ active: locale === l }"
+        @click="setLocale(l)"
+      >{{ l === 'zh' ? '🇨🇳 中文' : l === 'en' ? '🇺🇸 EN' : '🇹🇭 ไทย' }}</span>
+    </div>
+
     <!-- 联合品牌条 -->
     <div v-if="c.agencyBranding" class="cobrand">
       <img v-if="c.agencyBranding.logoUrl" :src="fixImageUrl(c.agencyBranding.logoUrl)" class="logo" alt="logo" />
@@ -66,7 +100,8 @@ const tripParams = computed(() => {
       <div v-if="tripParams.length" class="params">
         <span v-for="p in tripParams" :key="p.k" class="param"><b>{{ p.k }}</b> {{ p.v }}</span>
       </div>
-      <p v-if="c.descZh" class="desc">{{ c.descZh }}</p>
+      <p v-if="caseDesc" class="desc">{{ caseDesc }}</p>
+    <p v-if="transCredit && caseDesc" class="trans-credit">{{ transCredit }}</p>
     </div>
 
     <!-- 案例主体 HTML（沙箱 iframe 渲染） -->
@@ -96,6 +131,10 @@ const tripParams = computed(() => {
   display: flex; align-items: center; gap: 12px; padding: 10px 14px;
   background: var(--brand-soft, #eef); border-radius: 12px; margin-bottom: 12px;
 }
+.lang-switch { display: flex; justify-content: flex-end; gap: 6px; margin-bottom: 10px; }
+.lang-chip { padding: 4px 12px; border-radius: 999px; font-size: 12px; cursor: pointer; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink-2); }
+.lang-chip.active { background: var(--brand); color: #fff; border-color: var(--brand); }
+.trans-credit { font-size: 11.5px; color: var(--muted); margin-top: -12px; margin-bottom: 14px; }
 .cobrand .logo { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; }
 .cobrand .x { color: var(--brand); font-weight: 700; }
 .contacts { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--muted); }

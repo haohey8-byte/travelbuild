@@ -185,10 +185,16 @@ export interface CaseItem {
   days: number
   theme: string
   priceRange: string
-  // 多语言描述（P0 仅建模型 + zh 渲染）
+  // 多语言描述（P0 仅建模型 + zh 渲染；P1 AI 机器翻译 + 人工校对）
   descZh?: string
   descEn?: string
   descTh?: string
+  // 归属机构 + 翻译状态（P1）：agencyId=境外旅行社；transMeta={ en:{status,at}, th:{...} }
+  agencyId?: string | null
+  transMeta?: {
+    en?: { status?: 'machine' | 'reviewed'; at?: string }
+    th?: { status?: 'machine' | 'reviewed'; at?: string }
+  } | null
   // 每日图文（脱敏派生，可覆盖）
   daysContent?: DayContent[]
   // 案例主体 HTML（运营上传的单文件微站，服务端 sanitize 后存；含地图/天气/滚动等交互）

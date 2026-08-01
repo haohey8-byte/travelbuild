@@ -150,6 +150,9 @@ model Case {
   descTh      String?   // 泰文描述
   daysContent Json?     // 每日图文（脱敏派生，可覆盖）：{ day,city,spots[],hotel,meals[],notes,image? }[]
   contentHtml  String?  // 案例主体 HTML（运营上传的单文件微站，服务端 sanitize 后存；含地图/天气/滚动等交互）
+  // —— P1 多语言 AI 机器翻译 ——
+  agencyId  String?     // 案例归属境外旅行社（权限边界：机构账号只管理/校对自己的案例；PandaKing 全量）
+  transMeta Json?       // 翻译状态：{ en: { status:'machine'|'reviewed', at:ISO }, th: {...} }
 }
 
 // 知识库条目

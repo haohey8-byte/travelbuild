@@ -47,6 +47,12 @@ export async function publishCase(id: string): Promise<CaseItem> {
   return data
 }
 
+// 管理端：AI 机器翻译（中文 → en/th，标记 machine）
+export async function translateCase(id: string): Promise<CaseItem> {
+  const { data } = await client.post(`/cases/${id}/translate`)
+  return data
+}
+
 export async function unpublishCase(id: string): Promise<CaseItem> {
   const { data } = await client.post(`/cases/${id}/unpublish`)
   return data

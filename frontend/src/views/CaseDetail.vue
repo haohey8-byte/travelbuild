@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
-import { fetchCase, fetchCaseManage, updateCase, publishCase, unpublishCase, deleteCase } from '@/api/cases'
+import { fetchCase, fetchCaseManage, updateCase, publishCase, unpublishCase, deleteCase, translateCase } from '@/api/cases'
 import { useAuthStore } from '@/stores/auth'
 import { copyText, buildShareText } from '@/utils/share'
 import { fixImageUrl } from '@/utils/image'
@@ -31,15 +31,22 @@ const tab = ref<'edit' | 'preview'>('edit')
 const newHighlight = ref('')
 const form = ref<{
   title: string
+  titleEn: string
+  titleTh: string
   cover: string
   highlights: string[]
   descZh: string
+  descEn: string
+  descTh: string
   contentHtml: string
   daysContent: DayContent[]
   travelDate?: string | null
   groupSize?: number | null
   vehicle?: string | null
-}>({ title: '', cover: '', highlights: [], descZh: '', contentHtml: '', daysContent: [], travelDate: null, groupSize: null, vehicle: null })
+}>({
+  title: '', titleEn: '', titleTh: '', cover: '', highlights: [], descZh: '', descEn: '', descTh: '',
+  contentHtml: '', daysContent: [], travelDate: null, groupSize: null, vehicle: null,
+})
 const msg = ref('')
 
 // 草稿 localStorage（防意外中断丢失）
@@ -67,9 +74,13 @@ const previewCase = computed<CaseItem | null>(() => {
   return {
     ...c.value,
     title: form.value.title,
+    titleEn: form.value.titleEn,
+    titleTh: form.value.titleTh,
     cover: form.value.cover,
     highlights: form.value.highlights,
     descZh: form.value.descZh,
+    descEn: form.value.descEn,
+    descTh: form.value.descTh,
     contentHtml: form.value.contentHtml,
     daysContent: form.value.daysContent,
     travelDate: form.value.travelDate || null,
@@ -174,9 +185,13 @@ function startEdit() {
   if (!x) return
   form.value = {
     title: x.title || '',
+    titleEn: x.titleEn || '',
+    titleTh: x.titleTh || '',
     cover: x.cover || '',
     highlights: x.highlights ? [...x.highlights] : [],
     descZh: x.descZh || '',
+    descEn: x.descEn || '',
+    descTh: x.descTh || '',
     contentHtml: x.contentHtml || '',
     daysContent: (x.daysContent || []).map((d) => ({ ...d, spots: [...(d.spots || [])], meals: [...(d.meals || [])] })),
     travelDate: x.travelDate ? x.travelDate.slice(0, 10) : null,
@@ -207,9 +222,13 @@ async function onSave() {
   try {
     const payload = {
       title: form.value.title.trim(),
+      titleEn: form.value.titleEn?.trim() || undefined,
+      titleTh: form.value.titleTh?.trim() || undefined,
       cover: form.value.cover?.trim() || undefined,
       highlights: form.value.highlights,
       descZh: form.value.descZh,
+      descEn: form.value.descEn || undefined,
+      descTh: form.value.descTh || undefined,
       contentHtml: form.value.contentHtml || undefined,
       daysContent: form.value.daysContent,
       travelDate: form.value.travelDate || null,
@@ -244,6 +263,39 @@ async function onDelete() {
   if (!confirm('确认删除该案例？')) return
   await deleteCase(id.value)
   router.push('/cases')
+}
+
+// —— AI 机器翻译（中文 → en/th，TMT；结果可编辑人工校对）——
+const translateBusy = ref(false)
+async function onTranslate() {
+  if (translateBusy.value) return
+  if (!form.value.descZh.trim() && !form.value.title.trim()) {
+    flash('请先填写标题或中文描述再翻译')
+    return
+  }
+  translateBusy.value = true
+  try {
+    const updated = await translateCase(id.value)
+    c.value = updated
+    // 回填翻译结果到编辑表单（保留其他未保存编辑）
+    form.value.titleEn = updated.titleEn || ''
+    form.value.titleTh = updated.titleTh || ''
+    form.value.descEn = updated.descEn || ''
+    form.value.descTh = updated.descTh || ''
+    flash('AI 翻译完成，请人工校对后保存')
+  } catch (e: any) {
+    const m = e?.response?.data?.message || e?.response?.data?.error || e?.message || '翻译失败'
+    flash(`翻译失败：${m}`)
+  } finally {
+    translateBusy.value = false
+  }
+}
+function transStatus(lang: 'en' | 'th'): { label: string; cls: string } | null {
+  const m = c.value?.transMeta?.[lang]
+  const has = lang === 'en' ? form.value.descEn || form.value.titleEn : form.value.descTh || form.value.titleTh
+  if (!has) return null
+  if (m?.status === 'reviewed') return { label: '已人工校对', cls: 'ok' }
+  return { label: 'AI 翻译 · 待校对', cls: 'ai' }
 }
 
 // 亮点 chips 编辑：支持逗号/顿号/分号分隔批量添加；重复项明确提示（不静默吞掉，避免"写了 N 个只有 M 个"）
@@ -334,6 +386,39 @@ function removeHighlight(i: number) {
             <input v-model="form.vehicle" class="field" placeholder="如 15座中巴" />
             <label>描述</label>
             <textarea v-model="form.descZh" class="field area" placeholder="图文产品页正文"></textarea>
+
+            <!-- AI 机器翻译 + 多语言校对（英/泰可编辑，保存即标记人工校对） -->
+            <div class="trans-bar">
+              <span class="trans-bar-tip">
+                AI 机器翻译为英文 / 泰文（发布时若缺失也会自动补翻），结果可编辑人工校对
+              </span>
+              <button class="btn sm" :disabled="translateBusy" @click="onTranslate">
+                {{ translateBusy ? '翻译中…' : '✨ AI 翻译' }}
+              </button>
+            </div>
+            <div class="trans-langs">
+              <div class="trans-lang">
+                <div class="trans-lang-h">
+                  <span class="trans-lang-name">🇺🇸 英文</span>
+                  <span v-if="transStatus('en')" class="badge" :class="transStatus('en')!.cls">
+                    {{ transStatus('en')!.label }}
+                  </span>
+                </div>
+                <input v-model="form.titleEn" class="field" placeholder="English title（可选）" />
+                <textarea v-model="form.descEn" class="field area" placeholder="English description（可选）"></textarea>
+              </div>
+              <div class="trans-lang">
+                <div class="trans-lang-h">
+                  <span class="trans-lang-name">🇹🇭 泰文</span>
+                  <span v-if="transStatus('th')" class="badge" :class="transStatus('th')!.cls">
+                    {{ transStatus('th')!.label }}
+                  </span>
+                </div>
+                <input v-model="form.titleTh" class="field" placeholder="Thai title（可选）" />
+                <textarea v-model="form.descTh" class="field area" placeholder="Thai description（可选）"></textarea>
+              </div>
+            </div>
+
             <label>内容 HTML（单文件微站）</label>
             <HtmlUploader v-model="form.contentHtml" />
 
@@ -479,6 +564,19 @@ function removeHighlight(i: number) {
 
 .field { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--text); width: 100%; box-sizing: border-box; }
 .area { min-height: 80px; resize: vertical; }
+
+/* AI 翻译 + 多语言校对 */
+.trans-bar { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin-top: 8px; background: var(--brand-50); border: 1px solid var(--brand-100); border-radius: 8px; }
+.trans-bar-tip { flex: 1; font-size: 12px; color: var(--brand-600); }
+.trans-langs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.trans-lang { border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: var(--surface-2); }
+.trans-lang-h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.trans-lang-name { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.trans-lang .field { margin-bottom: 6px; }
+.badge { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.badge.ai { background: var(--warn-50); color: var(--warn); }
+.badge.ok { background: var(--ok-50); color: var(--ok); }
+@media (max-width: 640px) { .trans-langs { grid-template-columns: 1fr; } }
 .btn { padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--brand); color: #fff; cursor: pointer; }
 .btn.sm { padding: 3px 10px; font-size: 12px; }
 .btn.ghost { background: transparent; color: var(--text); }
