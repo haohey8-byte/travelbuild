@@ -52,6 +52,7 @@ export interface CaseOgData {
   highlights?: string[]
   descZh?: string | null
   daysContent?: unknown
+  contentHtml?: string | null
   agency?: { name: string; logoUrl?: string | null; contacts?: unknown } | null
 }
 
@@ -61,6 +62,8 @@ export function renderCaseOgPage(
   origin: string,
 ): string {
   const title = esc(data.title?.trim() || data.destination || 'PandaKing9 定制案例')
+  // 底部落款机构：联合品牌（?via=agencyId）时显示该机构名，否则回落 PandaKing9
+  const orgName = data.agency?.name || 'PandaKing9'
   // OG 描述：descZh 前 200 字；无则用亮点标签拼接兜底；联合品牌落款追加在结尾
   const descBase =
     (data.descZh && String(data.descZh).trim()) ||
@@ -116,6 +119,13 @@ export function renderCaseOgPage(
     : ''
 
   const descBody = data.descZh ? `<div class="desc">${esc(data.descZh)}</div>` : ''
+
+  // 案例主体 HTML（运营上传的单文件微站，服务端 sanitize-html 后存储，已净化）。
+  // 微站案例的路线详情全在这里；直接内联渲染（同源净化 HTML，比 iframe 更利于 SEO 与直看）。
+  // 防破坏：把 </script 转义，避免其中的脚本片段串提前闭合本页 JSON-LD/页面结构。
+  const contentHtmlBlock = data.contentHtml
+    ? `<div class="microsite">${String(data.contentHtml).replace(/<\/script/gi, '<\\/script')}</div>`
+    : ''
 
   // 联合品牌条（via=agencyId 有效时）：logo + 名称 + 联系方式 + 「与 PandaKing9 联合提供」
   const agencyHtml = data.agency
@@ -194,6 +204,7 @@ export function renderCaseOgPage(
     .chip{display:inline-block;padding:4px 11px;border-radius:999px;background:#fdeef0;color:var(--brand-600);font-size:12.5px;font-weight:600;}
     .chips{margin-bottom:12px;}
     .desc{font-size:15px;color:var(--ink);white-space:pre-wrap;word-break:break-word;margin-bottom:6px;}
+    .microsite{margin-top:16px;}
     h3{font-size:15px;margin:18px 0 6px;color:var(--ink);}
     .days{margin-top:4px;}
     .day{border-top:1px solid var(--line);padding:12px 0;}
@@ -225,10 +236,11 @@ export function renderCaseOgPage(
       ${metaHtml}
       ${highlightsHtml}
       ${descBody}
+      ${contentHtmlBlock}
       ${daysHtml ? `<h3>行程安排</h3>${daysHtml}` : ''}
       ${agencyHtml}
     </div>
-    <div class="foot"><a href="${esc(origin)}/#/cases">查看 PandaKing9 更多案例</a> · 入境游定制旅行</div>
+    <div class="foot">${esc(orgName)} · 入境游定制旅行</div>
   </div>
 </body>
 </html>`

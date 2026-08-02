@@ -40,6 +40,7 @@ export class CaseOgController {
           highlights: c.highlights,
           descZh: c.descZh,
           daysContent: c.daysContent,
+          contentHtml: c.contentHtml,
           agency: c.agencyBranding
             ? {
                 name: c.agencyBranding.name,
