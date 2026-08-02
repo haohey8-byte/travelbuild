@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common'
 import * as HTMLParserNs from 'node-html-parser'
-import { tmtTranslate } from './tmt.translator'
+import { tmtTranslate, tmtTranslateBatch } from './tmt.translator'
 
 const HTMLParser = (HTMLParserNs as any).default ?? HTMLParserNs
 
@@ -20,13 +20,39 @@ interface DayContent {
 export class TranslateService {
   private readonly logger = new Logger(TranslateService.name)
 
-  /** 中文 → 目标语种（en/th） */
+  // ── TMT 全局限速（令牌桶）──────────────────────────────────────────────
+  // TMT 官方限制 5 次/秒（RequestLimitExceeded）。所有 TMT HTTP 调用（单条 + 批量）
+  // 都经 acquireSlot() 串行化到 ≤4 次/秒，留 1 次余量，避免并行 Promise.all 打爆配额。
+  // 用 gate 链式串行化，确保「读取下次允许时间 → sleep → 更新」在并发下也严格有序，
+  // 否则多个 await 同时读到同一 bucketNext 会全部一起放行（竞态）。
+  private bucketNext = 0
+  private readonly bucketInterval = 250 // ms → 4 次/秒
+  private gate: Promise<void> = Promise.resolve()
+
+  private acquireSlot(): Promise<void> {
+    const run = async () => {
+      const now = Date.now()
+      const wait = Math.max(0, this.bucketNext - now)
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait))
+      this.bucketNext = Date.now() + this.bucketInterval
+    }
+    const result = this.gate.then(() => run())
+    // 无论 run 成功失败都让链继续，后续调用挂在这之后
+    this.gate = result.then(
+      () => {},
+      () => {},
+    )
+    return result
+  }
+
+  /** 中文 → 目标语种（en/th），经全局限速闸门 */
   async translateZh(text: string, target: 'en' | 'th'): Promise<string> {
     const sid = process.env.TMT_SECRET_ID
     const skey = process.env.TMT_SECRET_KEY
     if (!sid || !skey) {
       throw new Error('翻译服务未配置：缺少 TMT_SECRET_ID/TMT_SECRET_KEY')
     }
+    await this.acquireSlot()
     const out = await tmtTranslate(
       { secretId: sid, secretKey: skey, region: process.env.TMT_REGION || 'ap-guangzhou' },
       text,
@@ -35,6 +61,23 @@ export class TranslateService {
     )
     this.logger.log(`tmt translate zh->${target} (${text.length} chars)`)
     return out
+  }
+
+  /** 批量翻译（经全局限速闸门）。空数组直接返回空数组。 */
+  private async batchTranslate(texts: string[], target: 'en' | 'th'): Promise<string[]> {
+    if (!texts.length) return []
+    const sid = process.env.TMT_SECRET_ID
+    const skey = process.env.TMT_SECRET_KEY
+    if (!sid || !skey) {
+      throw new Error('翻译服务未配置：缺少 TMT_SECRET_ID/TMT_SECRET_KEY')
+    }
+    await this.acquireSlot()
+    return tmtTranslateBatch(
+      { secretId: sid, secretKey: skey, region: process.env.TMT_REGION || 'ap-guangzhou' },
+      texts,
+      'zh',
+      target,
+    )
   }
 
   /** 字符串数组整体翻译（highlights 用），按出现顺序返回；过滤空字符串 */
@@ -104,43 +147,65 @@ export class TranslateService {
       `translateHtmlContent: ${textQueue.length} text nodes + ${attrQueue.length} attrs (target=${target})`,
     )
 
-    // 3. 逐项翻译（短文本，TMT 单节点 2000 字符内够用）
-    // 收集失败节点，超过 0 立即 throw，把 TMT 错误原文抛给前端（避免静默半翻译）
-    const failures: { kind: 'text' | 'attr'; original: string; err: string }[] = []
-    for (const t of textQueue) {
+    // 3. 合并所有可翻译字符串，按 ≤5000 字符分块，逐块批量翻译 + 写回。
+    //    分块批量大幅减少 TMT 请求数（82 个节点 → 几次请求），配合全局令牌桶彻底远离 5次/秒 限速。
+    //    单块失败即 throw，把 TMT 错误原文抛给前端（避免静默半翻译）。已成功写回的块不受影响。
+    type Item =
+      | { kind: 'text'; node: any; original: string }
+      | { kind: 'attr'; el: any; attr: string; original: string }
+
+    const items: Item[] = [
+      ...textQueue.map((t) => ({ kind: 'text' as const, node: t.node, original: t.original })),
+      ...attrQueue.map((a) => ({ kind: 'attr' as const, el: a.el, attr: a.attr, original: a.original })),
+    ]
+    if (!items.length) {
+      // node-html-parser v9 移除了 toHTML()，正确序列化方法是 toString()
+      return root.toString()
+    }
+
+    const CHUNK_CHARS = 5000 // 留余量：TMT 批量单次总长度 < 6000
+    const CHUNK_ITEMS = 20 // 兜底：单块条数上限，防未知隐藏限制
+    const chunks: Item[][] = []
+    let cur: Item[] = []
+    let sum = 0
+    for (const it of items) {
+      const len = (it.original || '').length
+      if (cur.length && (sum + len > CHUNK_CHARS || cur.length >= CHUNK_ITEMS)) {
+        chunks.push(cur)
+        cur = []
+        sum = 0
+      }
+      cur.push(it)
+      sum += len
+    }
+    if (cur.length) chunks.push(cur)
+
+    for (const chunk of chunks) {
+      const srcs = chunk.map((c) => c.original)
+      let outs: string[]
       try {
-        // node-html-parser v9：TextNode.text 是只读 getter，赋值会抛
-        // "Cannot set property text of [object Object] which has only a getter"。
-        // 用 rawText 直接写回（setter 存在），并手动转义 & <>（文本节点仅这三个需要转义）。
-        // 避开 textContent setter 内部 encode() 把所有非 ASCII 编成 &#xNNNN;
-        // 导致 HTML 体积膨胀 ~2.7x 的问题。
-        const translated = await this.translateZh(t.original, target)
-        t.node.rawText = translated
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
+        outs = await this.batchTranslate(srcs, target)
       } catch (e: any) {
         const msg = e?.message || String(e)
-        this.logger.warn(`text node translate fail: ${msg} | text=${t.original.slice(0, 60)}`)
-        failures.push({ kind: 'text', original: t.original, err: msg })
+        const sample = srcs[0]?.length > 40 ? srcs[0].slice(0, 40) + '…' : srcs[0] || ''
+        this.logger.warn(`batch translate fail: ${msg} | sample=${sample}`)
+        throw new BadRequestException(
+          `HTML 翻译失败 ${srcs.length} 处（首处样本：${sample}）：${msg}。请检查 TMT 密钥是否对该服务有调用权限，或先保存后稍后重试。`,
+        )
       }
-    }
-    for (const a of attrQueue) {
-      try {
-        a.el.setAttribute(a.attr, await this.translateZh(a.original, target))
-      } catch (e: any) {
-        const msg = e?.message || String(e)
-        this.logger.warn(`attr ${a.attr} translate fail: ${msg} | text=${a.original.slice(0, 60)}`)
-        failures.push({ kind: 'attr', original: a.original, err: msg })
-      }
-    }
-    if (failures.length) {
-      // 取首条失败的具体错误（多数情况是同一个 TMT 权限/网络问题），便于用户自查
-      const first = failures[0]
-      const sample = first.original.length > 40 ? first.original.slice(0, 40) + '…' : first.original
-      throw new BadRequestException(
-        `HTML 翻译失败 ${failures.length} 处（首处样本：${sample}）：${first.err}。请检查 TMT 密钥是否对该服务有调用权限，或先保存后稍后重试。`,
-      )
+      chunk.forEach((it, i) => {
+        const translated = outs[i] ?? ''
+        if (it.kind === 'text') {
+          // node-html-parser v9：TextNode.text 是只读 getter，必须用 rawText 写回并手动转义 & <>
+          // （文本节点仅这三个需转义，避开 textContent setter 内部 encode 把非 ASCII 编成 &#xNNNN; 膨胀 HTML）
+          it.node.rawText = translated
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+        } else {
+          it.el.setAttribute(it.attr, translated)
+        }
+      })
     }
 
     // node-html-parser v9 移除了 toHTML()，正确序列化方法是 toString()
