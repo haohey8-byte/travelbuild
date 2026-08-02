@@ -109,7 +109,16 @@ export class TranslateService {
     const failures: { kind: 'text' | 'attr'; original: string; err: string }[] = []
     for (const t of textQueue) {
       try {
-        t.node.text = await this.translateZh(t.original, target)
+        // node-html-parser v9：TextNode.text 是只读 getter，赋值会抛
+        // "Cannot set property text of [object Object] which has only a getter"。
+        // 用 rawText 直接写回（setter 存在），并手动转义 & <>（文本节点仅这三个需要转义）。
+        // 避开 textContent setter 内部 encode() 把所有非 ASCII 编成 &#xNNNN;
+        // 导致 HTML 体积膨胀 ~2.7x 的问题。
+        const translated = await this.translateZh(t.original, target)
+        t.node.rawText = translated
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
       } catch (e: any) {
         const msg = e?.message || String(e)
         this.logger.warn(`text node translate fail: ${msg} | text=${t.original.slice(0, 60)}`)
@@ -134,6 +143,8 @@ export class TranslateService {
       )
     }
 
-    return root.toHTML()
+    // node-html-parser v9 移除了 toHTML()，正确序列化方法是 toString()
+    // （HTMLElement.toString 内部 formatNode(tag, attrs, innerHTML)）
+    return root.toString()
   }
 }
