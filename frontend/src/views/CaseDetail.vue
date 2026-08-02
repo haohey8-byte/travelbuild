@@ -141,7 +141,7 @@ async function load() {
 onMounted(load)
 watch([id, via], load)
 
-// 复制「路线链接分享」文案（含出行时间/人数/用车 + 每日行程概览 + 详情链接）
+// 复制「路线链接分享」文案（精简两行：标题 + 详情链接，直接粘贴微信发送）
 const copying = ref(false)
 const copied = ref(false)
 const shareModal = ref(false)
