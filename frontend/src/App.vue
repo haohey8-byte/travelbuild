@@ -35,8 +35,8 @@ const nav = computed(() => {
   if (auth.user?.role === 'provincial') return base
   const items = [
     { to: '/routes/kanban', label: t('nav.routes'), icon: '🗺' },
-    { to: '/kb', label: t('nav.kb'), icon: '📚' },
     { to: '/cases', label: t('nav.cases'), icon: '🏆' },
+    { to: '/kb', label: t('nav.kb'), icon: '📚' },
     ...base,
   ]
   return items

@@ -3,7 +3,7 @@ import { createI18n } from 'vue-i18n'
 // 四语最小字典（EN/ZH/TH/RU），后续按 doc 扩字段
 const messages = {
   zh: {
-    nav: { routes: '路线管理', kb: '知识库', account: '账号', settings: '系统设置', cases: '案例展示' },
+    nav: { routes: '行程定制', kb: '知识库', account: '账号', settings: '系统设置', cases: '经典路线' },
     common: {
       role: '角色',
       loading: '加载中…',
