@@ -59,7 +59,6 @@ const form = ref<{
   daysContent: [], daysContentEn: [], daysContentTh: [],
   travelDate: null, groupSize: null, vehicle: null,
 })
-const msg = ref('')
 
 // 权限计算
 const isPandaking = computed(() => user.value?.role === 'pandaking')
@@ -204,9 +203,18 @@ async function copyCta(v: string, label: string) {
   flash(ok ? '已复制 ' + label + '，去粘贴添加好友即可' : '复制失败，请长按手动复制')
 }
 
-function flash(m: string) {
+// 顶部 flash 提示：支持 error 等级（红色 + 延长 6s）和 info 等级（2.6s）；error 会显示完整后端 message
+const msg = ref('')
+const msgLevel = ref<'info' | 'error'>('info')
+let flashTimer: ReturnType<typeof setTimeout> | null = null
+function flash(m: string, level: 'info' | 'error' = 'info') {
+  if (flashTimer) clearTimeout(flashTimer)
   msg.value = m
-  setTimeout(() => { if (msg.value === m) msg.value = '' }, 2600)
+  msgLevel.value = level
+  flashTimer = setTimeout(() => {
+    if (msg.value === m) msg.value = ''
+    flashTimer = null
+  }, level === 'error' ? 6000 : 2600)
 }
 
 function initForm(x: CaseItem) {
@@ -426,8 +434,13 @@ async function onTranslate(fields?: string[]) {
     form.value.contentHtmlTh = updated.contentHtmlTh || ''
     flash(wantAll ? '已按当前内容生成英文+泰文初稿，请校对后保存' : `已翻译 ${list.join('、')} 模块，请校对后保存`)
   } catch (e: any) {
-    const m = e?.response?.data?.message || e?.response?.data?.error || e?.message || '翻译失败'
-    flash(`翻译失败：${m}`)
+    // 优先取后端 message（含我们 throw 的 HTML 失败详情），其次 axios 默认 message
+    const m =
+      e?.response?.data?.message ||
+      (Array.isArray(e?.response?.data?.message) ? e.response.data.message.join('; ') : null) ||
+      e?.message ||
+      '翻译失败'
+    flash(`翻译失败：${m}`, 'error')
   } finally {
     translateBusy.value = false
   }
@@ -690,7 +703,7 @@ function removeHighlightLang(lang: 'en' | 'th', i: number) {
         </div>
       </div>
 
-      <p v-if="msg" class="msg">{{ msg }}</p>
+      <p v-if="msg" class="msg" :class="{ err: msgLevel === 'error' }">{{ msg }}</p>
     </template>
   </div>
 
@@ -840,7 +853,8 @@ function removeHighlightLang(lang: 'en' | 'th', i: number) {
 .btn.copied { background: var(--ok); border-color: var(--ok); }
 .btn.ai-btn { color: var(--brand-600); border-color: var(--brand-200); background: var(--brand-50); }
 .err { color: var(--danger); }
-.msg { color: var(--ok); font-size: 13px; margin-top: 10px; }
+.msg { color: var(--ok); font-size: 13px; margin-top: 10px; word-break: break-word; line-height: 1.5; }
+.msg.err { color: #fff; background: #d83a3a; border-radius: 6px; padding: 8px 12px; }
 
 /* 复制分享文案弹窗 */
 .modal-mask { position: fixed; inset: 0; background: rgba(18, 26, 41, .45); display: flex; align-items: center; justify-content: center; z-index: 60; padding: 20px; }

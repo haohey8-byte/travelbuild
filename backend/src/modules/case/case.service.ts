@@ -338,7 +338,7 @@ export class CaseService {
       meta.daysContent = { status: 'machine', at: nowIso }
     }
 
-    // contentHtml（DOM 级）
+    // contentHtml（DOM 级）：translateHtmlContent 内部遇错会 throw BadRequestException（含失败数+首处样本+TMT 错误）
     if (has('contentHtml') && srcContentHtml) {
       data.contentHtmlEn = await this.translate.translateHtmlContent(srcContentHtml, 'en')
       data.contentHtmlTh = await this.translate.translateHtmlContent(srcContentHtml, 'th')

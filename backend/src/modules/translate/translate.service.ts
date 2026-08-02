@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common'
+import { BadRequestException, Injectable, Logger } from '@nestjs/common'
 import * as HTMLParserNs from 'node-html-parser'
 import { tmtTranslate } from './tmt.translator'
 
@@ -105,19 +105,33 @@ export class TranslateService {
     )
 
     // 3. 逐项翻译（短文本，TMT 单节点 2000 字符内够用）
+    // 收集失败节点，超过 0 立即 throw，把 TMT 错误原文抛给前端（避免静默半翻译）
+    const failures: { kind: 'text' | 'attr'; original: string; err: string }[] = []
     for (const t of textQueue) {
       try {
         t.node.text = await this.translateZh(t.original, target)
       } catch (e: any) {
-        this.logger.warn(`skip text node translate: ${e?.message || e}`)
+        const msg = e?.message || String(e)
+        this.logger.warn(`text node translate fail: ${msg} | text=${t.original.slice(0, 60)}`)
+        failures.push({ kind: 'text', original: t.original, err: msg })
       }
     }
     for (const a of attrQueue) {
       try {
         a.el.setAttribute(a.attr, await this.translateZh(a.original, target))
       } catch (e: any) {
-        this.logger.warn(`skip attr ${a.attr} translate: ${e?.message || e}`)
+        const msg = e?.message || String(e)
+        this.logger.warn(`attr ${a.attr} translate fail: ${msg} | text=${a.original.slice(0, 60)}`)
+        failures.push({ kind: 'attr', original: a.original, err: msg })
       }
+    }
+    if (failures.length) {
+      // 取首条失败的具体错误（多数情况是同一个 TMT 权限/网络问题），便于用户自查
+      const first = failures[0]
+      const sample = first.original.length > 40 ? first.original.slice(0, 40) + '…' : first.original
+      throw new BadRequestException(
+        `HTML 翻译失败 ${failures.length} 处（首处样本：${sample}）：${first.err}。请检查 TMT 密钥是否对该服务有调用权限，或先保存后稍后重试。`,
+      )
     }
 
     return root.toHTML()
