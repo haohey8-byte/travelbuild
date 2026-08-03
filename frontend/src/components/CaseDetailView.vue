@@ -146,8 +146,9 @@ const caseContentHtml = computed(() => {
       </div>
     </section>
 
-    <!-- 底部联合品牌落款：运营主体/联合机构全称 & pandaking9 -->
-    <div class="cdv-foot">「“<span class="fn">{{ c.agencyBranding?.name || '随程国际旅行社' }}</span>” &amp; <span class="brand9">pandaking9</span>」联合定制旅行</div>
+    <!-- 底部落款：已知境外旅行社身份(agencyBranding)时显示联合定制旅行；否则 Pandaking9 与运营主体同一身份，仅显示单品牌 -->
+    <div v-if="c.agencyBranding" class="cdv-foot">「“<span class="fn">{{ c.agencyBranding.name }}</span>” &amp; <span class="brand9">pandaking9</span>」联合定制旅行</div>
+    <div v-else class="cdv-foot"><b>PandaKing9</b> · 定制旅行</div>
   </div>
 </template>
 

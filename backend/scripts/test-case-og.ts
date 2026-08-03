@@ -59,7 +59,7 @@ let pass = true
 
 // 场景1 校验：多语言切换条 + 三语言文本块 + iframe 微服务 + REVEAL_FIX/RESIZE_SCRIPT + 落款 + 无"更多案例"
 pass = check('微站案例-多语言与iframe', a, [
-  '成都某境外旅行社</span>” &amp; <span class="brand9">pandaking9', // 落款=机构名（联合品牌格式）
+  '成都某境外旅行社</span>" &amp; <span class="brand9">pandaking9', // 落款=机构名（联合品牌格式）
   'data-lang-btn="zh"', 'data-lang-btn="en"', 'data-lang-btn="th"', // 切换条
   'data-lang="zh"', 'data-lang="en"', 'data-lang="th"', // 三语言文本块
   '成都-四姑娘山-毕棚沟-达古冰川'.slice(0, 6),     // 中文标题
@@ -85,13 +85,15 @@ pass = check('微站案例-非zh默认隐藏', a, [
   'data-lang="th" style="display:none"',
 ], []) && pass
 
-// 场景2 校验：纯 PandaKing9 回落 + 无任何机构痕迹
+// 场景2 校验：纯 PandaKing9 回落（无 agency = 单品牌，不写"联合定制旅行"）
 pass = check('纯PandaKing9', b, [
-  '随程国际旅行社</span>” &amp; <span class="brand9">pandaking9', // 无 agency 回落运营主体全称
+  '<b>PandaKing9</b> · 定制旅行', // 无 agency 仅显示单品牌（Pandaking9 与运营主体同一身份）
   '摘要',
 ], [
   '查看 PandaKing9 更多案例',
   '成都某境外旅行社',
+  '联合定制旅行',        // 无境外旅行社身份时不应出现"联合定制旅行"
+  '随程国际旅行社',      // 不应再把运营主体当联合方列出
   'id="microsite"',     // 无 contentHtml 不应渲染 iframe 元素（CSS 类名常驻，故只校验元素）
 ]) && pass
 

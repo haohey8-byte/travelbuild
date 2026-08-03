@@ -142,8 +142,11 @@ export function renderCaseOgPage(
   origin: string,
 ): string {
   const titleZh = esc(data.title?.trim() || data.destination || 'PandaKing9 定制案例')
-  // 底部落款机构：联合品牌（?via=agencyId）时显示该机构全称；否则回落运营主体「随程国际旅行社」（PandaKing9 的法人旅行社全称）
-  const orgName = data.agency?.name || '随程国际旅行社'
+  // 底部落款：已知境外旅行社身份（?via=agencyId 有效）时，显示「"<机构全称>" & pandaking9」联合定制旅行；
+  // 否则 Pandaking9 与运营主体同为随程国际旅行社（同一身份），仅显示单品牌 PandaKing9，不写"联合定制旅行"（避免自己联合自己）。
+  const footHtml = data.agency
+    ? `<div class="foot">「"<span class="fn">${esc(data.agency.name)}</span>" &amp; <span class="brand9">pandaking9</span>」联合定制旅行</div>`
+    : `<div class="foot"><b>PandaKing9</b> · 定制旅行</div>`
 
   // OG 描述（始终中文）：descZh 前 200 字；无则用亮点标签拼接兜底；联合品牌落款追加在结尾
   const descBase =
@@ -331,7 +334,7 @@ export function renderCaseOgPage(
       <div class="lang-section">${daysBlock}</div>
       ${agencyHtml}
     </div>
-    <div class="foot">「“<span class="fn">${esc(orgName)}</span>” &amp; <span class="brand9">pandaking9</span>」联合定制旅行</div>
+    ${footHtml}
   </div>
   <script>
   (function(){
