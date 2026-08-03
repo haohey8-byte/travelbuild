@@ -23,6 +23,7 @@ const { user } = storeToRefs(auth)
 
 const isPandaking = computed(() => user.value?.role === 'pandaking')
 const isAgency = computed(() => user.value?.role === 'agency')
+const isProvincial = computed(() => user.value?.role === 'provincial')
 
 const list = ref<CaseItem[]>([])
 const loading = ref(true)
@@ -278,7 +279,7 @@ async function onDelete(c: CaseItem) {
     <!-- Hero -->
     <section class="hero">
       <h1 class="hero-h">案例中心</h1>
-      <p class="hero-sub">管理 PandaKing9 对外公开案例 — 派生、空建、HTML 微站三种创建路径</p>
+      <p class="hero-sub">三角色共创经典路线 — 新建空白案例、从行程定制导入、导入 HTML 微站三种创建方式</p>
       <div class="kpi-row">
         <div class="kpi">
           <div class="kpi-ico pri">★</div>
@@ -304,7 +305,7 @@ async function onDelete(c: CaseItem) {
       <button class="btn btn-primary" @click="openCreate">+ 新建空白案例</button>
       <button class="btn btn-soft" @click="openImport">↑ 导入 HTML 微站</button>
       <button class="btn btn-ghost" :class="{ active: deriveOpen }" @click="deriveOpen = !deriveOpen">
-        ↻ 从路线派生
+        ↻ 从行程定制导入
       </button>
       <div class="btn-spacer"></div>
       <span class="count">共 {{ view.length }} 个案例</span>
@@ -319,13 +320,13 @@ async function onDelete(c: CaseItem) {
     <!-- 派生面板（展开式） -->
     <section v-if="deriveOpen && user" class="derive-panel">
       <select v-model="routeId" class="field">
-        <option value="">选择已确认路线…</option>
+        <option value="">选择已确认行程…</option>
         <option v-for="r in routes" :key="r.id" :value="r.id">
           {{ routeName(r) }} · {{ safeText(r.destination) }}
         </option>
       </select>
       <button class="btn btn-primary btn-sm" :disabled="deriveBusy" @click="onDerive">
-        {{ deriveBusy ? '派生中…' : '派生脱敏草稿' }}
+        {{ deriveBusy ? '导入中…' : '导入脱敏草稿' }}
       </button>
       <p class="hint">服务端强制合规：自动屏蔽真名 / 证件 / 合同价</p>
     </section>
@@ -404,14 +405,11 @@ async function onDelete(c: CaseItem) {
             <div class="price">{{ c.priceRange || '—' }}</div>
           </div>
           <div v-if="user" class="card-actions" @click.stop>
-            <template v-if="isPandaking">
+            <template v-if="isPandaking || (isAgency && c.agencyId === user?.agencyId) || (isProvincial && c.createdById === user?.id)">
               <button v-if="c.status !== 'published'" class="btn btn-sm btn-soft" @click="onPublish(c)">发布</button>
               <button v-else class="btn btn-sm btn-ghost" @click="onUnpublish(c)">下线</button>
               <button class="btn btn-sm btn-ghost danger" @click="onDelete(c)">删除</button>
               <span class="card-edit" @click="openDetail(c)">编辑 →</span>
-            </template>
-            <template v-else-if="isAgency && c.agencyId === user?.agencyId">
-              <span class="card-edit" @click="openDetail(c)">校对 →</span>
             </template>
           </div>
         </div>
@@ -423,11 +421,11 @@ async function onDelete(c: CaseItem) {
       <div class="empty-illust"></div>
       <div class="empty-title">还没有匹配的案例</div>
       <div class="empty-sub">
-        {{ hasFilter() ? '试试清除筛选条件' : (user ? '新建空白案例、从路线派生，或导入 HTML 微站' : '暂无公开案例') }}
+        {{ hasFilter() ? '试试清除筛选条件' : (user ? '新建空白案例、从行程定制导入，或导入 HTML 微站' : '暂无公开案例') }}
       </div>
       <div v-if="user" style="display: flex; gap: 8px; justify-content: center">
         <button class="btn btn-primary" @click="openCreate">+ 新建空白案例</button>
-        <button class="btn btn-soft" @click="deriveOpen = true; !routeId && (routeId = routes[0]?.id || '')">↻ 从路线派生</button>
+        <button class="btn btn-soft" @click="deriveOpen = true; !routeId && (routeId = routes[0]?.id || '')">↻ 从行程定制导入</button>
       </div>
       <button v-else-if="hasFilter()" class="btn btn-ghost" @click="resetFilter">清除筛选</button>
     </section>

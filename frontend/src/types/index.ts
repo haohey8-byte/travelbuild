@@ -196,8 +196,9 @@ export interface CaseItem {
   daysContentTh?: DayContent[]
   contentHtmlEn?: string | null
   contentHtmlTh?: string | null
-  // 归属机构 + 翻译状态（P1）：agencyId=境外旅行社；transMeta={title/desc/highlights/daysContent/contentHtml:{status,at}}
+  // 归属机构 + 创建人 + 翻译状态（P1）：agencyId=境外旅行社；createdById=创建人（省地接社靠它识别本人）；transMeta={title/desc/highlights/daysContent/contentHtml:{status,at}}
   agencyId?: string | null
+  createdById?: string | null
   transMeta?: {
     title?: { status?: 'machine' | 'reviewed'; at?: string }
     desc?: { status?: 'machine' | 'reviewed'; at?: string }

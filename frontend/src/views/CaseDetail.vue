@@ -60,15 +60,17 @@ const form = ref<{
   travelDate: null, groupSize: null, vehicle: null,
 })
 
-// 权限计算
+// 权限计算（三角色共创 / 角色自发布）
 const isPandaking = computed(() => user.value?.role === 'pandaking')
 const isAgency = computed(() => user.value?.role === 'agency')
+const isProvincial = computed(() => user.value?.role === 'provincial')
 const canManage = computed(() => {
   if (isPandaking.value) return true
   if (isAgency.value && user.value?.agencyId && c.value?.agencyId === user.value.agencyId) return true
+  if (isProvincial.value && user.value?.id && c.value?.createdById === user.value.id) return true
   return false
 })
-const canEdit = computed(() => isPandaking.value)
+const canEdit = computed(() => canManage.value)
 const canReview = computed(() => isAgency.value && canManage.value)
 const isEditing = computed(() => mode.value === 'edit')
 const isReviewing = computed(() => mode.value === 'review')

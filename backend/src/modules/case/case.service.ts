@@ -67,18 +67,30 @@ export class CaseService {
     private readonly translate: TranslateService,
   ) {}
 
-  // 管理权限：pandaking 全量；agency 仅能管理归属自己机构的案例（agencyId 匹配）
-  private async assertCanManage(id: string, user: { role?: string; agencyId?: string | null }) {
+  // 归属判定（三角色共创 / 角色自发布）：
+  // - pandaking：任意案例。
+  // - agency：归属自己机构（agencyId 匹配）。
+  // - provincial：自己创建（createdById 匹配）；省地接社不归属机构，但可管自己建的草稿。
+  private isOwned(
+    c: { agencyId?: string | null; createdById?: string | null },
+    user: { role?: string; agencyId?: string | null; id?: string },
+  ): boolean {
+    if (user.role === 'pandaking') return true
+    if (user.role === 'agency' && user.agencyId && c.agencyId === user.agencyId) return true
+    if (user.role === 'provincial' && user.id && c.createdById === user.id) return true
+    return false
+  }
+
+  // 管理权限：归属自己（按上面 isOwned）即可操作；否则 403
+  private async assertCanManage(
+    id: string,
+    user: { role?: string; agencyId?: string | null; id?: string },
+  ) {
     if (user.role === 'pandaking') return
     const c = await this.prisma.case.findUnique({ where: { id } })
     if (!c) throw new NotFoundException('案例不存在')
-    if (user.agencyId && c.agencyId && c.agencyId === user.agencyId) return
+    if (this.isOwned(c, user)) return
     throw new ForbiddenException('无权操作该案例')
-  }
-
-  // PandaKing 专属操作（发布/下线/删除/AI 翻译）
-  private assertPandaking(user: { role?: string }) {
-    if (user.role !== 'pandaking') throw new ForbiddenException('该操作仅限 PandaKing')
   }
 
   // 公开列表：仅已发布（案例展示页）
@@ -91,14 +103,16 @@ export class CaseService {
 
   // 全量（需登录，含草稿/下线，供案例中心）：
   // - pandaking：全量（含草稿/下线/他人机构）。
-  // - agency：自己机构的全部状态（供校对草稿）+ 全网已发布案例（含 PandaKing9 发布的，三角色可见）。
-  // - provincial（或 agency 无 agencyId）：仅已发布案例（参考浏览，省地接社不归属案例管理）。
-  listAll(user: { role?: string; agencyId?: string | null }) {
+  // - agency：自己机构的全部状态（供编辑/发布草稿）+ 全网已发布案例（含 PandaKing9 发布的，三角色可见）。
+  // - provincial：自己创建的全部状态（供编辑/发布草稿）+ 全网已发布案例；不碰他人案例。
+  listAll(user: { role?: string; agencyId?: string | null; id?: string }) {
     let where: Record<string, unknown>
     if (user.role === 'pandaking') {
       where = {}
     } else if (user.role === 'agency' && user.agencyId) {
       where = { OR: [{ status: 'published' }, { agencyId: user.agencyId }] }
+    } else if (user.role === 'provincial' && user.id) {
+      where = { OR: [{ status: 'published' }, { createdById: user.id }] }
     } else {
       where = { status: 'published' }
     }
@@ -160,8 +174,9 @@ export class CaseService {
     return this.prisma.case.create({ data: { ...input, status: 'draft' } })
   }
 
-  // 由已确认路线派生脱敏案例（草稿态）：仅搬运安全字段，不含客户真名/证件/合同价
-  async publishFromRoute(routeId: string, createdById: string) {
+  // 由已确认行程定制派生脱敏案例（草稿态）：仅搬运安全字段，不含客户真名/证件/合同价；
+  // 归属取创建人（而非源路线机构），使派生案例归创建人所有，三角色均可自发布
+  async publishFromRoute(routeId: string, user: { role?: string; agencyId?: string | null; id: string }) {
     const route = await this.prisma.route.findUnique({
       where: { id: routeId },
       include: { versions: { orderBy: { createdAt: 'desc' }, take: 1 } },
@@ -198,9 +213,9 @@ export class CaseService {
         groupSize: route.groupSize ?? null,
         daysContent,
         status: 'draft',
-        createdById,
-        // 归属机构随源路线（route.agencyId 为境外旅行社 org id；省地接社 province 不归属案例管理）
-        agencyId: route.agencyId ?? null,
+        createdById: user.id,
+        // 归属机构取创建人（而非源路线机构）：派生案例归创建人所有，三角色均可自发布
+        agencyId: user.agencyId ?? null,
       },
     })
   }
@@ -208,7 +223,6 @@ export class CaseService {
   // 发布 + 自动补翻：未翻译的字段（title/desc/highlights/daysContent/contentHtml）→ TMT 生成 en/th 初稿；
   // 翻译失败不阻塞发布；transMeta 改为模块化状态（按 title/desc/.../contentHtml 维度）
   async publish(id: string, user: { role?: string; agencyId?: string | null }) {
-    this.assertPandaking(user)
     await this.assertCanManage(id, user)
     const c = await this.getById(id)
     const data: Record<string, unknown> = { status: 'published', publishedAt: new Date() }
@@ -275,7 +289,6 @@ export class CaseService {
       contentHtml?: string
     },
   ) {
-    this.assertPandaking(user)
     await this.assertCanManage(id, user)
     const c = await this.getById(id)
     const wantAll = !fields || fields.length === 0
@@ -369,7 +382,6 @@ export class CaseService {
   }
 
   async unpublish(id: string, user: { role?: string; agencyId?: string | null }) {
-    this.assertPandaking(user)
     await this.assertCanManage(id, user)
     return this.prisma.case.update({ where: { id }, data: { status: 'offline', publishedAt: null } })
   }
@@ -381,20 +393,21 @@ export class CaseService {
   ) {
     await this.assertCanManage(id, user)
 
-    // agency 仅允许修改多语言校对字段
+    const cur = await this.getById(id)
+    const owned = this.isOwned(cur, user)
+    // 他机构 agency 仅允许修改多语言校对字段；归属自己的案例（pandaking / 本机构 agency / 本人省地接社）放开全字段
     const AGENCY_EDITABLE_FIELDS = [
       'titleEn', 'titleTh', 'descEn', 'descTh',
       'highlightsEn', 'highlightsTh',
       'daysContentEn', 'daysContentTh',
       'contentHtmlEn', 'contentHtmlTh',
     ]
-    const isAgency = user.role === 'agency'
-    const filteredInput: Record<string, unknown> = isAgency
+    const isOtherAgency = user.role === 'agency' && !owned
+    const filteredInput: Record<string, unknown> = isOtherAgency
       ? Object.fromEntries(Object.entries(input).filter(([k]) => AGENCY_EDITABLE_FIELDS.includes(k)))
       : { ...input }
 
     // 人工保存多语言字段时，按模块标记 reviewed
-    const cur = await this.getById(id)
     const meta: Record<string, any> = ((cur.transMeta as any) || {})
     const nowIso = new Date().toISOString()
     const touched = (key: string) => key in filteredInput && filteredInput[key] !== undefined
@@ -411,7 +424,6 @@ export class CaseService {
   }
 
   async remove(id: string, user: { role?: string; agencyId?: string | null }) {
-    this.assertPandaking(user)
     await this.assertCanManage(id, user)
     return this.prisma.case.delete({ where: { id } })
   }
