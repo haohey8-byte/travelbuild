@@ -8,12 +8,14 @@ import type { CaseItem } from '@/types'
 
 // 案例只读视图（公开页 + 编辑预览共用，防样式漂移）
 // 渲染：语言切换 / 联合品牌条 / hero / 亮点 / 描述 / 主体 HTML / 每日图文（只读）
-const props = defineProps<{ c: CaseItem }>()
+// locale：校对台预览语言（zh/en/th），默认 zh
+const props = defineProps<{ c: CaseItem; locale?: 'zh' | 'en' | 'th' }>()
 
 type Locale = 'zh' | 'en' | 'th'
 
 // 公开页语言切换使用局部状态，避免影响全局导航/菜单
-const caseLocale = ref<Locale>('zh')
+// 校对台可通过 locale prop 覆盖初始语言（预览同步当前校对语言）
+const caseLocale = ref<Locale>(props.locale ?? 'zh')
 function setLocale(l: Locale) {
   caseLocale.value = l
 }

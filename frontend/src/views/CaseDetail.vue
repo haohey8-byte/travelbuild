@@ -9,6 +9,7 @@ import { fixImageUrl } from '@/utils/image'
 import ImageUploader from '@/components/ImageUploader.vue'
 import HtmlUploader from '@/components/HtmlUploader.vue'
 import CaseDetailView from '@/components/CaseDetailView.vue'
+import ReviewWorkbench from '@/components/ReviewWorkbench.vue'
 import type { CaseItem, DayContent } from '@/types'
 
 const route = useRoute()
@@ -121,6 +122,34 @@ const previewCase = computed<CaseItem | null>(() => {
     groupSize: form.value.groupSize ?? null,
     vehicle: form.value.vehicle || null,
   }
+})
+
+// 校对台双向绑定：从 form 派生翻译字段子集（ReviewWorkbench v-model）
+const reviewForm = computed({
+  get: () => ({
+    titleEn: form.value.titleEn,
+    titleTh: form.value.titleTh,
+    descEn: form.value.descEn,
+    descTh: form.value.descTh,
+    highlightsEn: form.value.highlightsEn,
+    highlightsTh: form.value.highlightsTh,
+    daysContentEn: form.value.daysContentEn,
+    daysContentTh: form.value.daysContentTh,
+    contentHtmlEn: form.value.contentHtmlEn,
+    contentHtmlTh: form.value.contentHtmlTh,
+  }),
+  set: (v) => {
+    form.value.titleEn = v.titleEn
+    form.value.titleTh = v.titleTh
+    form.value.descEn = v.descEn
+    form.value.descTh = v.descTh
+    form.value.highlightsEn = v.highlightsEn
+    form.value.highlightsTh = v.highlightsTh
+    form.value.daysContentEn = v.daysContentEn
+    form.value.daysContentTh = v.daysContentTh
+    form.value.contentHtmlEn = v.contentHtmlEn
+    form.value.contentHtmlTh = v.contentHtmlTh
+  },
 })
 
 async function load() {
@@ -359,6 +388,34 @@ async function onSave() {
     saving.value = false
   }
 }
+
+// 校对台按单元保存（ReviewWorkbench emit → 调 updateCase → 同步后端返回值到 form + c）
+async function onSaveUnit(_unit: string, payload: Record<string, unknown>) {
+  saving.value = true
+  msg.value = ''
+  try {
+    const updated = await updateCase(id.value, payload)
+    c.value = updated
+    // 同步后端最新值到表单
+    form.value.titleEn = updated.titleEn || ''
+    form.value.titleTh = updated.titleTh || ''
+    form.value.descEn = updated.descEn || ''
+    form.value.descTh = updated.descTh || ''
+    form.value.highlightsEn = updated.highlightsEn || []
+    form.value.highlightsTh = updated.highlightsTh || []
+    form.value.daysContentEn = updated.daysContentEn || []
+    form.value.daysContentTh = updated.daysContentTh || []
+    form.value.contentHtmlEn = updated.contentHtmlEn || ''
+    form.value.contentHtmlTh = updated.contentHtmlTh || ''
+    flash('校对已保存')
+  } catch (e: any) {
+    const m = e?.response?.data?.message || e?.message || '保存失败'
+    flash(`保存失败：${m}`, 'error')
+  } finally {
+    saving.value = false
+  }
+}
+
 async function onPublish() {
   await publishCase(id.value)
   await load()
@@ -543,7 +600,7 @@ function removeHighlightLang(lang: 'en' | 'th', i: number) {
           <button v-if="isEditing" class="btn ghost sm ai-btn" :disabled="translateBusy" :title="'基于中文内容一键生成英文+泰文初稿；发布时若缺失也会自动补翻。生成后请在下方双语区人工校对。'" @click="onTranslate()">
             {{ translateBusy ? '翻译中…' : '✨ AI翻译' }}
           </button>
-          <button class="btn sm" :disabled="saving" @click="onSave">{{ saving ? '加载中…' : '保存' }}</button>
+          <button class="btn sm" :disabled="saving" @click="onSave">{{ saving ? '加载中…' : isReviewing ? '保存并退出' : '保存' }}</button>
           <button class="btn ghost sm" @click="cancelWork">取消</button>
         </template>
       </div>
@@ -558,8 +615,11 @@ function removeHighlightLang(lang: 'en' | 'th', i: number) {
       <CaseDetailView v-if="!isWorking" :c="c" />
       <p v-if="!isWorking" class="wechat-tip">分享文案已复制，直接粘贴到微信发送即可</p>
 
-      <!-- 工作态：双栏（桌面左编辑右预览 / 移动 Tab） -->
-      <div v-if="isWorking" class="edit-layout" :class="tab">
+      <!-- 校对态：ReviewWorkbench 3 栏校对台（EN/TH 切换 + 按单元源对照编辑 + 预览） -->
+      <ReviewWorkbench v-if="isReviewing && c" v-model="reviewForm" :c="c" @save-unit="onSaveUnit" />
+
+      <!-- 编辑态（PandaKing）：双栏（桌面左编辑右预览 / 移动 Tab） -->
+      <div v-if="isEditing" class="edit-layout" :class="tab">
         <div class="edit-tabs">
           <button :class="{ active: tab === 'edit' }" @click="tab = 'edit'">编辑内容</button>
           <button :class="{ active: tab === 'preview' }" @click="tab = 'preview'">预览</button>
@@ -594,15 +654,7 @@ function removeHighlightLang(lang: 'en' | 'th', i: number) {
               <textarea v-model="form.descZh" class="field area" :placeholder="'填写中文描述'"></textarea>
             </template>
 
-            <!-- agency 校对态：中文源只读摘要 -->
-            <template v-if="isReviewing">
-              <div class="source-summary">
-                <div class="source-title">标题：{{ form.title || '未命名案例' }}</div>
-                <div v-if="form.descZh" class="source-desc">{{ form.descZh }}</div>
-              </div>
-            </template>
-
-            <!-- 双语校对区（edit / review 均显示） -->
+            <!-- 双语校对区（PandaKing 编辑态人均显示） -->
             <div class="trans-bar">
               <span class="trans-bar-tip">双语校对（人工修正 AI 翻译）</span>
             </div>
