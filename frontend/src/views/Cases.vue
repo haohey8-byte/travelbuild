@@ -440,16 +440,16 @@ async function onDelete(c: CaseItem) {
       </div>
       <div class="modal-body">
         <div class="field-row">
-          <div class="field-label">案例标题 *</div>
+          <div class="field-label">案例标题<span class="req">*</span></div>
           <input v-model="createForm.title" class="field-input" placeholder="例如：清迈兰纳文化 5 日深度游" />
         </div>
         <div class="row2">
           <div class="field-row">
-            <div class="field-label">目的地 *</div>
+            <div class="field-label">目的地<span class="req">*</span></div>
             <input v-model="createForm.destination" class="field-input" placeholder="如：清迈" />
           </div>
           <div class="field-row">
-            <div class="field-label">天数 *</div>
+            <div class="field-label">天数<span class="req">*</span></div>
             <input v-model="createForm.days" class="field-input" type="number" min="1" max="60" placeholder="如：5" />
           </div>
         </div>

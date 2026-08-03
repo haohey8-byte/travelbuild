@@ -102,11 +102,13 @@ async function onDelete(e: KbEntry) {
 
     <p v-if="err" class="err">{{ err }}</p>
     <div v-if="showForm && user" class="card form">
+      <label>标题<span class="req">*</span></label>
       <input v-model="form.title" class="field" placeholder="标题" />
       <select v-model="form.category" class="field">
         <option v-for="c in CATS" :key="c" :value="c">{{ c }}</option>
       </select>
       <input v-model="form.tags" class="field" placeholder="标签，逗号分隔" />
+      <label>正文<span class="req">*</span></label>
       <textarea v-model="form.body" class="field" rows="5" placeholder="正文"></textarea>
       <div class="row-actions">
         <button class="btn" @click="showForm = false">取消</button>

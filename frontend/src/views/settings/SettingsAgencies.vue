@@ -231,7 +231,7 @@ onMounted(load)
     <div v-if="showCreate" class="modal-backdrop" @click.self="showCreate = false">
       <div class="modal">
         <h3>新增旅行社</h3>
-        <div class="row"><label>旅行社名称</label><input v-model="newAgency.name" class="input" placeholder="环球旅行社" /></div>
+        <div class="row"><label>旅行社名称<span class="req">*</span></label><input v-model="newAgency.name" class="input" placeholder="环球旅行社" /></div>
         <div class="row"><label>角色</label>
           <select v-model="newAgency.role" class="input">
             <option value="agency">旅行社</option>
@@ -244,8 +244,8 @@ onMounted(load)
             <button v-if="newAgency.contact" class="clear-btn" type="button" @click="newAgency.contact = ''" aria-label="清除联系方式">×</button>
           </div>
         </div>
-        <div class="row"><label>登录手机</label><input :value="newAgency.phone" @input="onPhoneInput" class="input" type="tel" inputmode="numeric" maxlength="11" placeholder="旅行社账号登录手机号（11 位）" /></div>
-        <div class="row"><label>初始密码</label>
+        <div class="row"><label>登录手机<span class="req">*</span></label><input :value="newAgency.phone" @input="onPhoneInput" class="input" type="tel" inputmode="numeric" maxlength="11" placeholder="旅行社账号登录手机号（11 位）" /></div>
+        <div class="row"><label>初始密码<span class="req">*</span></label>
           <div class="input-wrap">
             <input v-model="newAgency.initPwd" class="input" type="text" placeholder="默认 pandaking8888" />
             <button v-if="newAgency.initPwd" class="clear-btn" type="button" @click="newAgency.initPwd = ''" aria-label="清除密码">×</button>
@@ -287,7 +287,7 @@ onMounted(load)
         <h3>修改旅行社「{{ editTarget.name }}」</h3>
         <div class="row"><label>旅行社编号</label><input :value="editTarget.id" class="input" disabled /></div>
         <div class="row"><label>角色</label><input :value="ROLE_LABEL[editTarget.role] || editTarget.role" class="input" disabled /></div>
-        <div class="row"><label>名称</label><input v-model="editForm.name" class="input" placeholder="旅行社名称" /></div>
+        <div class="row"><label>名称<span class="req">*</span></label><input v-model="editForm.name" class="input" placeholder="旅行社名称" /></div>
         <div class="row"><label>联系方式</label><input v-model="editForm.contact" class="input" placeholder="邮箱 / 电话（可选）" /></div>
         <div class="row"><label>Logo</label><input v-model="editForm.logoUrl" class="input" placeholder="https://… 机构 logo 图片 URL（联合品牌展示用，可选）" /></div>
         <div class="row col"><label>联合品牌联系方式</label>

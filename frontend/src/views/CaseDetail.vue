@@ -567,7 +567,7 @@ function removeHighlightLang(lang: 'en' | 'th', i: number) {
           <div class="edit-pane">
             <!-- PandaKing 完整编辑字段 -->
             <template v-if="isEditing">
-              <label>标题</label>
+              <label>标题<span class="req">*</span></label>
               <input v-model="form.title" class="field" :placeholder="'标题'" />
               <label>封面</label>
               <ImageUploader v-model="form.cover" :hint="'上传封面图'" />

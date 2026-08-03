@@ -161,7 +161,7 @@ const pkPeerTip = ref('')
 
 // —— 旅行社视角：利润②（成本①不可见，仅见报价A 作为成本基线）——
 const agProfit2Mode = ref<'amount' | 'percent'>('amount')
-const agProfit2 = ref(0)
+const agProfit2 = ref<number | null>(null)
 const agQuoteA = computed(() => Number(data.value?.quote?.totals?.quoteA) || 0)
 const agGuestPrice = computed(() => {
   const qa = agQuoteA.value
@@ -345,6 +345,11 @@ async function onAgSave() {
   agThText.value = ''
   agThErr.value = ''
   try {
+    if (agProfit2.value === null || agProfit2.value === undefined || Number.isNaN(agProfit2.value)) {
+      agSaveErr.value = '请填写利润②（对客总价的核心项，不能为空）'
+      agSaving.value = false
+      return
+    }
     if (!data.value) throw new Error('数据未加载')
     const res = await submitH5AgencyEdit(token, {
       itinerary: itinerary.value,
@@ -797,6 +802,7 @@ function goHome() {
               <input type="radio" v-model="agProfit2Mode" value="percent" /><span>百分比 %</span>
             </label>
           </div>
+          <label class="h5-label">利润②（对客总价核心，必填）<span class="req">*</span></label>
           <input
             v-model.number="agProfit2"
             type="number"

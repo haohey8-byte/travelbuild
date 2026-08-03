@@ -197,6 +197,13 @@ input:focus, select:focus, textarea:focus {
   width: 100%;
 }
 
+/* 必填标记：红色星号 */
+.req {
+  color: var(--danger);
+  font-weight: 600;
+  margin-left: 2px;
+}
+
 /* ---------- 状态徽章（统一语义色） ---------- */
 .badge {
   display: inline-flex;

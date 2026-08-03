@@ -441,7 +441,7 @@ async function confirmDelete() {
         <form @submit.prevent="onCreate">
           <h2>创建新路线</h2>
           <label>
-            <span>客户名（英文）*</span>
+            <span>客户名（英文）<span class="req">*</span></span>
             <input v-model="form.customerName" type="text" placeholder="Smith Family" autocomplete="off" />
           </label>
           <label>
@@ -449,7 +449,7 @@ async function confirmDelete() {
             <input v-model="form.customerNameCn" type="text" placeholder="史密斯一家" autocomplete="off" />
           </label>
           <label>
-            <span>目的地 *</span>
+            <span>目的地<span class="req">*</span></span>
             <input v-model="form.destination" type="text" placeholder="成都·九寨" autocomplete="off" />
           </label>
           <label>
@@ -457,7 +457,7 @@ async function confirmDelete() {
             <input v-model="form.country" type="text" placeholder="China" autocomplete="off" />
           </label>
           <label v-if="user?.role === 'pandaking'">
-            <span>旅行社 *</span>
+            <span>旅行社<span class="req">*</span></span>
             <select v-model="form.agencyId" :disabled="loadingAgencies">
               <option value="" disabled>{{ loadingAgencies ? '加载中…' : agencyError ? '机构加载失败' : '请选择旅行社' }}</option>
               <option v-for="a in agencies.filter(x => x.role === 'agency' && !x.disabled)" :key="a.id" :value="a.id">{{ a.name }}</option>

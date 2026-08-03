@@ -143,9 +143,9 @@ onMounted(loadAdmins)
     <div v-if="showCreate" class="modal-backdrop" @click.self="showCreate = false">
       <div class="modal">
         <h3>新增管理员</h3>
-        <div class="row"><label>名称</label><input v-model="newAdmin.name" class="input" placeholder="如 张三" /></div>
-        <div class="row"><label>手机号</label><input :value="newAdmin.phone" @input="onPhoneInput" class="input" type="tel" inputmode="numeric" maxlength="11" placeholder="11 位手机号" /></div>
-        <div class="row"><label>初始密码</label><input v-model="newAdmin.initPwd" class="input" type="password" placeholder="至少 8 位" /></div>
+        <div class="row"><label>名称<span class="req">*</span></label><input v-model="newAdmin.name" class="input" placeholder="如 张三" /></div>
+        <div class="row"><label>手机号<span class="req">*</span></label><input :value="newAdmin.phone" @input="onPhoneInput" class="input" type="tel" inputmode="numeric" maxlength="11" placeholder="11 位手机号" /></div>
+        <div class="row"><label>初始密码<span class="req">*</span></label><input v-model="newAdmin.initPwd" class="input" type="password" placeholder="至少 8 位" /></div>
         <p v-if="createErr" class="err">{{ createErr }}</p>
         <div class="modal-actions">
           <button class="btn" type="button" @click="showCreate = false">取消</button>

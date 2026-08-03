@@ -100,7 +100,7 @@ onMounted(() => {
       <p class="muted">使用手机号 + 密码登录控制台</p>
 
       <form class="form" @submit.prevent="onSubmit">
-        <label class="lbl">手机号</label>
+        <label class="lbl">手机号<span class="req">*</span></label>
         <input
           :value="phone" @input="onPhoneInput"
           class="input"
@@ -110,7 +110,7 @@ onMounted(() => {
           placeholder="11 位手机号"
           autocomplete="username"
         />
-        <label class="lbl">密码</label>
+        <label class="lbl">密码<span class="req">*</span></label>
         <div class="pwd-wrap">
           <input
             v-model="password"

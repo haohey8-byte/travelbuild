@@ -198,16 +198,16 @@ onMounted(async () => {
     <div v-else class="h5-card">
       <p class="hint">请填写路线基本信息，提交后 PandaKing 将收到并进入规划确认流程。</p>
 
-      <label class="h5-label">客户名称（外文）*</label>
+      <label class="h5-label">客户名称（外文）<span class="req">*</span></label>
       <input v-model="customerName" class="h5-input" :class="{ invalid: !customerName.trim() }" placeholder="如 Smith Family" />
 
       <label class="h5-label">客户中文名</label>
       <input v-model="customerNameCn" class="h5-input" placeholder="如 史密斯一家（选填）" />
 
-      <label class="h5-label">国家 *</label>
+      <label class="h5-label">国家<span class="req">*</span></label>
       <input v-model="country" class="h5-input" :class="{ invalid: !country.trim() }" placeholder="如 美国" />
 
-      <label class="h5-label">目的地 *</label>
+      <label class="h5-label">目的地<span class="req">*</span></label>
       <input v-model="destination" class="h5-input" :class="{ invalid: !destination.trim() }" placeholder="如 北京 / 上海" />
 
       <label class="h5-label">人数</label>
