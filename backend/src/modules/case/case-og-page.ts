@@ -142,8 +142,8 @@ export function renderCaseOgPage(
   origin: string,
 ): string {
   const titleZh = esc(data.title?.trim() || data.destination || 'PandaKing9 定制案例')
-  // 底部落款机构：联合品牌（?via=agencyId）时显示该机构名，否则回落 PandaKing9
-  const orgName = data.agency?.name || 'PandaKing9'
+  // 底部落款机构：联合品牌（?via=agencyId）时显示该机构全称；否则回落运营主体「随程国际旅行社」（PandaKing9 的法人旅行社全称）
+  const orgName = data.agency?.name || '随程国际旅行社'
 
   // OG 描述（始终中文）：descZh 前 200 字；无则用亮点标签拼接兜底；联合品牌落款追加在结尾
   const descBase =
@@ -306,7 +306,9 @@ export function renderCaseOgPage(
     .agency-co b{color:var(--brand);}
     .agency-c{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:10px;font-size:13px;color:var(--muted);border-top:1px dashed var(--line);padding-top:10px;}
     .c-item b{display:inline-block;min-width:44px;color:var(--ink);font-weight:600;margin-right:4px;}
-    .foot{text-align:center;color:var(--muted);font-size:12px;margin-top:20px;}
+    .foot{text-align:center;color:var(--muted);font-size:12.5px;margin-top:20px;line-height:1.6;}
+    .foot .fn{color:var(--ink);font-weight:700;}
+    .foot .brand9{color:var(--brand);font-weight:700;}
     .foot a{color:var(--brand-600);text-decoration:none;}
   </style>
 </head>
@@ -329,7 +331,7 @@ export function renderCaseOgPage(
       <div class="lang-section">${daysBlock}</div>
       ${agencyHtml}
     </div>
-    <div class="foot">${esc(orgName)} · 入境游定制旅行</div>
+    <div class="foot">「“<span class="fn">${esc(orgName)}</span>” &amp; <span class="brand9">pandaking9</span>」联合定制旅行</div>
   </div>
   <script>
   (function(){

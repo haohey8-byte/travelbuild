@@ -145,6 +145,9 @@ const caseContentHtml = computed(() => {
         <div v-if="d.notes" class="day-notes">{{ d.notes }}</div>
       </div>
     </section>
+
+    <!-- 底部联合品牌落款：运营主体/联合机构全称 & pandaking9 -->
+    <div class="cdv-foot">「“<span class="fn">{{ c.agencyBranding?.name || '随程国际旅行社' }}</span>” &amp; <span class="brand9">pandaking9</span>」联合定制旅行</div>
   </div>
 </template>
 
@@ -195,4 +198,7 @@ const caseContentHtml = computed(() => {
 .day-row .k { color: var(--muted); width: 40px; flex: none; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .day-notes { color: var(--muted); font-size: 14px; white-space: pre-wrap; margin-top: 4px; }
+.cdv-foot { text-align: center; color: var(--muted); font-size: 12.5px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); line-height: 1.6; }
+.cdv-foot .fn { color: var(--ink); font-weight: 700; }
+.cdv-foot .brand9 { color: var(--brand); font-weight: 700; }
 </style>
