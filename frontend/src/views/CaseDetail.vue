@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
-import { fetchCase, fetchCaseManage, updateCase, publishCase, unpublishCase, deleteCase, translateCase } from '@/api/cases'
+import { fetchCase, fetchCaseView, updateCase, publishCase, unpublishCase, deleteCase, translateCase } from '@/api/cases'
 import { useAuthStore } from '@/stores/auth'
 import { copyText, buildShareText } from '@/utils/share'
 import { fixImageUrl } from '@/utils/image'
@@ -71,7 +71,8 @@ const canManage = computed(() => {
   return false
 })
 const canEdit = computed(() => canManage.value)
-const canReview = computed(() => isAgency.value && canManage.value)
+// 跨机构人工校对：境外旅行社（agency）对【任意已发布】经典路线均可校对/修正翻译；结构字段仍仅 canManage 可改
+const canReview = computed(() => isAgency.value && c.value?.status === 'published')
 const isEditing = computed(() => mode.value === 'edit')
 const isReviewing = computed(() => mode.value === 'review')
 const isWorking = computed(() => isEditing.value || isReviewing.value)
@@ -129,7 +130,7 @@ async function load() {
   try {
     // 登录态走管理接口（草稿/下线也可打开编辑）；公开访问走公开接口（仅 published）
     c.value = auth.user
-      ? await fetchCaseManage(id.value)
+      ? await fetchCaseView(id.value, via.value)
       : await fetchCase(id.value, via.value)
   } catch (e: any) {
     if (e?.response?.status === 404) notFound.value = true

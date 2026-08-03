@@ -46,6 +46,13 @@ export class CaseController {
     return this.svc.getManage(id, user)
   }
 
+  // 可见性单查（登录态）：已发布或归属自己；详情页打开用，与管理权限解耦，根治非归属 agency 打开即 403
+  @Get('view/:id')
+  @UseGuards(JwtAuthGuard)
+  getView(@Param('id') id: string, @CurrentUser() user: AuthUser, @Query('via') via?: string) {
+    return this.svc.getView(id, user, via)
+  }
+
   // 管理：新建案例（归属机构取创建人 agencyId）
   @Post()
   @UseGuards(JwtAuthGuard)

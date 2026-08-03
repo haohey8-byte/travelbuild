@@ -30,6 +30,12 @@ export async function fetchCaseManage(id: string): Promise<CaseItem> {
   return data
 }
 
+// 可见性单查（登录态）：已发布或归属自己，与管理权限解耦；用于详情页打开，根治非归属 agency 打开即 403
+export async function fetchCaseView(id: string, via?: string): Promise<CaseItem> {
+  const { data } = await client.get(`/cases/view/${id}`, { params: via ? { via } : undefined })
+  return data
+}
+
 // 管理端：新建空白案例（最少字段，其余后补）
 export async function createCase(payload: Partial<CaseItem>): Promise<CaseItem> {
   const { data } = await client.post('/cases', payload)

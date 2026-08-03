@@ -150,6 +150,30 @@ export class CaseService {
     return this.getById(id)
   }
 
+  // 可见性单查（登录态）：用于详情页打开，与管理权限解耦。
+  // 可见条件：已发布（全网可看，带 via 内嵌联合品牌）或归属自己（含草稿/下线）。
+  // 否则 404（不泄露存在性）。根治「非归属 agency 打开即 403 无权操作」。
+  async getView(id: string, user: { role?: string; agencyId?: string | null; id?: string }, via?: string) {
+    const c = await this.prisma.case.findUnique({ where: { id } })
+    if (!c) throw new NotFoundException('案例不存在')
+    const owned = this.isOwned(c, user)
+    if (c.status !== 'published' && !owned) throw new NotFoundException('案例不存在')
+    // 已发布 + via 内嵌联合品牌档案
+    if (c.status === 'published' && via) {
+      const agency = await this.prisma.agency.findUnique({ where: { id: via } })
+      if (agency && !agency.disabled) {
+        const agencyBranding: AgencyBranding = {
+          id: agency.id,
+          name: agency.name,
+          logoUrl: agency.logoUrl,
+          contacts: agency.contacts,
+        }
+        return { ...c, agencyBranding }
+      }
+    }
+    return { ...c, agencyBranding: null }
+  }
+
   // 导入 HTML 微站直接创建草稿案例：sanitize → 抽 h1/<title> 作标题 → 建 draft
   // 目的地/天数/主题/价格等字段留空由运营在编辑页补全（HTML 内不可靠解析）
   async importCaseHtml(html: string, createdById: string, agencyId?: string | null) {
@@ -389,13 +413,10 @@ export class CaseService {
   async update(
     id: string,
     input: Partial<Omit<CreateCaseInput, 'createdById'>>,
-    user: { role?: string; agencyId?: string | null },
+    user: { role?: string; agencyId?: string | null; id?: string },
   ) {
-    await this.assertCanManage(id, user)
-
     const cur = await this.getById(id)
     const owned = this.isOwned(cur, user)
-    // 他机构 agency 仅允许修改多语言校对字段；归属自己的案例（pandaking / 本机构 agency / 本人省地接社）放开全字段
     const AGENCY_EDITABLE_FIELDS = [
       'titleEn', 'titleTh', 'descEn', 'descTh',
       'highlightsEn', 'highlightsTh',
@@ -403,20 +424,40 @@ export class CaseService {
       'contentHtmlEn', 'contentHtmlTh',
     ]
     const isOtherAgency = user.role === 'agency' && !owned
+    // 跨机构人工校对：仅允许翻译字段，且目标须为已发布案例；其余操作需管理权（归属方/PandaKing/本人省地接社）
+    if (isOtherAgency) {
+      const onlyTranslation = Object.keys(input).every((k) => AGENCY_EDITABLE_FIELDS.includes(k))
+      if (!onlyTranslation) throw new ForbiddenException('无权操作该案例')
+      if (cur.status !== 'published') throw new ForbiddenException('仅已发布案例可跨机构校对翻译')
+    } else {
+      await this.assertCanManage(id, user)
+    }
+
     const filteredInput: Record<string, unknown> = isOtherAgency
       ? Object.fromEntries(Object.entries(input).filter(([k]) => AGENCY_EDITABLE_FIELDS.includes(k)))
       : { ...input }
 
-    // 人工保存多语言字段时，按模块标记 reviewed
+    // 跨机构校对为较低信任路径：对 HTML 微站翻译字段做一次 sanitize 重洗，防注入
+    if (isOtherAgency) {
+      if (typeof filteredInput.contentHtmlEn === 'string') {
+        filteredInput.contentHtmlEn = this.uploadSvc.sanitizeHtml(filteredInput.contentHtmlEn).html
+      }
+      if (typeof filteredInput.contentHtmlTh === 'string') {
+        filteredInput.contentHtmlTh = this.uploadSvc.sanitizeHtml(filteredInput.contentHtmlTh).html
+      }
+    }
+
+    // 人工保存多语言字段时，按模块标记 reviewed + 校对人（审计）
     const meta: Record<string, any> = ((cur.transMeta as any) || {})
     const nowIso = new Date().toISOString()
+    const by = user.id
     const touched = (key: string) => key in filteredInput && filteredInput[key] !== undefined
 
-    if (touched('titleEn') || touched('titleTh')) meta.title = { status: 'reviewed', at: nowIso }
-    if (touched('descEn') || touched('descTh')) meta.desc = { status: 'reviewed', at: nowIso }
-    if (touched('highlightsEn') || touched('highlightsTh')) meta.highlights = { status: 'reviewed', at: nowIso }
-    if (touched('daysContentEn') || touched('daysContentTh')) meta.daysContent = { status: 'reviewed', at: nowIso }
-    if (touched('contentHtmlEn') || touched('contentHtmlTh')) meta.contentHtml = { status: 'reviewed', at: nowIso }
+    if (touched('titleEn') || touched('titleTh')) meta.title = { status: 'reviewed', at: nowIso, by }
+    if (touched('descEn') || touched('descTh')) meta.desc = { status: 'reviewed', at: nowIso, by }
+    if (touched('highlightsEn') || touched('highlightsTh')) meta.highlights = { status: 'reviewed', at: nowIso, by }
+    if (touched('daysContentEn') || touched('daysContentTh')) meta.daysContent = { status: 'reviewed', at: nowIso, by }
+    if (touched('contentHtmlEn') || touched('contentHtmlTh')) meta.contentHtml = { status: 'reviewed', at: nowIso, by }
 
     const data: Record<string, unknown> = { ...filteredInput }
     if (Object.keys(meta).length) data.transMeta = meta
