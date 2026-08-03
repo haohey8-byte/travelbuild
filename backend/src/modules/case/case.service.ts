@@ -89,9 +89,19 @@ export class CaseService {
     })
   }
 
-  // 全量（需登录，含草稿/下线，供管理后台）：pandaking 全量；agency 仅自己机构的案例
+  // 全量（需登录，含草稿/下线，供案例中心）：
+  // - pandaking：全量（含草稿/下线/他人机构）。
+  // - agency：自己机构的全部状态（供校对草稿）+ 全网已发布案例（含 PandaKing9 发布的，三角色可见）。
+  // - provincial（或 agency 无 agencyId）：仅已发布案例（参考浏览，省地接社不归属案例管理）。
   listAll(user: { role?: string; agencyId?: string | null }) {
-    const where = user.role === 'pandaking' ? {} : { agencyId: user.agencyId ?? '__none__' }
+    let where: Record<string, unknown>
+    if (user.role === 'pandaking') {
+      where = {}
+    } else if (user.role === 'agency' && user.agencyId) {
+      where = { OR: [{ status: 'published' }, { agencyId: user.agencyId }] }
+    } else {
+      where = { status: 'published' }
+    }
     return this.prisma.case.findMany({ where, orderBy: { createdAt: 'desc' } })
   }
 
