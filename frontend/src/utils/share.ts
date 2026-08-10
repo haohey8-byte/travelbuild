@@ -117,18 +117,21 @@ export function formatTravelDate(d?: string | null): string {
 // 文案刻意精简为「标题 + 详情链接」两行：避免冗长导致微信卡片臃肿、关键信息被折叠。
 //   第一行：{标题}（{目的地}）
 //   第二行：详情：{正式域名分享链接}
-export function buildShareText(c: CaseItem): string {
+// via 可选：agency 角色分享时显式传自身 agencyId，使公开页展示该旅行社品牌（白标）
+export function buildShareText(c: CaseItem, via?: string): string {
   const title = safeText(c.title) || safeText(c.destination) || '未命名案例'
   const dest = safeText(c.destination)
   const titleLine = `【${title}】${dest ? `（${dest}）` : ''}`
-  return `${titleLine}\n详情：${caseShareUrl(c)}`
+  return `${titleLine}\n详情：${caseShareUrl(c, via)}`
 }
 
 // 案例分享链接：指向后端 SSR 页（/share/case/:id，带 OG 注入）。
 // 与协作 H5（shareH5Url）同模式——hash 路由的 #/cases/:id 无法被微信爬虫解析，
 // 因此对外分享必须用无 hash 的 SSR 地址，粘贴到微信即可出标题/封面/描述卡片。
-export function caseShareUrl(c: CaseItem): string {
-  return `${SITE_ORIGIN}/share/case/${c.id}${c.agencyBranding ? '?via=' + c.agencyBranding.id : ''}`
+// via 优先级：显式传入 > case 自带的 agencyBranding.id；两者皆无则不带 via
+export function caseShareUrl(c: CaseItem, via?: string): string {
+  const vid = via || c.agencyBranding?.id
+  return `${SITE_ORIGIN}/share/case/${c.id}${vid ? '?via=' + vid : ''}`
 }
 
 // 统一协作通知文案构造：覆盖「规划提交（方案更新）」与「反馈意见」两类事件。

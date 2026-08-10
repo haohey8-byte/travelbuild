@@ -10,6 +10,7 @@ import ImageUploader from '@/components/ImageUploader.vue'
 import HtmlUploader from '@/components/HtmlUploader.vue'
 import CaseDetailView from '@/components/CaseDetailView.vue'
 import ReviewWorkbench from '@/components/ReviewWorkbench.vue'
+import { contactViews } from '@/utils/contacts'
 import type { CaseItem, DayContent } from '@/types'
 
 const route = useRoute()
@@ -184,7 +185,9 @@ async function onCopyShare() {
   if (!x || copying.value) return
   copying.value = true
   try {
-    const text = buildShareText(x)
+    // agency 角色：分享链接自动带自身机构 ID（公开页以该旅行社白标展示）；PandaKing 不带 via
+    const via = isAgency.value && user.value?.agencyId ? user.value.agencyId : undefined
+    const text = buildShareText(x, via)
     const ok = await copyText(text)
     if (ok) {
       copied.value = true
@@ -216,20 +219,25 @@ function onSelectShare(e: Event) {
   try { ta.setSelectionRange(0, ta.value.length) } catch { /* */ }
 }
 
-// —— 离站咨询 CTA（境外旅行社联合品牌获客：展示机构联系方式 + 一键复制 + 引导加 Line）——
+// —— 离站咨询 CTA（境外旅行社获客：展示机构联系方式 + 一键复制 + 引导加 Line）——
 const ctaOpen = ref(false)
 const ctaContacts = computed(() => {
-  const ct = c.value?.agencyBranding?.contacts as Record<string, string> | null | undefined
+  const ct = c.value?.agencyBranding?.contacts
   if (!ct) return []
-  const items: { k: string; label: string; v: string; link?: string }[] = []
-  if (ct.line) items.push({ k: 'line', label: 'Line', v: ct.line })
-  if (ct.facebook) items.push({ k: 'facebook', label: 'Facebook', v: ct.facebook })
-  if (ct.wechat) items.push({ k: 'wechat', label: '微信', v: ct.wechat })
-  if (ct.phone) items.push({ k: 'phone', label: '电话', v: ct.phone, link: `tel:${ct.phone}` })
-  if (ct.email) items.push({ k: 'email', label: '邮箱', v: ct.email, link: `mailto:${ct.email}` })
-  return items
+  return contactViews(ct).map((it) => ({
+    k: it.platform,
+    label: it.label,
+    v: it.value,
+    link: it.href, // 无链接则 undefined
+    copyable: !!it.copyable,
+  }))
 })
-const ctaLine = computed(() => c.value?.agencyBranding?.contacts?.line)
+const ctaLine = computed(() => {
+  const ct = c.value?.agencyBranding?.contacts
+  if (!ct) return ''
+  const line = contactViews(ct).find((it) => it.platform === 'line')
+  return line ? line.value : ''
+})
 async function copyCta(v: string, label: string) {
   const ok = await copyText(v)
   flash(ok ? '已复制 ' + label + '，去粘贴添加好友即可' : '复制失败，请长按手动复制')
@@ -789,7 +797,6 @@ function removeHighlightLang(lang: 'en' | 'th', i: number) {
           <span v-else class="cta-logo fb">{{ (c?.agencyBranding?.name || '?').slice(0, 1) }}</span>
           <div>
             <div class="cta-name">{{ c?.agencyBranding?.name }}</div>
-            <div class="cta-co">联合提供</div>
           </div>
         </div>
         <p class="cta-tip">行程与报价咨询，请通过以下方式联系：</p>
@@ -809,7 +816,7 @@ function removeHighlightLang(lang: 'en' | 'th', i: number) {
             <button class="btn btn-sm btn-ghost" @click="copyCta(it.v, it.label)">复制</button>
           </div>
         </div>
-        <p class="cta-foot">本案例由 {{ c?.agencyBranding?.name || '' }} 与 PandaKing9 联合提供 · 定制旅行</p>
+        <p class="cta-foot">由 {{ c?.agencyBranding?.name || '' }} 提供</p>
       </div>
     </div>
   </div>

@@ -109,6 +109,39 @@ function buildDaysHtml(daysContent: unknown, origin: string): string {
     .join('')}</div>`
 }
 
+// —— 联系方式自由列表渲染（白标：仅展示机构自身，不出现 PandaKing9）——
+// platform 匹配已知平台给特殊交互；未知平台仅纯文本（不生成链接，防注入假链接）
+function contactLabel(p: string): string {
+  const m: Record<string, string> = { line: 'LINE', wechat: '微信' }
+  return m[p] || cap(p)
+}
+function cap(s: string): string {
+  return s ? s[0].toUpperCase() + s.slice(1) : s
+}
+function escContactLink(p: string, v: string): string {
+  switch (p) {
+    case 'line':
+    case 'wechat':
+      return `<span class="c-item"><b>${esc(contactLabel(p))}</b>${esc(v)}<button type="button" class="c-copy" onclick="copyVal('${attrEsc(v)}')">复制</button></span>`
+    case 'whatsapp': {
+      const digits = v.replace(/[^\d]/g, '')
+      return digits
+        ? `<span class="c-item"><b>WhatsApp</b><a href="https://wa.me/${digits}" target="_blank" rel="noopener">${esc(v)} · 发消息</a></span>`
+        : `<span class="c-item"><b>WhatsApp</b>${esc(v)}</span>`
+    }
+    case 'facebook': {
+      const href = /^https?:\/\//.test(v) ? v : 'https://' + v
+      return `<span class="c-item"><b>Facebook</b><a href="${attrEsc(href)}" target="_blank" rel="noopener">${esc(v)} · 查看主页</a></span>`
+    }
+    case 'phone':
+      return `<span class="c-item"><b>电话</b><a href="tel:${attrEsc(v)}">${esc(v)}</a></span>`
+    case 'email':
+      return `<span class="c-item"><b>邮箱</b><a href="mailto:${attrEsc(v)}">${esc(v)}</a></span>`
+    default:
+      return `<span class="c-item"><b>${esc(cap(p))}</b>${esc(v)}</span>`
+  }
+}
+
 export interface CaseOgData {
   id: string
   title?: string | null
@@ -142,20 +175,23 @@ export function renderCaseOgPage(
   origin: string,
 ): string {
   const titleZh = esc(data.title?.trim() || data.destination || 'PandaKing9 定制案例')
-  // 底部落款：已知境外旅行社身份（?via=agencyId 有效）时，显示「"<机构全称>" & pandaking9」联合定制旅行；
-  // 否则 Pandaking9 与运营主体同为随程国际旅行社（同一身份），仅显示单品牌 PandaKing9，不写"联合定制旅行"（避免自己联合自己）。
+  // 底部落款（白标规则）：
+  // - 有 agency（?via= 有效）→ 仅展示机构名，不出现 "提供/联合/PandaKing9" 字样；
+  // - 无 agency → PandaKing9 平台兜底。
   const footHtml = data.agency
-    ? `<div class="foot">「"<span class="fn">${esc(data.agency.name)}</span>" &amp; <span class="brand9">pandaking9</span>」联合定制旅行</div>`
+    ? `<div class="foot"><span class="fn">${esc(data.agency.name)}</span></div>`
     : `<div class="foot"><b>PandaKing9</b> · 定制旅行</div>`
 
-  // OG 描述（始终中文）：descZh 前 200 字；无则用亮点标签拼接兜底；联合品牌落款追加在结尾
+  // OG 描述（始终中文）：descZh 前 200 字；无则用亮点标签拼接兜底；有 agency 时落款追加机构名（不出现 PandaKing9）
   const descBase =
     (data.descZh && String(data.descZh).trim()) ||
     (Array.isArray(data.highlights) && data.highlights.filter(Boolean).join('、')) ||
     `${esc(data.destination || '')} ${data.days || 0}天定制行程`
-  const agencyLine = data.agency ? `本案例由 ${data.agency.name} 与 PandaKing9 联合提供` : ''
+  const agencyLine = data.agency ? `本案例由 ${data.agency.name} 提供` : ''
   const desc = [String(descBase).slice(0, 200), agencyLine].filter(Boolean).join('\n')
   const cover = imgUrl(data.cover, origin) || `${origin}/share/og-cover.png`
+  // 页面 title：有 agency 时去掉 "| PandaKing9" 后缀（纯白标）
+  const pageTitle = data.agency ? titleZh : `${titleZh} | PandaKing9`
 
   const meta: string[] = []
   if (data.days) meta.push(`${data.days} 天`)
@@ -208,31 +244,21 @@ export function renderCaseOgPage(
     ? `<div class="microsite-wrap"><iframe id="microsite" class="microsite-frame" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" srcdoc="${zhMicroSrcdoc}"></iframe></div>`
     : ''
 
-  // 联合品牌条（via=agencyId 有效时）：logo + 名称 + 联系方式 + 「与 PandaKing9 联合提供」
+  // 品牌条（via=agencyId 有效时）：纯白标 — 仅机构 Logo + 名称 + 联系方式，不出现 PandaKing9
   const agencyHtml = data.agency
     ? (() => {
         const a = data.agency
         const logo = a.logoUrl ? imgUrl(a.logoUrl, origin) : ''
-        const c = (a.contacts as Record<string, string> | null) ?? {}
-        const contactLines: string[] = []
-        const LABELS: [string, string][] = [
-          ['facebook', 'Facebook'],
-          ['line', 'LINE'],
-          ['wechat', '微信'],
-          ['phone', '电话'],
-          ['email', '邮箱'],
-        ]
-        for (const [k, label] of LABELS) {
-          const v = c[k]
-          if (v) contactLines.push(`<span class="c-item"><b>${label}</b>${esc(v)}</span>`)
-        }
+        const items = Array.isArray(a.contacts) ? a.contacts : []
+        const contactLines = items.map((it: any) =>
+          escContactLink(String(it?.platform ?? '').toLowerCase(), String(it?.value ?? '')),
+        )
         return `
       <div class="agency">
         <div class="agency-h">
           ${logo ? `<img class="agency-logo" src="${esc(logo)}" alt="${esc(a.name)}" loading="lazy" />` : '<span class="agency-logo-fallback">' + esc(a.name.slice(0, 1)) + '</span>'}
           <div class="agency-meta">
             <div class="agency-name">${esc(a.name)}</div>
-            <div class="agency-co">与 <b>PandaKing9</b> 联合提供</div>
           </div>
         </div>
         ${contactLines.length ? `<div class="agency-c">${contactLines.join('')}</div>` : ''}
@@ -249,7 +275,7 @@ export function renderCaseOgPage(
     url: shareUrl,
     provider: {
       '@type': 'Organization',
-      name: data.agency ? `${data.agency.name} 与 PandaKing9` : 'PandaKing9',
+      name: data.agency ? data.agency.name : 'PandaKing9',
     },
   })
 
@@ -258,7 +284,7 @@ export function renderCaseOgPage(
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>${titleZh} | PandaKing9</title>
+  <title>${pageTitle}</title>
   <meta name="description" content="${esc(desc.replace(/\n/g, ' '))}" />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="${titleZh}" />
@@ -309,6 +335,10 @@ export function renderCaseOgPage(
     .agency-co b{color:var(--brand);}
     .agency-c{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:10px;font-size:13px;color:var(--muted);border-top:1px dashed var(--line);padding-top:10px;}
     .c-item b{display:inline-block;min-width:44px;color:var(--ink);font-weight:600;margin-right:4px;}
+    .c-item a{color:#1a6cff;text-decoration:none;word-break:break-all;}
+    .c-item a:hover{text-decoration:underline;}
+    .c-copy{margin-left:6px;padding:1px 8px;font-size:12px;border:1px solid #ccd3e0;border-radius:4px;background:#fff;color:var(--ink);cursor:pointer;font-family:inherit;}
+    .c-copy:hover{border-color:var(--brand-600);color:var(--brand-600);}
     .foot{text-align:center;color:var(--muted);font-size:12.5px;margin-top:20px;line-height:1.6;}
     .foot .fn{color:var(--ink);font-weight:700;}
     .foot .brand9{color:var(--brand);font-weight:700;}
@@ -322,7 +352,7 @@ export function renderCaseOgPage(
       <button type="button" data-lang-btn="en">English</button>
       <button type="button" data-lang-btn="th">ไทย</button>
     </div>
-    <div class="brand"><span class="dot"></span><b>PandaKing9</b> · 定制旅行</div>
+    ${data.agency ? '' : '<div class="brand"><span class="dot"></span><b>PandaKing9</b> · 定制旅行</div>'}
     <div class="card">
       ${data.cover ? `<img class="cover" src="${esc(cover)}" alt="${titleZh}" />` : ''}
       <div class="lang-section">${titleBlock}</div>
@@ -337,6 +367,18 @@ export function renderCaseOgPage(
     ${footHtml}
   </div>
   <script>
+  // 品牌条 Line/微信「复制」按钮：Clipboard API 优先，iOS/微信 webview 退化 execCommand
+  function copyVal(v){
+    try{
+      if(navigator.clipboard && window.isSecureContext){ navigator.clipboard.writeText(v).then(function(){alert('已复制');},function(){fallbackCopy(v);}); }
+      else{ fallbackCopy(v); }
+    }catch(e){ fallbackCopy(v); }
+  }
+  function fallbackCopy(v){
+    try{
+      var t=document.createElement('textarea');t.value=v;t.style.position='fixed';t.style.opacity='0';document.body.appendChild(t);t.select();document.execCommand('copy');document.body.removeChild(t);alert('已复制');
+    }catch(e){ prompt('请手动复制：', v); }
+  }
   (function(){
     var caseId = ${JSON.stringify(data.id)};
     var REVEAL_FIX = ${JSON.stringify(REVEAL_FIX).replace(/<\//g, '<\\/')};

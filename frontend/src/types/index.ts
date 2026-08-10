@@ -100,13 +100,10 @@ export interface AdminView {
   createdAt: string
 }
 
-// 机构联系方式（联合品牌档案，P0）
-export interface AgencyContacts {
-  facebook?: string
-  line?: string
-  wechat?: string
-  phone?: string
-  email?: string
+// 机构联系方式（自由列表：platform 为平台 key 小写；未知平台展示为纯文本，无需改代码即可扩展）
+export interface ContactItem {
+  platform: string
+  value: string
 }
 
 export interface Agency {
@@ -115,7 +112,7 @@ export interface Agency {
   role: Role
   contact?: string | null
   logoUrl?: string | null // P0 联合品牌：机构 logo
-  contacts?: AgencyContacts | null // P0 联合品牌：联系方式
+  contacts?: ContactItem[] | null // 联合品牌：联系方式自由列表
   disabled?: boolean // 禁用：仅从选择下拉框移除，不阻断登录
   createdAt: string
   loginAccount?: string | null // 关联登录账号的手机号（后台登录键）；无账号则 null
@@ -164,7 +161,7 @@ export interface AgencyBranding {
   id: string
   name: string
   logoUrl: string | null
-  contacts: AgencyContacts | null
+  contacts: ContactItem[] | null
 }
 
 // 案例展示（公开化内容模型，P0）

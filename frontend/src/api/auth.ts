@@ -7,6 +7,7 @@ import type {
   Agency,
   AgencyView,
   AdminView,
+  ContactItem,
 } from '@/types'
 
 // 认证 —— 对应 doc/04-接口契约/账号与认证.md
@@ -101,7 +102,7 @@ export async function updateAgency(
     contact?: string
     disabled?: boolean
     logoUrl?: string
-    contacts?: { facebook?: string; line?: string; wechat?: string; phone?: string; email?: string }
+    contacts?: ContactItem[] // 联系方式自由列表 [{platform, value}]
   },
 ): Promise<Agency> {
   const { data } = await client.patch(`/auth/agencies/${id}`, body)

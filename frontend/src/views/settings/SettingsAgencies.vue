@@ -3,7 +3,8 @@ import { onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { fetchAgencies, updateAgency } from '@/api/auth'
 import { copyText } from '@/utils/share'
-import type { Agency, AgencyView, Role } from '@/types'
+import { normalizeContacts } from '@/utils/contacts'
+import type { Agency, AgencyView, ContactItem, Role } from '@/types'
 
 const auth = useAuthStore()
 
@@ -40,7 +41,7 @@ const editForm = ref({
   name: '',
   contact: '',
   logoUrl: '',
-  contacts: { facebook: '', line: '', wechat: '', phone: '', email: '' },
+  contacts: [] as ContactItem[],
 })
 const editErr = ref('')
 const editSaving = ref(false)
@@ -63,13 +64,8 @@ async function onEdit(a: Agency) {
     name: a.name,
     contact: a.contact || '',
     logoUrl: a.logoUrl || '',
-    contacts: {
-      facebook: a.contacts?.facebook || '',
-      line: a.contacts?.line || '',
-      wechat: a.contacts?.wechat || '',
-      phone: a.contacts?.phone || '',
-      email: a.contacts?.email || '',
-    },
+    // 兼容旧格式（对象）与现格式（数组）
+    contacts: normalizeContacts(a.contacts),
   }
   editErr.value = ''
 }
@@ -83,13 +79,10 @@ async function onSaveEdit() {
       name: editForm.value.name.trim(),
       contact: editForm.value.contact.trim() || undefined,
       logoUrl: editForm.value.logoUrl.trim() || undefined,
-      contacts: {
-        facebook: editForm.value.contacts.facebook.trim(),
-        line: editForm.value.contacts.line.trim(),
-        wechat: editForm.value.contacts.wechat.trim(),
-        phone: editForm.value.contacts.phone.trim(),
-        email: editForm.value.contacts.email.trim(),
-      },
+      // 提交数组：platform 转小写、value 去首尾空白；空值行丢弃
+      contacts: editForm.value.contacts
+        .map((c) => ({ platform: c.platform.trim().toLowerCase(), value: c.value.trim() }))
+        .filter((c) => c.platform && c.value),
     })
     replaceLocal(updated)
     editTarget.value = null
@@ -290,13 +283,25 @@ onMounted(load)
         <div class="row"><label>名称<span class="req">*</span></label><input v-model="editForm.name" class="input" placeholder="旅行社名称" /></div>
         <div class="row"><label>联系方式</label><input v-model="editForm.contact" class="input" placeholder="邮箱 / 电话（可选）" /></div>
         <div class="row"><label>Logo</label><input v-model="editForm.logoUrl" class="input" placeholder="https://… 机构 logo 图片 URL（联合品牌展示用，可选）" /></div>
-        <div class="row col"><label>联合品牌联系方式</label>
-          <div class="contacts-grid">
-            <input v-model="editForm.contacts.wechat" class="input" placeholder="微信（可选）" />
-            <input v-model="editForm.contacts.line" class="input" placeholder="Line（可选）" />
-            <input v-model="editForm.contacts.facebook" class="input" placeholder="Facebook（可选）" />
-            <input v-model="editForm.contacts.phone" class="input" placeholder="电话（可选）" />
-            <input v-model="editForm.contacts.email" class="input" placeholder="邮箱（可选）" />
+        <div class="row col"><label>社交媒体</label>
+          <div class="contacts-edit">
+            <div v-for="(c, i) in editForm.contacts" :key="i" class="contact-row">
+              <input v-model="c.platform" class="input contact-platform" list="platform-suggest" placeholder="平台名，如 WhatsApp / Line / Facebook" />
+              <input v-model="c.value" class="input contact-value" :placeholder="'填写 ' + (c.platform || '账号') + ' ID / 号码 / 链接'" />
+              <button class="clear-btn" type="button" @click="editForm.contacts.splice(i, 1)" aria-label="删除">×</button>
+            </div>
+            <datalist id="platform-suggest">
+              <option value="WhatsApp" />
+              <option value="Line" />
+              <option value="Facebook" />
+              <option value="WeChat" />
+              <option value="Instagram" />
+              <option value="Telegram" />
+              <option value="Phone" />
+              <option value="Email" />
+            </datalist>
+            <button class="btn ghost sm" type="button" @click="editForm.contacts.push({ platform: '', value: '' })">+ 添加社交媒体</button>
+            <p class="muted small">平台名建议从下拉选择（WhatsApp/Line/Facebook/Instagram/Telegram/Phone/Email），也可自由填写任意平台；填写的平台会展示在分享页，未知平台以纯文本展示。</p>
           </div>
         </div>
         <p class="muted">角色为结构性字段（决定编号前缀语义），此处锁定不可修改。</p>
@@ -343,6 +348,13 @@ onMounted(load)
 .row.col { align-items: flex-start; }
 .row.col label { padding-top: 9px; }
 .contacts-grid { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.contacts-edit { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.contact-row { display: flex; align-items: center; gap: 6px; }
+.contact-row .contact-platform { flex: 1; }
+.contact-row .contact-value { flex: 2; }
+.contact-row .clear-btn { position: static; flex: none; }
+.contacts-edit .btn.ghost.sm { align-self: flex-start; }
+.small { font-size: 12px; }
 .row label { color: var(--muted); width: 72px; flex: none; font-size: 13px; }
 .input { flex: 1; padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); font-size: 14px; }
 .input-wrap { position: relative; flex: 1; display: flex; align-items: center; }

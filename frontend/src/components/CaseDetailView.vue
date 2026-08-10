@@ -2,8 +2,9 @@
 import { computed, ref } from 'vue'
 import CaseHtmlView from './CaseHtmlView.vue'
 import { safeText } from '@/utils/name'
-import { formatTravelDate } from '@/utils/share'
+import { formatTravelDate, copyText } from '@/utils/share'
 import { fixImageUrl } from '@/utils/image'
+import { contactViews } from '@/utils/contacts'
 import type { CaseItem } from '@/types'
 
 // 案例只读视图（公开页 + 编辑预览共用，防样式漂移）
@@ -46,15 +47,16 @@ const transCredit = computed(() => {
 
 const contactList = computed(() => {
   const ct = props.c.agencyBranding?.contacts
-  if (!ct) return []
-  const arr: { label: string; value: string }[] = []
-  if (ct.wechat) arr.push({ label: '微信', value: ct.wechat })
-  if (ct.line) arr.push({ label: 'Line', value: ct.line })
-  if (ct.facebook) arr.push({ label: 'Facebook', value: ct.facebook })
-  if (ct.phone) arr.push({ label: '电话', value: ct.phone })
-  if (ct.email) arr.push({ label: '邮箱', value: ct.email })
-  return arr
+  return ct ? contactViews(ct) : []
 })
+const copiedContact = ref('')
+async function copyContact(v: string) {
+  const ok = await copyText(v)
+  if (ok) {
+    copiedContact.value = v
+    setTimeout(() => (copiedContact.value = ''), 1800)
+  }
+}
 
 // 行程参数（出行时间 / 人数 / 用车）：公开案例页与分享文案保持一致；均可空，无值不展示
 const tripParams = computed(() => {
@@ -96,13 +98,19 @@ const caseContentHtml = computed(() => {
       >{{ l === 'zh' ? '中文' : l === 'en' ? 'English' : 'ไทย' }}</span>
     </div>
 
-    <!-- 联合品牌条 -->
+    <!-- 品牌条（白标：有 agency 时仅展示机构自身 Logo + 名称 + 联系方式，不出现 PandaKing9） -->
     <div v-if="c.agencyBranding" class="cobrand">
       <img v-if="c.agencyBranding.logoUrl" :src="fixImageUrl(c.agencyBranding.logoUrl)" class="logo" alt="logo" />
       <div class="cobrand-text">
-        <span class="x">PandaKing</span> × <b>{{ c.agencyBranding.name }}</b>
+        <b>{{ c.agencyBranding.name }}</b>
         <div v-if="contactList.length" class="contacts">
-          <span v-for="ct in contactList" :key="ct.label" class="contact">{{ ct.label }}: {{ ct.value }}</span>
+          <template v-for="(ct, i) in contactList" :key="i" class="contact">
+            <a v-if="ct.href" :href="ct.href" class="contact-link" target="_blank" rel="noopener">{{ ct.label }}: {{ ct.value }}</a>
+            <span v-else class="contact">
+              {{ ct.label }}: {{ ct.value }}
+              <button v-if="ct.copyable" type="button" class="ct-copy" @click="copyContact(ct.value)">{{ copiedContact === ct.value ? '已复制 ✓' : '复制' }}</button>
+            </span>
+          </template>
         </div>
       </div>
     </div>
@@ -148,8 +156,8 @@ const caseContentHtml = computed(() => {
       </div>
     </section>
 
-    <!-- 底部落款：已知境外旅行社身份(agencyBranding)时显示联合定制旅行；否则 Pandaking9 与运营主体同一身份，仅显示单品牌 -->
-    <div v-if="c.agencyBranding" class="cdv-foot">「“<span class="fn">{{ c.agencyBranding.name }}</span>” &amp; <span class="brand9">pandaking9</span>」联合定制旅行</div>
+    <!-- 底部落款：白标规则 — 有 agency 仅机构名；无 agency 显示 PandaKing9 兜底 -->
+    <div v-if="c.agencyBranding" class="cdv-foot"><span class="fn">{{ c.agencyBranding.name }}</span></div>
     <div v-else class="cdv-foot"><b>PandaKing9</b> · 定制旅行</div>
   </div>
 </template>
@@ -167,6 +175,9 @@ const caseContentHtml = computed(() => {
 .cobrand .x { color: var(--brand); font-weight: 700; }
 .contacts { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--muted); }
 .contact { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
+.contact-link { color: var(--brand-600); text-decoration: none; word-break: break-all; }
+.contact-link:hover { text-decoration: underline; }
+.ct-copy { margin-left: 4px; padding: 0 6px; font-size: 11px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--surface); color: var(--ink-2); cursor: pointer; font-family: inherit; }
 .hero {
   height: 280px; background: var(--brand-soft, var(--line)) center/cover no-repeat;
   border-radius: 14px; position: relative; display: flex; align-items: flex-end; overflow: hidden;

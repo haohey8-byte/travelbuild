@@ -39,7 +39,34 @@ export interface AgencyBranding {
   id: string
   name: string
   logoUrl: string | null
-  contacts: unknown
+  contacts: ContactItem[] | null
+}
+
+// 联系方式自由列表项：platform 为平台 key（小写），未知平台展示为纯文本
+export interface ContactItem {
+  platform: string
+  value: string
+}
+
+// 兼容旧格式（对象 {platform: value}）与现格式（数组 [{platform, value}]），统一输出数组。
+// 幂等：数组输入直接过滤；空值（value trim 后为空）丢弃。
+function normalizeContacts(raw: unknown): ContactItem[] {
+  if (!raw) return []
+  if (Array.isArray(raw)) {
+    return raw.filter(
+      (it): it is ContactItem =>
+        !!it &&
+        typeof it.platform === 'string' &&
+        typeof it.value === 'string' &&
+        it.value.trim() !== '',
+    )
+  }
+  if (typeof raw === 'object') {
+    return Object.entries(raw as Record<string, unknown>)
+      .filter(([, v]) => typeof v === 'string' && v.trim() !== '')
+      .map(([platform, value]) => ({ platform, value: String(value).trim() }))
+  }
+  return []
 }
 
 // 从 HTML 提取案例标题：优先 h1 文本，其次 <title>；剥标签、压缩空白、截 80 字
@@ -131,7 +158,7 @@ export class CaseService {
           id: agency.id,
           name: agency.name,
           logoUrl: agency.logoUrl,
-          contacts: agency.contacts,
+          contacts: normalizeContacts(agency.contacts),
         }
       }
     }
@@ -166,7 +193,7 @@ export class CaseService {
           id: agency.id,
           name: agency.name,
           logoUrl: agency.logoUrl,
-          contacts: agency.contacts,
+          contacts: normalizeContacts(agency.contacts),
         }
         return { ...c, agencyBranding }
       }

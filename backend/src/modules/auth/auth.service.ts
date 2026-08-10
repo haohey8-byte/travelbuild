@@ -601,7 +601,8 @@ export class AuthService {
       contact?: string
       disabled?: boolean
       logoUrl?: string
-      contacts?: { facebook?: string; line?: string; wechat?: string; phone?: string; email?: string }
+      // 联系方式自由列表 [{platform, value}]；兼容旧格式对象 {platform: value}
+      contacts?: { platform: string; value: string }[] | Record<string, string> | null
     },
     caller: AuthPrincipal,
   ) {
@@ -628,14 +629,23 @@ export class AuthService {
       data.logoUrl = body.logoUrl.trim() || null
     }
     if (body.contacts !== undefined) {
-      const c = body.contacts
-      const cleaned: Record<string, string> = {}
-      if (c.facebook?.trim()) cleaned.facebook = c.facebook.trim()
-      if (c.line?.trim()) cleaned.line = c.line.trim()
-      if (c.wechat?.trim()) cleaned.wechat = c.wechat.trim()
-      if (c.phone?.trim()) cleaned.phone = c.phone.trim()
-      if (c.email?.trim()) cleaned.email = c.email.trim()
-      data.contacts = Object.keys(cleaned).length ? cleaned : Prisma.JsonNull
+      // 归一化为 [{platform, value}]：数组直接清洗；旧对象转数组；空值丢弃
+      const raw = body.contacts
+      const arr: { platform: string; value: string }[] = []
+      if (Array.isArray(raw)) {
+        for (const it of raw) {
+          if (!it || typeof it !== 'object') continue
+          const platform = String((it as Record<string, unknown>).platform ?? '').trim().toLowerCase()
+          const value = String((it as Record<string, unknown>).value ?? '').trim()
+          if (platform && value) arr.push({ platform, value })
+        }
+      } else if (raw && typeof raw === 'object') {
+        for (const [platform, value] of Object.entries(raw)) {
+          const v = String(value ?? '').trim()
+          if (platform.trim() && v) arr.push({ platform: platform.trim().toLowerCase(), value: v })
+        }
+      }
+      data.contacts = arr.length ? arr : Prisma.JsonNull
     }
     if (Object.keys(data).length === 0) {
       return agency // 无可改字段，原样返回

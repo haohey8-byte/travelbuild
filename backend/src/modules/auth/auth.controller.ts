@@ -164,7 +164,8 @@ export class AuthController {
       contact?: string
       disabled?: boolean
       logoUrl?: string
-      contacts?: { facebook?: string; line?: string; wechat?: string; phone?: string; email?: string }
+      // 联系方式自由列表 [{platform, value}]；兼容旧格式对象
+      contacts?: { platform: string; value: string }[] | Record<string, string> | null
     },
     @CurrentUser() user: AuthUser,
   ) {
