@@ -180,14 +180,17 @@ export class CaseService {
   // 可见性单查（登录态）：用于详情页打开，与管理权限解耦。
   // 可见条件：已发布（全网可看，带 via 内嵌联合品牌）或归属自己（含草稿/下线）。
   // 否则 404（不泄露存在性）。根治「非归属 agency 打开即 403 无权操作」。
+  // 控制台预览：agency 未显式传 via 时，默认用自己机构 ID 内嵌品牌条（预览"我分享出去的样子"）；
+  // 显式 via 优先。PandaKing / 省地接社不兜底（平台视角不显示品牌条）。
   async getView(id: string, user: { role?: string; agencyId?: string | null; id?: string }, via?: string) {
     const c = await this.prisma.case.findUnique({ where: { id } })
     if (!c) throw new NotFoundException('案例不存在')
     const owned = this.isOwned(c, user)
     if (c.status !== 'published' && !owned) throw new NotFoundException('案例不存在')
     // 已发布 + via 内嵌联合品牌档案
-    if (c.status === 'published' && via) {
-      const agency = await this.prisma.agency.findUnique({ where: { id: via } })
+    const viaId = via || (user.role === 'agency' ? user.agencyId : undefined)
+    if (c.status === 'published' && viaId) {
+      const agency = await this.prisma.agency.findUnique({ where: { id: viaId } })
       if (agency && !agency.disabled) {
         const agencyBranding: AgencyBranding = {
           id: agency.id,
