@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 import { fetchAgencies, updateAgency } from '@/api/auth'
 import { copyText } from '@/utils/share'
 import { normalizeContacts } from '@/utils/contacts'
+import ImageUploader from '@/components/ImageUploader.vue'
 import type { Agency, AgencyView, ContactItem, Role } from '@/types'
 
 const auth = useAuthStore()
@@ -40,7 +41,7 @@ const editTarget = ref<Agency | null>(null)
 const editForm = ref({
   name: '',
   contact: '',
-  logoUrl: '',
+  logoUrl: '' as string | null, // ImageUploader 可置 null（移除图片）
   contacts: [] as ContactItem[],
 })
 const editErr = ref('')
@@ -63,7 +64,7 @@ async function onEdit(a: Agency) {
   editForm.value = {
     name: a.name,
     contact: a.contact || '',
-    logoUrl: a.logoUrl || '',
+    logoUrl: a.logoUrl || null,
     // 兼容旧格式（对象）与现格式（数组）
     contacts: normalizeContacts(a.contacts),
   }
@@ -78,7 +79,7 @@ async function onSaveEdit() {
     const updated = await updateAgency(editTarget.value.id, {
       name: editForm.value.name.trim(),
       contact: editForm.value.contact.trim() || undefined,
-      logoUrl: editForm.value.logoUrl.trim() || undefined,
+      logoUrl: editForm.value.logoUrl?.trim() || undefined,
       // 提交数组：platform 转小写、value 去首尾空白；空值行丢弃
       contacts: editForm.value.contacts
         .map((c) => ({ platform: c.platform.trim().toLowerCase(), value: c.value.trim() }))
@@ -282,7 +283,11 @@ onMounted(load)
         <div class="row"><label>角色</label><input :value="ROLE_LABEL[editTarget.role] || editTarget.role" class="input" disabled /></div>
         <div class="row"><label>名称<span class="req">*</span></label><input v-model="editForm.name" class="input" placeholder="旅行社名称" /></div>
         <div class="row"><label>联系方式</label><input v-model="editForm.contact" class="input" placeholder="邮箱 / 电话（可选）" /></div>
-        <div class="row"><label>Logo</label><input v-model="editForm.logoUrl" class="input" placeholder="https://… 机构 logo 图片 URL（联合品牌展示用，可选）" /></div>
+        <div class="row col"><label>Logo</label>
+          <div class="logo-uploader">
+            <ImageUploader v-model="editForm.logoUrl" :hint="'机构 logo（分享页展示用，建议方形图，jpg/png/webp）'" />
+          </div>
+        </div>
         <div class="row col"><label>社交媒体</label>
           <div class="contacts-edit">
             <div v-for="(c, i) in editForm.contacts" :key="i" class="contact-row">
