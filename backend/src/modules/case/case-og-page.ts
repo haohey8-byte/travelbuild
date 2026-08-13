@@ -142,32 +142,49 @@ function contactActionLabel(p: string): string {
       return '查看'
   }
 }
-// 逐行渲染：label（定宽）+ value（可点）+ 复制按钮（copyable 平台）
-// v + copy 包裹在 vgroup 内，按钮永远紧贴 value（避免 flex:1 把按钮挤到行尾）
-function escContactRow(p: string, v: string): string {
-  const label = esc(contactLabel(p))
+// 平台徽章：品牌色圆底 + 文本符号（与前端 CaseDetailView.contactBadge 一致）
+function contactBadge(p: string): string {
+  switch (p) {
+    case 'line': return 'L'
+    case 'whatsapp': return 'W'
+    case 'facebook': return 'f'
+    case 'wechat': return '微'
+    case 'phone': return '☎'
+    case 'email': return '✉'
+    default: return p ? p[0].toUpperCase() : '•'
+  }
+}
+// 整行渲染：徽章（品牌色圆底）+ 平台名小标 + 值粗体 + 右侧操作胶囊。
+// copyable 平台整行点击复制；有 href 的平台整行跳转（wa.me/fb/tel/mailto）。
+function escContactItem(p: string, v: string): string {
+  const plat = esc(contactLabel(p))
   const act = esc(contactActionLabel(p))
+  const badge = esc(contactBadge(p))
+  const body = `<span class="cdv-body"><span class="cdv-plat">${plat}</span><span class="cdv-val">${esc(v)}</span></span>`
+  const href = (p === 'phone' ? `tel:${attrEsc(v)}` : p === 'email' ? `mailto:${attrEsc(v)}` : '')
+  const pf = /^https?:\/\//.test(v) ? v : 'https://' + v
   switch (p) {
     case 'line':
     case 'wechat':
-      return `<div class="cdv-row"><span class="cdv-k">${label}</span><div class="cdv-vgroup"><span class="cdv-v">${esc(v)}</span><button type="button" class="cdv-copy" onclick="copyVal('${attrEsc(v)}')">复制</button></div></div>`
+      return `<a class="cdv-contact-item pf-${esc(p)}" href="javascript:void(0)" onclick="copyVal('${attrEsc(v)}')">${badgeWrap(badge)}${body}<span class="cdv-act">复制</span></a>`
     case 'whatsapp': {
       const digits = v.replace(/[^\d]/g, '')
       return digits
-        ? `<div class="cdv-row"><span class="cdv-k">WhatsApp</span><div class="cdv-vgroup"><a class="cdv-v" href="https://wa.me/${digits}" target="_blank" rel="noopener">${esc(v)} · ${act}</a></div></div>`
-        : `<div class="cdv-row"><span class="cdv-k">WhatsApp</span><div class="cdv-vgroup"><span class="cdv-v">${esc(v)}</span></div></div>`
+        ? `<a class="cdv-contact-item pf-whatsapp" href="https://wa.me/${digits}" target="_blank" rel="noopener">${badgeWrap(badge)}${body}<span class="cdv-act">${act} ›</span></a>`
+        : `<a class="cdv-contact-item pf-whatsapp" href="javascript:void(0)">${badgeWrap(badge)}${body}</a>`
     }
-    case 'facebook': {
-      const href = /^https?:\/\//.test(v) ? v : 'https://' + v
-      return `<div class="cdv-row"><span class="cdv-k">Facebook</span><div class="cdv-vgroup"><a class="cdv-v" href="${attrEsc(href)}" target="_blank" rel="noopener">${esc(v)} · ${act}</a></div></div>`
-    }
+    case 'facebook':
+      return `<a class="cdv-contact-item pf-facebook" href="${attrEsc(pf)}" target="_blank" rel="noopener">${badgeWrap(badge)}${body}<span class="cdv-act">${act} ›</span></a>`
     case 'phone':
-      return `<div class="cdv-row"><span class="cdv-k">电话</span><div class="cdv-vgroup"><a class="cdv-v" href="tel:${attrEsc(v)}">${esc(v)} · ${act}</a></div></div>`
+      return `<a class="cdv-contact-item pf-phone" href="${href}">${badgeWrap(badge)}${body}<span class="cdv-act">${act} ›</span></a>`
     case 'email':
-      return `<div class="cdv-row"><span class="cdv-k">邮箱</span><div class="cdv-vgroup"><a class="cdv-v" href="mailto:${attrEsc(v)}">${esc(v)} · ${act}</a></div></div>`
+      return `<a class="cdv-contact-item pf-email" href="${href}">${badgeWrap(badge)}${body}<span class="cdv-act">${act} ›</span></a>`
     default:
-      return `<div class="cdv-row"><span class="cdv-k">${label}</span><div class="cdv-vgroup"><span class="cdv-v">${esc(v)}</span></div></div>`
+      return `<a class="cdv-contact-item" href="javascript:void(0)">${badgeWrap(badge)}${body}</a>`
   }
+}
+function badgeWrap(badge: string): string {
+  return `<span class="cdv-badge">${badge}</span>`
 }
 
 export interface CaseOgData {
@@ -279,7 +296,7 @@ export function renderCaseOgPage(
         const logo = a.logoUrl ? imgUrl(a.logoUrl, origin) : ''
         const items = Array.isArray(a.contacts) ? a.contacts : []
         const contactLines = items.map((it: any) =>
-          escContactRow(String(it?.platform ?? '').toLowerCase(), String(it?.value ?? '')),
+          escContactItem(String(it?.platform ?? '').toLowerCase(), String(it?.value ?? '')),
         )
         return `
       <div class="agency">
@@ -362,15 +379,16 @@ export function renderCaseOgPage(
     .agency-name{font-weight:700;font-size:15px;}
     .agency-co{font-size:12.5px;color:var(--muted);margin-top:2px;}
     .agency-co b{color:var(--brand);}
-    .agency-c{display:flex;flex-direction:column;gap:8px;margin-top:10px;font-size:13px;border-top:1px dashed var(--line);padding-top:10px;}
-    .cdv-row{display:flex;align-items:center;gap:10px;}
-    .cdv-k{width:76px;flex:none;color:var(--ink);font-weight:600;}
-    .cdv-vgroup{flex:1;min-width:0;display:flex;align-items:center;gap:10px;}
-    .cdv-v{flex:1;min-width:0;color:var(--muted);text-decoration:none;word-break:break-all;}
-    a.cdv-v{color:#1a6cff;}
-    a.cdv-v:hover{text-decoration:underline;}
-    .cdv-copy{flex:none;padding:2px 10px;font-size:12px;border:1px solid #ccd3e0;border-radius:6px;background:#fff;color:var(--ink);cursor:pointer;font-family:inherit;}
-    .cdv-copy:hover{border-color:var(--brand-600);color:var(--brand-600);}
+    .agency-c{display:flex;flex-direction:column;gap:10px;margin-top:12px;font-size:13px;}
+    .cdv-contact-item{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:14px;border:1px solid var(--line);background:#fff;text-decoration:none;color:inherit;cursor:pointer;transition:transform .18s cubic-bezier(.16,1,.3,1),box-shadow .18s,border-color .18s;}
+    .cdv-contact-item:hover{transform:translateY(-1px);border-color:color-mix(in srgb,var(--pf,#185fa5) 35%,transparent);box-shadow:0 4px 14px rgba(24,95,165,.08);}
+    .cdv-badge{width:36px;height:36px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#fff;background:var(--pf,#185fa5);}
+    .pf-line{--pf:#00b900}.pf-whatsapp{--pf:#25d366}.pf-facebook{--pf:#1877f2}.pf-wechat{--pf:#07c160}.pf-phone{--pf:#185fa5}.pf-email{--pf:#e8590c}
+    .cdv-body{flex:1;min-width:0;display:flex;flex-direction:column;}
+    .cdv-plat{font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.04em;text-transform:uppercase;}
+    .cdv-val{font-size:14px;color:var(--ink);font-weight:600;word-break:break-all;margin-top:1px;}
+    .cdv-act{flex:none;font-size:12.5px;font-weight:600;color:var(--pf,#185fa5);padding:5px 12px;border-radius:999px;background:color-mix(in srgb,var(--pf,#185fa5) 10%,transparent);transition:background .15s;}
+    .cdv-contact-item:hover .cdv-act{background:color-mix(in srgb,var(--pf,#185fa5) 18%,transparent);}
     .foot{text-align:center;color:var(--muted);font-size:12.5px;margin-top:20px;line-height:1.6;}
     .foot .fn{color:var(--ink);font-weight:700;}
     .foot .brand9{color:var(--brand);font-weight:700;}

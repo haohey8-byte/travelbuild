@@ -77,6 +77,19 @@ function contactActionLabel(p: string): string {
   }
 }
 
+// 平台徽章：品牌色圆底 + 文本符号（不引第三方图标库）
+function contactBadge(p: string): string {
+  switch (p) {
+    case 'line': return 'L'
+    case 'whatsapp': return 'W'
+    case 'facebook': return 'f'
+    case 'wechat': return '微'
+    case 'phone': return '☎'
+    case 'email': return '✉'
+    default: return p ? p[0].toUpperCase() : '•'
+  }
+}
+
 // 行程参数（出行时间 / 人数 / 用车）：公开案例页与分享文案保持一致；均可空，无值不展示
 const tripParams = computed(() => {
   const arr: { k: string; v: string }[] = []
@@ -187,29 +200,28 @@ const caseContentHtml = computed(() => {
         <span v-else class="cdv-contact-logo fb">{{ (c.agencyBranding.name || '?').slice(0, 1) }}</span>
         <div class="cdv-contact-meta">
           <div class="cdv-contact-name">{{ c.agencyBranding.name }}</div>
-          <div class="cdv-contact-tip">提供本行程 · 联系定制</div>
+          <div class="cdv-contact-tip">联系定制本行程</div>
         </div>
       </div>
       <div v-if="contactList.length" class="cdv-contact-list">
-        <div v-for="(ct, i) in contactList" :key="i" class="cdv-contact-row">
-          <span class="cdv-contact-k">{{ ct.label }}</span>
-          <div class="cdv-contact-vgroup">
-            <a
-              v-if="ct.href"
-              :href="ct.href"
-              target="_blank"
-              rel="noopener"
-              class="cdv-contact-v"
-            >{{ ct.value }} · {{ contactActionLabel(ct.platform) }}</a>
-            <span v-else class="cdv-contact-v">{{ ct.value }}</span>
-            <button
-              v-if="ct.copyable"
-              type="button"
-              class="cdv-contact-copy"
-              @click="copyContact(ct.value)"
-            >{{ copiedContact === ct.value ? '已复制 ✓' : '复制' }}</button>
-          </div>
-        </div>
+        <a
+          v-for="(ct, i) in contactList"
+          :key="i"
+          class="cdv-contact-item"
+          :class="'pf-' + ct.platform"
+          :href="ct.href || undefined"
+          :target="ct.href ? '_blank' : undefined"
+          :rel="ct.href ? 'noopener' : undefined"
+          @click="!ct.href && ct.copyable && copyContact(ct.value)"
+        >
+          <span class="cdv-badge">{{ contactBadge(ct.platform) }}</span>
+          <span class="cdv-body">
+            <span class="cdv-plat">{{ ct.label }}</span>
+            <span class="cdv-val">{{ ct.value }}</span>
+          </span>
+          <span v-if="ct.copyable" class="cdv-act">{{ copiedContact === ct.value ? '已复制 ✓' : '复制' }}</span>
+          <span v-else-if="ct.href" class="cdv-act">{{ contactActionLabel(ct.platform) }} ›</span>
+        </a>
       </div>
     </div>
 
@@ -273,38 +285,69 @@ const caseContentHtml = computed(() => {
 .cdv-foot .fn { color: var(--ink); font-weight: 700; }
 .cdv-foot .brand9 { color: var(--brand); font-weight: 700; }
 
-/* 底部完整联系方式块 */
+/* 底部完整联系方式块（高端化：柔和阴影 + 平台色徽章 + 行卡片 + 操作胶囊） */
 .cdv-contact {
-  margin-top: 22px;
-  border: 1px solid var(--line, #e8edf4);
-  border-radius: 14px;
-  padding: 16px 18px;
+  margin-top: 26px;
+  border: 1px solid rgba(24, 95, 165, .08);
+  border-radius: 18px;
+  padding: 22px 24px;
   background: var(--card, #fff);
+  box-shadow: 0 8px 30px rgba(24, 95, 165, .07);
 }
-.cdv-contact-hd { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.cdv-contact-hd { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
 .cdv-contact-logo {
-  width: 48px; height: 48px; border-radius: 12px; object-fit: cover;
-  background: var(--brand-soft, #eef);
+  width: 56px; height: 56px; border-radius: 16px; object-fit: cover;
+  background: var(--brand-soft, #eef); box-shadow: 0 2px 8px rgba(24, 95, 165, .1);
 }
 .cdv-contact-logo.fb {
   display: flex; align-items: center; justify-content: center;
-  font-size: 22px; font-weight: 700; color: var(--brand);
+  font-size: 24px; font-weight: 700; color: var(--brand);
 }
-.cdv-contact-name { font-size: 16px; font-weight: 700; }
-.cdv-contact-tip { font-size: 12px; color: var(--muted); margin-top: 2px; }
-.cdv-contact-list {
-  display: flex; flex-direction: column; gap: 8px;
-  border-top: 1px dashed var(--line, #e8edf4); padding-top: 12px;
+.cdv-contact-name { font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
+.cdv-contact-tip { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+.cdv-contact-list { display: flex; flex-direction: column; gap: 10px; }
+.cdv-contact-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 14px; border-radius: 14px;
+  border: 1px solid var(--line, #e8edf4); background: var(--surface, #fff);
+  text-decoration: none; color: inherit; cursor: pointer;
+  transition: transform .18s cubic-bezier(.16, 1, .3, 1), box-shadow .18s, border-color .18s;
 }
-.cdv-contact-row { display: flex; align-items: center; gap: 10px; font-size: 13px; }
-.cdv-contact-k { width: 72px; flex: none; color: var(--muted); font-weight: 600; }
-.cdv-contact-vgroup { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; }
-.cdv-contact-v { flex: 1; min-width: 0; color: var(--ink, #1c2430); text-decoration: none; word-break: break-all; }
-a.cdv-contact-v:hover { color: var(--brand-600, #185FA5); }
-.cdv-contact-copy {
-  flex: none; padding: 2px 10px; font-size: 12px;
-  border: 1px solid var(--line-strong, #ccd3e0); border-radius: 6px;
-  background: var(--surface, #fff); color: var(--ink-2, #444); cursor: pointer; font-family: inherit;
+.cdv-contact-item:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--pf, #185fa5) 35%, transparent);
+  box-shadow: 0 4px 14px rgba(24, 95, 165, .08);
 }
-.cdv-contact-copy:hover { border-color: var(--brand-600); color: var(--brand-600); }
+.cdv-badge {
+  width: 36px; height: 36px; border-radius: 50%; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; font-weight: 700; color: #fff;
+  background: var(--pf, #185fa5);
+}
+/* 平台品牌色映射 */
+.pf-line { --pf: #00b900; }
+.pf-whatsapp { --pf: #25d366; }
+.pf-facebook { --pf: #1877f2; }
+.pf-wechat { --pf: #07c160; }
+.pf-phone { --pf: #185fa5; }
+.pf-email { --pf: #e8590c; }
+.cdv-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.cdv-plat { font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.cdv-val { font-size: 14px; color: var(--ink, #1c2430); font-weight: 600; word-break: break-all; margin-top: 1px; }
+.cdv-act {
+  flex: none; font-size: 12.5px; font-weight: 600;
+  color: var(--pf, #185fa5); padding: 5px 12px; border-radius: 999px;
+  background: color-mix(in srgb, var(--pf, #185fa5) 10%, transparent);
+  transition: background .15s;
+}
+.cdv-contact-item:hover .cdv-act { background: color-mix(in srgb, var(--pf, #185fa5) 18%, transparent); }
+
+/* 移动端：紧凑适配 */
+@media (max-width: 480px) {
+  .cdv-contact { padding: 16px 14px; }
+  .cdv-contact-logo { width: 46px; height: 46px; border-radius: 12px; }
+  .cdv-badge { width: 32px; height: 32px; font-size: 13px; }
+  .cdv-val { font-size: 13px; }
+  .cdv-act { padding: 4px 10px; font-size: 12px; }
+}
 </style>

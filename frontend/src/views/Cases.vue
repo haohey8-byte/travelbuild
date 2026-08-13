@@ -50,7 +50,7 @@ const createBusy = ref(false)
 const createForm = ref({ title: '', destination: '', days: '', theme: '', priceRange: '' })
 const createErr = ref('')
 
-// —— 导入 HTML 微站弹窗 ——
+// —— 导入路线 HTML 弹窗 ——
 const showImport = ref(false)
 const importBusy = ref(false)
 const importErr = ref('')
@@ -279,7 +279,7 @@ async function onDelete(c: CaseItem) {
     <!-- Hero -->
     <section class="hero">
       <h1 class="hero-h">案例中心</h1>
-      <p class="hero-sub">三角色共创经典路线 — 新建空白案例、从行程定制导入、导入 HTML 微站三种创建方式</p>
+      <p class="hero-sub">三角色共创经典路线 — 新建路线、从行程定制导入、导入路线 HTML 三种创建方式</p>
       <div class="kpi-row">
         <div class="kpi">
           <div class="kpi-ico pri">★</div>
@@ -302,9 +302,9 @@ async function onDelete(c: CaseItem) {
 
     <!-- Action Bar -->
     <section class="actions">
-      <button class="btn btn-primary" @click="openCreate">+ 新建空白案例</button>
-      <button class="btn btn-soft" @click="openImport">↑ 导入 HTML 微站</button>
-      <button class="btn btn-ghost" :class="{ active: deriveOpen }" @click="deriveOpen = !deriveOpen">
+      <button class="btn btn-primary" v-tooltip="'创建空白路线（标题+目的地+天数），其余字段编辑时补全'" @click="openCreate">+ 新建路线</button>
+      <button class="btn btn-soft" v-tooltip="'上传单文件 HTML 微站，自动创建草稿路线（标题取 h1，正文为 HTML）'" @click="openImport">↑ 导入路线 HTML</button>
+      <button class="btn btn-soft" :class="{ active: deriveOpen }" v-tooltip="'从已确认的协作行程一键生成路线草稿（含自动脱敏）'" @click="deriveOpen = !deriveOpen">
         ↻ 从行程定制导入
       </button>
       <div class="btn-spacer"></div>
@@ -325,8 +325,8 @@ async function onDelete(c: CaseItem) {
           {{ routeName(r) }} · {{ safeText(r.destination) }}
         </option>
       </select>
-      <button class="btn btn-primary btn-sm" :disabled="deriveBusy" @click="onDerive">
-        {{ deriveBusy ? '导入中…' : '导入脱敏草稿' }}
+      <button class="btn btn-primary btn-sm" :disabled="deriveBusy" v-tooltip="'服务端强制合规：自动屏蔽真名/证件/合同价'" @click="onDerive">
+        {{ deriveBusy ? '导入中…' : '导入行程定制路线' }}
       </button>
       <p class="hint">服务端强制合规：自动屏蔽真名 / 证件 / 合同价</p>
     </section>
@@ -421,21 +421,21 @@ async function onDelete(c: CaseItem) {
       <div class="empty-illust"></div>
       <div class="empty-title">还没有匹配的案例</div>
       <div class="empty-sub">
-        {{ hasFilter() ? '试试清除筛选条件' : (user ? '新建空白案例、从行程定制导入，或导入 HTML 微站' : '暂无公开案例') }}
+        {{ hasFilter() ? '试试清除筛选条件' : (user ? '新建路线、从行程定制导入，或导入路线 HTML' : '暂无公开案例') }}
       </div>
       <div v-if="user" style="display: flex; gap: 8px; justify-content: center">
-        <button class="btn btn-primary" @click="openCreate">+ 新建空白案例</button>
+        <button class="btn btn-primary" @click="openCreate">+ 新建路线</button>
         <button class="btn btn-soft" @click="deriveOpen = true; !routeId && (routeId = routes[0]?.id || '')">↻ 从行程定制导入</button>
       </div>
       <button v-else-if="hasFilter()" class="btn btn-ghost" @click="resetFilter">清除筛选</button>
     </section>
   </div>
 
-  <!-- 新建空白案例弹窗 -->
+  <!-- 新建路线弹窗 -->
   <div v-if="showCreate" class="modal-mask" @click.self="showCreate = false">
     <div class="modal">
       <div class="modal-head">
-        <div class="modal-title">新建空白案例</div>
+        <div class="modal-title">新建路线</div>
         <div class="modal-close" @click="showCreate = false">✕</div>
       </div>
       <div class="modal-body">
@@ -475,11 +475,11 @@ async function onDelete(c: CaseItem) {
     </div>
   </div>
 
-  <!-- 导入 HTML 微站弹窗 -->
+  <!-- 导入路线 HTML 弹窗 -->
   <div v-if="showImport" class="modal-mask" @click.self="showImport = false">
     <div class="modal">
       <div class="modal-head">
-        <div class="modal-title">导入 HTML 微站作为案例</div>
+        <div class="modal-title">导入路线 HTML</div>
         <div class="modal-close" @click="showImport = false">✕</div>
       </div>
       <div class="modal-body">
@@ -496,7 +496,7 @@ async function onDelete(c: CaseItem) {
           </template>
         </div>
         <p v-if="importErr" class="err">{{ importErr }}</p>
-        <div class="field-hint">导入后自动创建草稿案例：标题取 HTML 内 h1，整份 HTML 作为案例正文，其余字段留空待补</div>
+        <div class="field-hint">导入后自动创建草稿路线：标题取 HTML 内 h1，整份 HTML 作为路线正文，其余字段留空待补</div>
       </div>
       <div class="modal-foot">
         <button class="btn" @click="showImport = false">取消</button>
@@ -538,12 +538,14 @@ async function onDelete(c: CaseItem) {
 .count { font-size: 12.5px; color: var(--muted); }
 .sort-select { padding: 6px 10px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); font-size: 12.5px; background: var(--surface); color: var(--ink-2); font-family: inherit; }
 
-.btn { padding: 8px 14px; border-radius: var(--r-sm); font-size: 13.5px; cursor: pointer; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); display: inline-flex; align-items: center; gap: 6px; font-family: inherit; font-weight: 600; transition: background .15s, color .15s, box-shadow .15s, transform .15s; }
+.btn { padding: 8px 14px; border-radius: var(--r-sm); font-size: 13.5px; cursor: pointer; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); display: inline-flex; align-items: center; gap: 6px; font-family: inherit; font-weight: 600; transition: background .15s, color .15s, box-shadow .18s, transform .18s cubic-bezier(.16, 1, .3, 1); }
 .btn:hover { transform: translateY(-1px); }
+.btn:active { transform: translateY(0) scale(.97); }
 .btn-primary { background: var(--brand); border-color: var(--brand); color: #fff; box-shadow: 0 1px 2px rgba(24, 95, 165, .2); }
 .btn-primary:hover { background: var(--brand-600); box-shadow: 0 4px 12px rgba(24, 95, 165, .25); }
 .btn-soft { background: var(--brand-50); border-color: transparent; color: var(--brand-600); }
-.btn-soft.active { background: var(--brand); color: #fff; }
+.btn-soft:hover { background: color-mix(in srgb, var(--brand) 16%, transparent); }
+.btn-soft.active { background: var(--brand); color: #fff; box-shadow: 0 4px 12px rgba(24, 95, 165, .25); }
 .btn-ghost { background: transparent; border-color: transparent; color: var(--ink-2); }
 .btn-ghost:hover { background: var(--brand-50); color: var(--brand); }
 .btn-ghost.danger { color: var(--danger); }
