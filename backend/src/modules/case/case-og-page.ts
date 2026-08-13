@@ -124,27 +124,48 @@ function contactLabel(p: string): string {
 function cap(s: string): string {
   return s ? s[0].toUpperCase() + s.slice(1) : s
 }
-function escContactLink(p: string, v: string): string {
+// 平台动作文案（与前端 CaseDetailView.contactActionLabel 一致）
+function contactActionLabel(p: string): string {
   switch (p) {
     case 'line':
     case 'wechat':
-      return `<span class="c-item"><b>${esc(contactLabel(p))}</b>${esc(v)}<button type="button" class="c-copy" onclick="copyVal('${attrEsc(v)}')">复制</button></span>`
+      return '添加'
+    case 'whatsapp':
+      return '发消息'
+    case 'facebook':
+      return '查看主页'
+    case 'phone':
+      return '拨打'
+    case 'email':
+      return '发送'
+    default:
+      return '查看'
+  }
+}
+// 逐行渲染：label（定宽）+ value（可点）+ 复制按钮（copyable 平台）
+function escContactRow(p: string, v: string): string {
+  const label = esc(contactLabel(p))
+  const act = esc(contactActionLabel(p))
+  switch (p) {
+    case 'line':
+    case 'wechat':
+      return `<div class="cdv-row"><span class="cdv-k">${label}</span><span class="cdv-v">${esc(v)}</span><button type="button" class="cdv-copy" onclick="copyVal('${attrEsc(v)}')">复制</button></div>`
     case 'whatsapp': {
       const digits = v.replace(/[^\d]/g, '')
       return digits
-        ? `<span class="c-item"><b>WhatsApp</b><a href="https://wa.me/${digits}" target="_blank" rel="noopener">${esc(v)} · 发消息</a></span>`
-        : `<span class="c-item"><b>WhatsApp</b>${esc(v)}</span>`
+        ? `<div class="cdv-row"><span class="cdv-k">WhatsApp</span><a class="cdv-v" href="https://wa.me/${digits}" target="_blank" rel="noopener">${esc(v)} · ${act}</a></div>`
+        : `<div class="cdv-row"><span class="cdv-k">WhatsApp</span><span class="cdv-v">${esc(v)}</span></div>`
     }
     case 'facebook': {
       const href = /^https?:\/\//.test(v) ? v : 'https://' + v
-      return `<span class="c-item"><b>Facebook</b><a href="${attrEsc(href)}" target="_blank" rel="noopener">${esc(v)} · 查看主页</a></span>`
+      return `<div class="cdv-row"><span class="cdv-k">Facebook</span><a class="cdv-v" href="${attrEsc(href)}" target="_blank" rel="noopener">${esc(v)} · ${act}</a></div>`
     }
     case 'phone':
-      return `<span class="c-item"><b>电话</b><a href="tel:${attrEsc(v)}">${esc(v)}</a></span>`
+      return `<div class="cdv-row"><span class="cdv-k">电话</span><a class="cdv-v" href="tel:${attrEsc(v)}">${esc(v)} · ${act}</a></div>`
     case 'email':
-      return `<span class="c-item"><b>邮箱</b><a href="mailto:${attrEsc(v)}">${esc(v)}</a></span>`
+      return `<div class="cdv-row"><span class="cdv-k">邮箱</span><a class="cdv-v" href="mailto:${attrEsc(v)}">${esc(v)} · ${act}</a></div>`
     default:
-      return `<span class="c-item"><b>${esc(cap(p))}</b>${esc(v)}</span>`
+      return `<div class="cdv-row"><span class="cdv-k">${label}</span><span class="cdv-v">${esc(v)}</span></div>`
   }
 }
 
@@ -257,7 +278,7 @@ export function renderCaseOgPage(
         const logo = a.logoUrl ? imgUrl(a.logoUrl, origin) : ''
         const items = Array.isArray(a.contacts) ? a.contacts : []
         const contactLines = items.map((it: any) =>
-          escContactLink(String(it?.platform ?? '').toLowerCase(), String(it?.value ?? '')),
+          escContactRow(String(it?.platform ?? '').toLowerCase(), String(it?.value ?? '')),
         )
         return `
       <div class="agency">
@@ -265,6 +286,7 @@ export function renderCaseOgPage(
           ${logo ? `<img class="agency-logo" src="${esc(logo)}" alt="${esc(a.name)}" loading="lazy" />` : '<span class="agency-logo-fallback">' + esc(a.name.slice(0, 1)) + '</span>'}
           <div class="agency-meta">
             <div class="agency-name">${esc(a.name)}</div>
+            <div class="agency-co">提供本行程 · 联系定制</div>
           </div>
         </div>
         ${contactLines.length ? `<div class="agency-c">${contactLines.join('')}</div>` : ''}
@@ -339,12 +361,14 @@ export function renderCaseOgPage(
     .agency-name{font-weight:700;font-size:15px;}
     .agency-co{font-size:12.5px;color:var(--muted);margin-top:2px;}
     .agency-co b{color:var(--brand);}
-    .agency-c{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:10px;font-size:13px;color:var(--muted);border-top:1px dashed var(--line);padding-top:10px;}
-    .c-item b{display:inline-block;min-width:44px;color:var(--ink);font-weight:600;margin-right:4px;}
-    .c-item a{color:#1a6cff;text-decoration:none;word-break:break-all;}
-    .c-item a:hover{text-decoration:underline;}
-    .c-copy{margin-left:6px;padding:1px 8px;font-size:12px;border:1px solid #ccd3e0;border-radius:4px;background:#fff;color:var(--ink);cursor:pointer;font-family:inherit;}
-    .c-copy:hover{border-color:var(--brand-600);color:var(--brand-600);}
+    .agency-c{display:flex;flex-direction:column;gap:8px;margin-top:10px;font-size:13px;border-top:1px dashed var(--line);padding-top:10px;}
+    .cdv-row{display:flex;align-items:center;gap:10px;}
+    .cdv-k{width:76px;flex:none;color:var(--ink);font-weight:600;}
+    .cdv-v{flex:1;color:var(--muted);text-decoration:none;word-break:break-all;}
+    a.cdv-v{color:#1a6cff;}
+    a.cdv-v:hover{text-decoration:underline;}
+    .cdv-copy{flex:none;padding:2px 10px;font-size:12px;border:1px solid #ccd3e0;border-radius:6px;background:#fff;color:var(--ink);cursor:pointer;font-family:inherit;}
+    .cdv-copy:hover{border-color:var(--brand-600);color:var(--brand-600);}
     .foot{text-align:center;color:var(--muted);font-size:12.5px;margin-top:20px;line-height:1.6;}
     .foot .fn{color:var(--ink);font-weight:700;}
     .foot .brand9{color:var(--brand);font-weight:700;}

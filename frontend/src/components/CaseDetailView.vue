@@ -58,6 +58,25 @@ async function copyContact(v: string) {
   }
 }
 
+// 底部完整块：平台动作文案（Line=添加 / WhatsApp=发消息 / Facebook=查看主页 / 电话=拨打 / 邮箱=发送 / 其他=查看）
+function contactActionLabel(p: string): string {
+  switch (p) {
+    case 'line':
+    case 'wechat':
+      return '添加'
+    case 'whatsapp':
+      return '发消息'
+    case 'facebook':
+      return '查看主页'
+    case 'phone':
+      return '拨打'
+    case 'email':
+      return '发送'
+    default:
+      return '查看'
+  }
+}
+
 // 行程参数（出行时间 / 人数 / 用车）：公开案例页与分享文案保持一致；均可空，无值不展示
 const tripParams = computed(() => {
   const arr: { k: string; v: string }[] = []
@@ -156,6 +175,42 @@ const caseContentHtml = computed(() => {
       </div>
     </section>
 
+    <!-- 底部完整联系方式块（白标：有 agency 显示；客户滚动到底直接联系） -->
+    <div v-if="c.agencyBranding" class="cdv-contact">
+      <div class="cdv-contact-hd">
+        <img
+          v-if="c.agencyBranding.logoUrl"
+          :src="fixImageUrl(c.agencyBranding.logoUrl)"
+          class="cdv-contact-logo"
+          alt="logo"
+        />
+        <span v-else class="cdv-contact-logo fb">{{ (c.agencyBranding.name || '?').slice(0, 1) }}</span>
+        <div class="cdv-contact-meta">
+          <div class="cdv-contact-name">{{ c.agencyBranding.name }}</div>
+          <div class="cdv-contact-tip">提供本行程 · 联系定制</div>
+        </div>
+      </div>
+      <div v-if="contactList.length" class="cdv-contact-list">
+        <div v-for="(ct, i) in contactList" :key="i" class="cdv-contact-row">
+          <span class="cdv-contact-k">{{ ct.label }}</span>
+          <a
+            v-if="ct.href"
+            :href="ct.href"
+            target="_blank"
+            rel="noopener"
+            class="cdv-contact-v"
+          >{{ ct.value }} · {{ contactActionLabel(ct.platform) }}</a>
+          <span v-else class="cdv-contact-v">{{ ct.value }}</span>
+          <button
+            v-if="ct.copyable"
+            type="button"
+            class="cdv-contact-copy"
+            @click="copyContact(ct.value)"
+          >{{ copiedContact === ct.value ? '已复制 ✓' : '复制' }}</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 底部落款：白标规则 — 有 agency 仅机构名；无 agency 显示 PandaKing9 兜底 -->
     <div v-if="c.agencyBranding" class="cdv-foot"><span class="fn">{{ c.agencyBranding.name }}</span></div>
     <div v-else class="cdv-foot"><b>PandaKing9</b> · 定制旅行</div>
@@ -215,4 +270,38 @@ const caseContentHtml = computed(() => {
 .cdv-foot { text-align: center; color: var(--muted); font-size: 12.5px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); line-height: 1.6; }
 .cdv-foot .fn { color: var(--ink); font-weight: 700; }
 .cdv-foot .brand9 { color: var(--brand); font-weight: 700; }
+
+/* 底部完整联系方式块 */
+.cdv-contact {
+  margin-top: 22px;
+  border: 1px solid var(--line, #e8edf4);
+  border-radius: 14px;
+  padding: 16px 18px;
+  background: var(--card, #fff);
+}
+.cdv-contact-hd { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.cdv-contact-logo {
+  width: 48px; height: 48px; border-radius: 12px; object-fit: cover;
+  background: var(--brand-soft, #eef);
+}
+.cdv-contact-logo.fb {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; font-weight: 700; color: var(--brand);
+}
+.cdv-contact-name { font-size: 16px; font-weight: 700; }
+.cdv-contact-tip { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.cdv-contact-list {
+  display: flex; flex-direction: column; gap: 8px;
+  border-top: 1px dashed var(--line, #e8edf4); padding-top: 12px;
+}
+.cdv-contact-row { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.cdv-contact-k { width: 72px; flex: none; color: var(--muted); font-weight: 600; }
+.cdv-contact-v { flex: 1; color: var(--ink, #1c2430); text-decoration: none; word-break: break-all; }
+a.cdv-contact-v:hover { color: var(--brand-600, #185FA5); }
+.cdv-contact-copy {
+  flex: none; padding: 2px 10px; font-size: 12px;
+  border: 1px solid var(--line-strong, #ccd3e0); border-radius: 6px;
+  background: var(--surface, #fff); color: var(--ink-2, #444); cursor: pointer; font-family: inherit;
+}
+.cdv-contact-copy:hover { border-color: var(--brand-600); color: var(--brand-600); }
 </style>
