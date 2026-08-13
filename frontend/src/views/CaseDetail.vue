@@ -591,25 +591,25 @@ function removeHighlightLang(lang: 'en' | 'th', i: number) {
       <div class="top-actions">
         <!-- 非工作态：复制分享 + 管理/校对入口 -->
         <template v-if="!isWorking">
-          <button class="btn sm" :class="{ copied }" :disabled="copying" @click="onCopyShare">
+          <button class="btn sm" :class="{ copied }" :disabled="copying" v-tooltip="'复制标题+链接文案，粘贴到微信发送'" @click="onCopyShare">
             {{ copied ? '已复制' : '复制分享' }}
           </button>
-          <button v-if="canEdit" class="btn ghost sm" @click="startEdit">编辑内容</button>
-          <button v-if="canReview" class="btn ghost sm" @click="startReview">校对翻译</button>
+          <button v-if="canEdit" class="btn ghost sm" v-tooltip="'进入完整编辑模式（中文源/行程/价格/封面）'" @click="startEdit">编辑内容</button>
+          <button v-if="canReview" class="btn ghost sm" v-tooltip="'人工校对/修正英文与泰文翻译'" @click="startReview">校对翻译</button>
           <template v-if="canEdit">
-            <button v-if="c?.status !== 'published'" class="btn sm" @click="onPublish">发布</button>
-            <button v-else class="btn ghost sm" @click="onUnpublish">下线</button>
-            <button class="btn ghost sm danger" @click="onDelete">删除</button>
+            <button v-if="c?.status !== 'published'" class="btn sm" v-tooltip="'发布后客户可通过链接查看'" @click="onPublish">发布</button>
+            <button v-else class="btn ghost sm" v-tooltip="'下线后分享链接不再可访问'" @click="onUnpublish">下线</button>
+            <button class="btn ghost sm danger" v-tooltip="'删除案例，不可恢复'" @click="onDelete">删除</button>
           </template>
         </template>
 
         <!-- 编辑/校对态：保存 + 取消（PandaKing 编辑态额外显示 AI翻译） -->
         <template v-else>
-          <button v-if="isEditing" class="btn ghost sm ai-btn" :disabled="translateBusy" :title="'基于中文内容一键生成英文+泰文初稿；发布时若缺失也会自动补翻。生成后请在下方双语区人工校对。'" @click="onTranslate()">
+          <button v-if="isEditing" class="btn ghost sm ai-btn" :disabled="translateBusy" v-tooltip="'基于中文内容一键生成英文+泰文初稿；发布时若缺失也会自动补翻。生成后请在双语区人工校对。'" @click="onTranslate()">
             {{ translateBusy ? '翻译中…' : '✨ AI翻译' }}
           </button>
-          <button class="btn sm" :disabled="saving" @click="onSave">{{ saving ? '加载中…' : isReviewing ? '保存并退出' : '保存' }}</button>
-          <button class="btn ghost sm" @click="cancelWork">取消</button>
+          <button class="btn sm" :disabled="saving" v-tooltip="isReviewing ? '保存全部校对并退出' : '保存当前修改'" @click="onSave">{{ saving ? '加载中…' : isReviewing ? '保存并退出' : '保存' }}</button>
+          <button class="btn ghost sm" v-tooltip="'退出编辑，不保存修改'" @click="cancelWork">取消</button>
         </template>
       </div>
     </div>
@@ -621,7 +621,6 @@ function removeHighlightLang(lang: 'en' | 'th', i: number) {
     <template v-else-if="c">
       <!-- 非工作态：公开视图（CaseDetailView）+ 管理按钮 -->
       <CaseDetailView v-if="!isWorking" :c="c" />
-      <p v-if="!isWorking" class="wechat-tip">分享文案已复制，直接粘贴到微信发送即可</p>
 
       <!-- 校对态：ReviewWorkbench 3 栏校对台（EN/TH 切换 + 按单元源对照编辑 + 预览） -->
       <ReviewWorkbench v-if="isReviewing && c" v-model="reviewForm" :c="c" @save-unit="onSaveUnit" />
@@ -851,7 +850,6 @@ function removeHighlightLang(lang: 'en' | 'th', i: number) {
 .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 8px; flex-wrap: wrap; }
 .back { color: var(--brand); text-decoration: none; }
 .top-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.wechat-tip { color: var(--muted); font-size: 13px; margin: 14px 0; }
 
 /* 双栏编辑布局 */
 .edit-layout { margin-top: 4px; }

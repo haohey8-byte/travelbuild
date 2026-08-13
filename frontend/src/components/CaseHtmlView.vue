@@ -21,7 +21,15 @@ const RESIZE_SCRIPT =
 const REVEAL_FIX =
   '<style>.reveal,[class*="reveal"],.fade-in,.fadeIn,.anim,.animate{opacity:1!important;transform:none!important;visibility:visible!important;transition:none!important}</style>'
 
-const srcdoc = computed(() => REVEAL_FIX + (props.html || '') + RESIZE_SCRIPT)
+// 锚点修复（srcdoc iframe 无真实 URL，原生 #锚点点击会导致 iframe 导航失败变空白）：
+// 拦截 iframe 内 a[href^="#"] 点击 → preventDefault → 找到目标元素 → scrollIntoView 平滑滚动。
+// 仅当目标元素存在时才接管；外链/无目标锚点不受影响。不动用户内容，仅渲染层行为补丁。
+const ANCHOR_FIX =
+  '<scr' +
+  'ipt>(function(){document.addEventListener("click",function(e){var a=e.target&&e.target.closest?e.target.closest(\'a[href^="#"]\'):null;if(!a)return;var id=decodeURIComponent(String(a.getAttribute("href")||"").slice(1));if(!id)return;var el=document.getElementById(id)||document.querySelector(\'[name="\'+id+\'"]\');if(!el)return;e.preventDefault();el.scrollIntoView({behavior:"smooth",block:"start"});});})()</scr' +
+  'ipt>'
+
+const srcdoc = computed(() => REVEAL_FIX + (props.html || '') + ANCHOR_FIX + RESIZE_SCRIPT)
 
 function onMsg(e: MessageEvent) {
   // 仅信任来自本 iframe contentWindow 的消息

@@ -14,6 +14,12 @@ const REVEAL_FIX =
 const RESIZE_SCRIPT =
   '<script>(function(){function p(){try{parent.postMessage({__caseHtmlHeight:document.documentElement.scrollHeight},"*");}catch(e){}}window.addEventListener("load",function(){p();setTimeout(p,300);setTimeout(p,1000);});if(window.MutationObserver){try{var o=new MutationObserver(function(){p();});o.observe(document.body,{childList:true,subtree:true,attributes:true});}catch(e){}}window.addEventListener("resize",p);})();</script>'
 
+// 锚点修复（srcdoc iframe 无真实 URL，原生 #锚点点击会导致 iframe 导航失败变空白）：
+// 拦截 iframe 内 a[href^="#"] 点击 → preventDefault → 目标元素存在时 scrollIntoView 平滑滚动。
+// 不动用户内容，仅渲染层行为补丁（与前端 CaseHtmlView 一致）。
+const ANCHOR_FIX =
+  '<script>(function(){document.addEventListener("click",function(e){var a=e.target&&e.target.closest?e.target.closest(\'a[href^="#"]\'):null;if(!a)return;var id=decodeURIComponent(String(a.getAttribute("href")||"").slice(1));if(!id)return;var el=document.getElementById(id)||document.querySelector(\'[name="\'+id+\'"]\');if(!el)return;e.preventDefault();el.scrollIntoView({behavior:"smooth",block:"start"});});})();</script>'
+
 function esc(s: unknown): string {
   return String(s ?? '')
     .replace(/&/g, '&amp;')
@@ -239,7 +245,7 @@ export function renderCaseOgPage(
   // 用沙箱 iframe srcdoc 渲染：注入 REVEAL_FIX（强制渐显可见）+ RESIZE_SCRIPT（自动高度），与前端的 CaseHtmlView 一致。
   // 直接内联进同一文档会导致微站全局 <style> 污染父页、全屏/绝对布局在容器内错乱、渐显区块卡 opacity:0 —— 故改用 iframe。
   // zh 内联 srcdoc（无需 fetch，首屏即见）；en/th 由前端 JS 走 /html?lang= 按需拉取。
-  const zhMicroSrcdoc = attrEsc(REVEAL_FIX + (data.contentHtml || '') + RESIZE_SCRIPT)
+  const zhMicroSrcdoc = attrEsc(REVEAL_FIX + (data.contentHtml || '') + ANCHOR_FIX + RESIZE_SCRIPT)
   const microFrame = data.contentHtml
     ? `<div class="microsite-wrap"><iframe id="microsite" class="microsite-frame" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" srcdoc="${zhMicroSrcdoc}"></iframe></div>`
     : ''
@@ -390,7 +396,7 @@ export function renderCaseOgPage(
       if(lang === 'zh'){ micro.srcdoc = zhSrcdoc; return; }
       fetch('/share/case/' + caseId + '/html?lang=' + lang, {cache:'no-store'})
         .then(function(r){ if(!r.ok) throw new Error('nf'); return r.text(); })
-        .then(function(html){ var h=(html||'').trim(); if(!h){ micro.srcdoc = zhSrcdoc; return; } micro.srcdoc = REVEAL_FIX + h + RESIZE_SCRIPT; })
+        .then(function(html){ var h=(html||'').trim(); if(!h){ micro.srcdoc = zhSrcdoc; return; } micro.srcdoc = REVEAL_FIX + h + ANCHOR_FIX + RESIZE_SCRIPT; })
         .catch(function(){ /* 保留当前微站（缺译回落 zh） */ });
     }
     function applyLang(lang){
