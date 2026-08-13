@@ -143,29 +143,30 @@ function contactActionLabel(p: string): string {
   }
 }
 // 逐行渲染：label（定宽）+ value（可点）+ 复制按钮（copyable 平台）
+// v + copy 包裹在 vgroup 内，按钮永远紧贴 value（避免 flex:1 把按钮挤到行尾）
 function escContactRow(p: string, v: string): string {
   const label = esc(contactLabel(p))
   const act = esc(contactActionLabel(p))
   switch (p) {
     case 'line':
     case 'wechat':
-      return `<div class="cdv-row"><span class="cdv-k">${label}</span><span class="cdv-v">${esc(v)}</span><button type="button" class="cdv-copy" onclick="copyVal('${attrEsc(v)}')">复制</button></div>`
+      return `<div class="cdv-row"><span class="cdv-k">${label}</span><div class="cdv-vgroup"><span class="cdv-v">${esc(v)}</span><button type="button" class="cdv-copy" onclick="copyVal('${attrEsc(v)}')">复制</button></div></div>`
     case 'whatsapp': {
       const digits = v.replace(/[^\d]/g, '')
       return digits
-        ? `<div class="cdv-row"><span class="cdv-k">WhatsApp</span><a class="cdv-v" href="https://wa.me/${digits}" target="_blank" rel="noopener">${esc(v)} · ${act}</a></div>`
-        : `<div class="cdv-row"><span class="cdv-k">WhatsApp</span><span class="cdv-v">${esc(v)}</span></div>`
+        ? `<div class="cdv-row"><span class="cdv-k">WhatsApp</span><div class="cdv-vgroup"><a class="cdv-v" href="https://wa.me/${digits}" target="_blank" rel="noopener">${esc(v)} · ${act}</a></div></div>`
+        : `<div class="cdv-row"><span class="cdv-k">WhatsApp</span><div class="cdv-vgroup"><span class="cdv-v">${esc(v)}</span></div></div>`
     }
     case 'facebook': {
       const href = /^https?:\/\//.test(v) ? v : 'https://' + v
-      return `<div class="cdv-row"><span class="cdv-k">Facebook</span><a class="cdv-v" href="${attrEsc(href)}" target="_blank" rel="noopener">${esc(v)} · ${act}</a></div>`
+      return `<div class="cdv-row"><span class="cdv-k">Facebook</span><div class="cdv-vgroup"><a class="cdv-v" href="${attrEsc(href)}" target="_blank" rel="noopener">${esc(v)} · ${act}</a></div></div>`
     }
     case 'phone':
-      return `<div class="cdv-row"><span class="cdv-k">电话</span><a class="cdv-v" href="tel:${attrEsc(v)}">${esc(v)} · ${act}</a></div>`
+      return `<div class="cdv-row"><span class="cdv-k">电话</span><div class="cdv-vgroup"><a class="cdv-v" href="tel:${attrEsc(v)}">${esc(v)} · ${act}</a></div></div>`
     case 'email':
-      return `<div class="cdv-row"><span class="cdv-k">邮箱</span><a class="cdv-v" href="mailto:${attrEsc(v)}">${esc(v)} · ${act}</a></div>`
+      return `<div class="cdv-row"><span class="cdv-k">邮箱</span><div class="cdv-vgroup"><a class="cdv-v" href="mailto:${attrEsc(v)}">${esc(v)} · ${act}</a></div></div>`
     default:
-      return `<div class="cdv-row"><span class="cdv-k">${label}</span><span class="cdv-v">${esc(v)}</span></div>`
+      return `<div class="cdv-row"><span class="cdv-k">${label}</span><div class="cdv-vgroup"><span class="cdv-v">${esc(v)}</span></div></div>`
   }
 }
 
@@ -364,7 +365,8 @@ export function renderCaseOgPage(
     .agency-c{display:flex;flex-direction:column;gap:8px;margin-top:10px;font-size:13px;border-top:1px dashed var(--line);padding-top:10px;}
     .cdv-row{display:flex;align-items:center;gap:10px;}
     .cdv-k{width:76px;flex:none;color:var(--ink);font-weight:600;}
-    .cdv-v{flex:1;color:var(--muted);text-decoration:none;word-break:break-all;}
+    .cdv-vgroup{flex:1;min-width:0;display:flex;align-items:center;gap:10px;}
+    .cdv-v{flex:1;min-width:0;color:var(--muted);text-decoration:none;word-break:break-all;}
     a.cdv-v{color:#1a6cff;}
     a.cdv-v:hover{text-decoration:underline;}
     .cdv-copy{flex:none;padding:2px 10px;font-size:12px;border:1px solid #ccd3e0;border-radius:6px;background:#fff;color:var(--ink);cursor:pointer;font-family:inherit;}

@@ -193,20 +193,22 @@ const caseContentHtml = computed(() => {
       <div v-if="contactList.length" class="cdv-contact-list">
         <div v-for="(ct, i) in contactList" :key="i" class="cdv-contact-row">
           <span class="cdv-contact-k">{{ ct.label }}</span>
-          <a
-            v-if="ct.href"
-            :href="ct.href"
-            target="_blank"
-            rel="noopener"
-            class="cdv-contact-v"
-          >{{ ct.value }} · {{ contactActionLabel(ct.platform) }}</a>
-          <span v-else class="cdv-contact-v">{{ ct.value }}</span>
-          <button
-            v-if="ct.copyable"
-            type="button"
-            class="cdv-contact-copy"
-            @click="copyContact(ct.value)"
-          >{{ copiedContact === ct.value ? '已复制 ✓' : '复制' }}</button>
+          <div class="cdv-contact-vgroup">
+            <a
+              v-if="ct.href"
+              :href="ct.href"
+              target="_blank"
+              rel="noopener"
+              class="cdv-contact-v"
+            >{{ ct.value }} · {{ contactActionLabel(ct.platform) }}</a>
+            <span v-else class="cdv-contact-v">{{ ct.value }}</span>
+            <button
+              v-if="ct.copyable"
+              type="button"
+              class="cdv-contact-copy"
+              @click="copyContact(ct.value)"
+            >{{ copiedContact === ct.value ? '已复制 ✓' : '复制' }}</button>
+          </div>
         </div>
       </div>
     </div>
@@ -296,7 +298,8 @@ const caseContentHtml = computed(() => {
 }
 .cdv-contact-row { display: flex; align-items: center; gap: 10px; font-size: 13px; }
 .cdv-contact-k { width: 72px; flex: none; color: var(--muted); font-weight: 600; }
-.cdv-contact-v { flex: 1; color: var(--ink, #1c2430); text-decoration: none; word-break: break-all; }
+.cdv-contact-vgroup { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; }
+.cdv-contact-v { flex: 1; min-width: 0; color: var(--ink, #1c2430); text-decoration: none; word-break: break-all; }
 a.cdv-contact-v:hover { color: var(--brand-600, #185FA5); }
 .cdv-contact-copy {
   flex: none; padding: 2px 10px; font-size: 12px;
