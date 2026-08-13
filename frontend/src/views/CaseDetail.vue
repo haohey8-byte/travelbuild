@@ -905,8 +905,14 @@ function removeHighlightLang(lang: 'en' | 'th', i: number) {
   .edit-layout.preview .edit-pane { display: none; }
   .topbar { flex-direction: column; align-items: flex-start; }
   .top-actions { width: 100%; justify-content: flex-end; }
+  /* FAB 移动端紧凑：缩小内边距/字号/右距，避免遮挡正文与过宽 */
+  .cta-fab { padding: 10px 14px; font-size: 13px; right: 12px; }
 }
 @media (max-width: 640px) {
   .trans-langs { grid-template-columns: 1fr; }
+}
+/* 小屏（≤480px）：FAB 进一步收窄 */
+@media (max-width: 480px) {
+  .cta-fab { padding: 9px 13px; font-size: 12.5px; right: 10px; }
 }
 </style>
