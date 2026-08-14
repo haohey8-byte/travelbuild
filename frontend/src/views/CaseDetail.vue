@@ -759,10 +759,10 @@ function removeHighlightLang(lang: 'en' | 'th', i: number) {
   <button
     v-if="!isWorking"
     class="cta-fab"
-    v-tooltip="'查看联系方式，咨询本行程'"
+    v-tooltip="$t('caseDetail.contact.contactTip')"
     @click="scrollToContact"
   >
-    💬 咨询本行程
+    {{ $t('caseDetail.cta.fab') }}
   </button>
 
   <!-- 复制分享文案弹窗 -->

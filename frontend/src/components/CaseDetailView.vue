@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import CaseHtmlView from './CaseHtmlView.vue'
 import { safeText } from '@/utils/name'
 import { formatTravelDate, copyText } from '@/utils/share'
@@ -18,6 +19,9 @@ type Locale = 'zh' | 'en' | 'th'
 // 公开页语言切换使用局部状态，避免影响全局导航/菜单
 // 校对台可通过 locale prop 覆盖初始语言（预览同步当前校对语言）
 const caseLocale = ref<Locale>(props.locale ?? 'zh')
+const { t: $t, locale: i18nLocale } = useI18n()
+// 同步 caseLocale 到 i18n 全局 locale，使 $t 渲染的硬编码文案（FAB/副标题/操作文案等）随案例语言切换
+watch(caseLocale, (v) => { i18nLocale.value = v })
 function setLocale(l: Locale) {
   caseLocale.value = l
 }
@@ -52,7 +56,12 @@ const effectiveBranding = computed(() => props.c.agencyBranding || PANDKING_BRAN
 
 const contactList = computed(() => {
   const ct = effectiveBranding.value?.contacts
-  return ct ? contactViews(ct) : []
+  if (!ct) return []
+  return contactViews(ct).map((v) => ({
+    ...v,
+    // 平台标签随案例语言切换（zh "电话" / en "Phone" / th "โทรศัพท์"）
+    label: $t(`caseDetail.contact.labels.${v.platform}`) as string,
+  }))
 })
 const copiedContact = ref('')
 async function copyContact(v: string) {
@@ -63,23 +72,10 @@ async function copyContact(v: string) {
   }
 }
 
-// 底部完整块：平台动作文案（Line=添加 / WhatsApp=发消息 / Facebook=查看主页 / 电话=拨打 / 邮箱=发送 / 其他=查看）
+// 平台动作文案（随案例语言切换：添加 / Message / View page / Call / Send / View）
 function contactActionLabel(p: string): string {
-  switch (p) {
-    case 'line':
-    case 'wechat':
-      return '添加'
-    case 'whatsapp':
-      return '发消息'
-    case 'facebook':
-      return '查看主页'
-    case 'phone':
-      return '拨打'
-    case 'email':
-      return '发送'
-    default:
-      return '查看'
-  }
+  const key = `caseDetail.contact.actions.${p === 'line' || p === 'wechat' || p === 'whatsapp' || p === 'facebook' || p === 'phone' || p === 'email' ? p : 'default'}`
+  return $t(key) as string
 }
 
 // 平台徽章：品牌色圆底 + 文本符号（不引第三方图标库）
@@ -145,7 +141,7 @@ const caseContentHtml = computed(() => {
             <a v-if="ct.href" :href="ct.href" class="contact-link" target="_blank" rel="noopener">{{ ct.label }}: {{ ct.value }}</a>
             <span v-else class="contact">
               {{ ct.label }}: {{ ct.value }}
-              <button v-if="ct.copyable" type="button" class="ct-copy" @click="copyContact(ct.value)">{{ copiedContact === ct.value ? '已复制 ✓' : '复制' }}</button>
+              <button v-if="ct.copyable" type="button" class="ct-copy" @click="copyContact(ct.value)">{{ copiedContact === ct.value ? $t('caseDetail.contact.copied') : $t('caseDetail.contact.copy') }}</button>
             </span>
           </template>
         </div>
@@ -205,7 +201,7 @@ const caseContentHtml = computed(() => {
         <span v-else class="cdv-contact-logo fb">{{ (effectiveBranding.name || '?').slice(0, 1) }}</span>
         <div class="cdv-contact-meta">
           <div class="cdv-contact-name">{{ effectiveBranding.name }}</div>
-          <div class="cdv-contact-tip">联系定制本行程</div>
+          <div class="cdv-contact-tip">{{ $t('caseDetail.contact.contactTip') }}</div>
         </div>
       </div>
       <div v-if="contactList.length" class="cdv-contact-list">
@@ -224,7 +220,7 @@ const caseContentHtml = computed(() => {
             <span class="cdv-plat">{{ ct.label }}</span>
             <span class="cdv-val">{{ ct.value }}</span>
           </span>
-          <span v-if="ct.copyable" class="cdv-act">{{ copiedContact === ct.value ? '已复制 ✓' : '复制' }}</span>
+          <span v-if="ct.copyable" class="cdv-act">{{ copiedContact === ct.value ? $t('caseDetail.contact.copied') : $t('caseDetail.contact.copy') }}</span>
           <span v-else-if="ct.href" class="cdv-act">{{ contactActionLabel(ct.platform) }} ›</span>
         </a>
       </div>
