@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { fetchCase, fetchCaseView, updateCase, publishCase, unpublishCase, deleteCase, translateCase } from '@/api/cases'
@@ -14,6 +15,7 @@ import type { CaseItem, DayContent } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
+const { t: $t } = useI18n()
 const auth = useAuthStore()
 const { user } = storeToRefs(auth)
 
@@ -163,7 +165,7 @@ async function load() {
       : await fetchCase(id.value, via.value)
   } catch (e: any) {
     if (e?.response?.status === 404) notFound.value = true
-    else err.value = e?.response?.data?.message || '加载失败'
+    else err.value = e?.response?.data?.message || $t('common.error')
     c.value = null
   } finally {
     loading.value = false
@@ -190,7 +192,7 @@ async function onCopyShare() {
     const ok = await copyText(text)
     if (ok) {
       copied.value = true
-      flash('分享文案已复制，直接粘贴到微信发送即可')
+      flash($t('caseDetail.shareCopied'))
       setTimeout(() => (copied.value = false), 1800)
     } else {
       shareText.value = text
@@ -205,9 +207,9 @@ async function onRetryCopy() {
   const ok = await copyText(shareText.value)
   if (ok) {
     shareModal.value = false
-    flash('复制成功，去微信粘贴发送即可')
+    flash($t('caseDetail.shareModal.retrySuccess'))
   } else {
-    flash('复制仍失败，请长按文案手动复制')
+    flash($t('caseDetail.shareModal.retryFail'))
   }
 }
 
@@ -577,8 +579,8 @@ function removeHighlightLang(lang: 'en' | 'th', i: number) {
       <div class="top-actions">
         <!-- 非工作态：复制分享 + 管理/校对入口 -->
         <template v-if="!isWorking">
-          <button class="btn sm" :class="{ copied }" :disabled="copying" v-tooltip="'复制标题+链接文案，粘贴到微信发送'" @click="onCopyShare">
-            {{ copied ? '已复制' : '复制分享' }}
+          <button class="btn sm" :class="{ copied }" :disabled="copying" v-tooltip="$t('caseDetail.copyShareTip')" @click="onCopyShare">
+            {{ copied ? $t('caseDetail.copied') : $t('caseDetail.copyShare') }}
           </button>
           <button v-if="canEdit" class="btn ghost sm" v-tooltip="'进入完整编辑模式（中文源/行程/价格/封面）'" @click="startEdit">编辑内容</button>
           <button v-if="canReview" class="btn ghost sm" v-tooltip="'人工校对/修正英文与泰文翻译'" @click="startReview">校对翻译</button>
@@ -600,8 +602,8 @@ function removeHighlightLang(lang: 'en' | 'th', i: number) {
       </div>
     </div>
 
-    <p v-if="loading">加载中…</p>
-    <p v-else-if="notFound" class="err">案例不存在</p>
+    <p v-if="loading">{{ $t('common.loading') }}</p>
+    <p v-else-if="notFound" class="err">{{ $t('caseDetail.notFound') }}</p>
     <p v-else-if="err" class="err">{{ err }}</p>
 
     <template v-else-if="c">
@@ -769,11 +771,11 @@ function removeHighlightLang(lang: 'en' | 'th', i: number) {
   <div v-if="shareModal" class="modal-mask" @click.self="shareModal = false">
     <div class="modal">
       <div class="modal-head">
-        <div class="modal-title">复制分享文案</div>
+        <div class="modal-title">{{ $t('caseDetail.shareModal.title') }}</div>
         <div class="modal-close" @click="shareModal = false">✕</div>
       </div>
       <div class="modal-body">
-        <p class="share-tip" v-html="'自动复制失败，请长按下方文案手动复制，然后粘贴到微信发送：'"></p>
+        <p class="share-tip">{{ $t('caseDetail.shareModal.tip') }}</p>
         <textarea
           class="share-ta"
           readonly
@@ -783,8 +785,8 @@ function removeHighlightLang(lang: 'en' | 'th', i: number) {
         ></textarea>
       </div>
       <div class="modal-foot">
-        <button class="btn" @click="shareModal = false">关闭</button>
-        <button class="btn btn-primary" @click="onRetryCopy">重新复制</button>
+        <button class="btn" @click="shareModal = false">{{ $t('common.close') }}</button>
+        <button class="btn btn-primary" @click="onRetryCopy">{{ $t('caseDetail.shareModal.retry') }}</button>
       </div>
     </div>
   </div>
