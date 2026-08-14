@@ -5,6 +5,7 @@ import { safeText } from '@/utils/name'
 import { formatTravelDate, copyText } from '@/utils/share'
 import { fixImageUrl } from '@/utils/image'
 import { contactViews } from '@/utils/contacts'
+import { PANDKING_BRAND } from '@/constants/pandaking'
 import type { CaseItem } from '@/types'
 
 // 案例只读视图（公开页 + 编辑预览共用，防样式漂移）
@@ -45,8 +46,12 @@ const transCredit = computed(() => {
   return hasDesc ? '' : '暂无译文，显示中文原文'
 })
 
+// 有效品牌：有 agencyBranding（via 有效）用旅行社品牌；否则兜底 PandaKing9 平台品牌
+// （匿名无 via 访问也必须能咨询 → 联系方式块恒渲染，修复"分享给客户无法咨询"悖论）
+const effectiveBranding = computed(() => props.c.agencyBranding || PANDKING_BRAND)
+
 const contactList = computed(() => {
-  const ct = props.c.agencyBranding?.contacts
+  const ct = effectiveBranding.value?.contacts
   return ct ? contactViews(ct) : []
 })
 const copiedContact = ref('')
@@ -130,11 +135,11 @@ const caseContentHtml = computed(() => {
       >{{ l === 'zh' ? '中文' : l === 'en' ? 'English' : 'ไทย' }}</span>
     </div>
 
-    <!-- 品牌条（白标：有 agency 时仅展示机构自身 Logo + 名称 + 联系方式，不出现 PandaKing9） -->
-    <div v-if="c.agencyBranding" class="cobrand">
-      <img v-if="c.agencyBranding.logoUrl" :src="fixImageUrl(c.agencyBranding.logoUrl)" class="logo" alt="logo" />
+    <!-- 品牌条（白标：有 agency 时仅展示机构自身 Logo + 名称 + 联系方式，不出现 PandaKing9；无 agency 兜底 PandaKing9 平台） -->
+    <div v-if="effectiveBranding" class="cobrand">
+      <img v-if="effectiveBranding.logoUrl" :src="fixImageUrl(effectiveBranding.logoUrl)" class="logo" alt="logo" />
       <div class="cobrand-text">
-        <b>{{ c.agencyBranding.name }}</b>
+        <b>{{ effectiveBranding.name }}</b>
         <div v-if="contactList.length" class="contacts">
           <template v-for="(ct, i) in contactList" :key="i" class="contact">
             <a v-if="ct.href" :href="ct.href" class="contact-link" target="_blank" rel="noopener">{{ ct.label }}: {{ ct.value }}</a>
@@ -188,18 +193,18 @@ const caseContentHtml = computed(() => {
       </div>
     </section>
 
-    <!-- 底部完整联系方式块（白标：有 agency 显示；客户滚动到底直接联系） -->
-    <div v-if="c.agencyBranding" class="cdv-contact">
+    <!-- 底部完整联系方式块（白标：有 agency 显示旅行社；无 agency 兜底 PandaKing9 平台，客户滚动到底直接联系） -->
+    <div v-if="effectiveBranding" class="cdv-contact">
       <div class="cdv-contact-hd">
         <img
-          v-if="c.agencyBranding.logoUrl"
-          :src="fixImageUrl(c.agencyBranding.logoUrl)"
+          v-if="effectiveBranding.logoUrl"
+          :src="fixImageUrl(effectiveBranding.logoUrl)"
           class="cdv-contact-logo"
           alt="logo"
         />
-        <span v-else class="cdv-contact-logo fb">{{ (c.agencyBranding.name || '?').slice(0, 1) }}</span>
+        <span v-else class="cdv-contact-logo fb">{{ (effectiveBranding.name || '?').slice(0, 1) }}</span>
         <div class="cdv-contact-meta">
-          <div class="cdv-contact-name">{{ c.agencyBranding.name }}</div>
+          <div class="cdv-contact-name">{{ effectiveBranding.name }}</div>
           <div class="cdv-contact-tip">联系定制本行程</div>
         </div>
       </div>

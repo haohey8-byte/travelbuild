@@ -289,16 +289,22 @@ export function renderCaseOgPage(
     ? `<div class="microsite-wrap"><iframe id="microsite" class="microsite-frame" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" srcdoc="${zhMicroSrcdoc}"></iframe></div>`
     : ''
 
-  // 品牌条（via=agencyId 有效时）：纯白标 — 仅机构 Logo + 名称 + 联系方式，不出现 PandaKing9
-  const agencyHtml = data.agency
-    ? (() => {
-        const a = data.agency
-        const logo = a.logoUrl ? imgUrl(a.logoUrl, origin) : ''
-        const items = Array.isArray(a.contacts) ? a.contacts : []
-        const contactLines = items.map((it: any) =>
-          escContactItem(String(it?.platform ?? '').toLowerCase(), String(it?.value ?? '')),
-        )
-        return `
+  // 品牌块（白标规则）：有 via（data.agency）→ 旅行社白标；无 via → PandaKing9 平台品牌兜底
+  // （匿名客户打开分享页也必须能咨询，联系方式块恒渲染，修复"无法咨询"悖论）
+  const PANDKING9_DEFAULT = {
+    name: 'PandaKing9',
+    logoUrl: null as string | null,
+    contacts: [{ platform: 'wechat', value: 'wx2754978' }],
+  }
+  const brand = data.agency || PANDKING9_DEFAULT
+  const agencyHtml = (() => {
+    const a = brand
+    const logo = a.logoUrl ? imgUrl(a.logoUrl, origin) : ''
+    const items = Array.isArray(a.contacts) ? a.contacts : []
+    const contactLines = items.map((it: any) =>
+      escContactItem(String(it?.platform ?? '').toLowerCase(), String(it?.value ?? '')),
+    )
+    return `
       <div class="agency">
         <div class="agency-h">
           ${logo ? `<img class="agency-logo" src="${esc(logo)}" alt="${esc(a.name)}" loading="lazy" />` : '<span class="agency-logo-fallback">' + esc(a.name.slice(0, 1)) + '</span>'}
@@ -309,8 +315,7 @@ export function renderCaseOgPage(
         </div>
         ${contactLines.length ? `<div class="agency-c">${contactLines.join('')}</div>` : ''}
       </div>`
-      })()
-    : ''
+  })()
 
   const ld = jsonSafe({
     '@context': 'https://schema.org',
